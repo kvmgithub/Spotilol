@@ -87,6 +87,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.platform.toClipEntry
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -248,6 +249,7 @@ fun SettingsContent(
     var lyricsStyle by remember { mutableStateOf(prefs.getString("LyricsStyle", LyricsTheme.DEFAULT_STYLE) ?: LyricsTheme.DEFAULT_STYLE) }
 
     val context = LocalContext.current
+    val resources = LocalResources.current
     var profiles by remember { mutableStateOf(ProfileManager.getProfiles(context)) }
 
     var showConnectionModeDialog by remember { mutableStateOf(false) }
@@ -290,7 +292,7 @@ fun SettingsContent(
             DownloadPrefs.setFolder(context, uri)
             refreshFolderState()
         } else {
-            Toast.makeText(context, context.getString(R.string.settings_folder_access_error), Toast.LENGTH_SHORT).show()
+            Toast.makeText(context, resources.getString(R.string.settings_folder_access_error), Toast.LENGTH_SHORT).show()
         }
     }
     var dlTags by remember { mutableStateOf(DownloadPrefs.writeTags(context)) }
@@ -303,12 +305,12 @@ fun SettingsContent(
             debugTapCount = 0
             debugUnlocked = true
             prefs.edit().putBoolean("DebugUnlocked", true).apply()
-            Toast.makeText(context, context.getString(R.string.settings_debug_unlocked), Toast.LENGTH_SHORT).show()
+            Toast.makeText(context, resources.getString(R.string.settings_debug_unlocked), Toast.LENGTH_SHORT).show()
         } else {
             val message = if (remaining == 1) {
-                context.getString(R.string.settings_debug_tap_one_left)
+                resources.getString(R.string.settings_debug_tap_one_left)
             } else {
-                context.getString(R.string.settings_debug_taps_left, remaining)
+                resources.getString(R.string.settings_debug_taps_left, remaining)
             }
             Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
         }
@@ -324,9 +326,9 @@ fun SettingsContent(
                 Logger.setEnabled(context, false)
                 onDebugToggle(false)
             }
-            Toast.makeText(context, context.getString(R.string.settings_debug_hidden), Toast.LENGTH_SHORT).show()
+            Toast.makeText(context, resources.getString(R.string.settings_debug_hidden), Toast.LENGTH_SHORT).show()
         } else {
-            Toast.makeText(context, context.getString(R.string.settings_debug_is_hidden), Toast.LENGTH_SHORT).show()
+            Toast.makeText(context, resources.getString(R.string.settings_debug_is_hidden), Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -735,7 +737,7 @@ fun SettingsContent(
                         onClick = {
                             val cookies = ProfileManager.captureSession(context)
                             if (cookies == null) {
-                                Toast.makeText(context, context.getString(R.string.settings_login_first), Toast.LENGTH_SHORT).show()
+                                Toast.makeText(context, resources.getString(R.string.settings_login_first), Toast.LENGTH_SHORT).show()
                             } else {
                                 pendingCookies = cookies
                                 accountNameInput = prefs.getString("CurrentAccountName", "") ?: ""
@@ -748,7 +750,7 @@ fun SettingsContent(
                         profiles.forEachIndexed { index, profile ->
                             ProfileRow(
                                 name = profile.name,
-                                subtitle = stringResource(R.string.settings_profile_saved, SimpleDateFormat("MMM d, yyyy", Locale.getDefault()).format(Date(profile.savedAt))),
+                                subtitle = stringResource(R.string.settings_profile_saved, SimpleDateFormat("MMM d, yyyy", resources.configuration.locales[0]).format(Date(profile.savedAt))),
                                 onLoad = { onLoadProfile(profile.cookies) },
                                 onDelete = {
                                     onDeleteProfile(profile.name)
@@ -831,10 +833,10 @@ fun SettingsContent(
                                     runCatching { context.startActivity(intent) }.isSuccess
                                 }
                                 if (!opened) {
-                                    Toast.makeText(context, context.getString(R.string.settings_open_links_unsupported), Toast.LENGTH_SHORT).show()
+                                    Toast.makeText(context, resources.getString(R.string.settings_open_links_unsupported), Toast.LENGTH_SHORT).show()
                                 }
                             } else {
-                                Toast.makeText(context, context.getString(R.string.settings_open_links_always_hint), Toast.LENGTH_LONG).show()
+                                Toast.makeText(context, resources.getString(R.string.settings_open_links_always_hint), Toast.LENGTH_LONG).show()
                             }
                         }
                     )
@@ -851,7 +853,7 @@ fun SettingsContent(
                             icon = TablerIcons.Shield,
                             onClick = {
                                 val path = LocalProxyManager.exportCACert(context)
-                                Toast.makeText(context, context.getString(R.string.settings_cert_exported, path), Toast.LENGTH_LONG).show()
+                                Toast.makeText(context, resources.getString(R.string.settings_cert_exported, path), Toast.LENGTH_LONG).show()
                             }
                         )
                     }
@@ -868,7 +870,7 @@ fun SettingsContent(
                         subtitle = stringResource(R.string.settings_github_subtitle),
                         painter = painterResource(id = R.drawable.ic_github),
                         onClick = {
-                            val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/lyssadev/Spotilol"))
+                            val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/kvmgithub/Spotilol"))
                             context.startActivity(intent)
                         }
                     )
@@ -938,7 +940,7 @@ fun SettingsContent(
                             title = stringResource(R.string.settings_crash_test),
                             subtitle = stringResource(R.string.settings_crash_test_subtitle),
                             icon = TablerIcons.AlertTriangle,
-                            onClick = { throw IllegalStateException(context.getString(R.string.settings_crash_test_exception)) }
+                            onClick = { throw IllegalStateException(resources.getString(R.string.settings_crash_test_exception)) }
                         )
                     }
                 }
@@ -1892,6 +1894,7 @@ fun ConfirmationDialog(
 @Composable
 fun SettingsContentPreview() {
     val context = LocalContext.current
+    val resources = LocalResources.current
     val prefs = remember { context.getSharedPreferences("preview_prefs", Context.MODE_PRIVATE) }
     SpotifyTheme {
         SettingsContent(

@@ -5,6 +5,7 @@ plugins {
 android {
     namespace = "net.qiujuer.lame"
     compileSdk = 37
+    ndkVersion = "28.2.13676358"
 
     defaultConfig {
         minSdk = 28
@@ -24,13 +25,14 @@ android {
         }
 
         ndk {
-            abiFilters += listOf("arm64-v8a", "armeabi-v7a")
+            abiFilters += providers.gradleProperty("forkAbis").orElse("arm64-v8a,armeabi-v7a").get().split(",")
         }
     }
 
     externalNativeBuild {
         cmake {
             path = file("CMakeLists.txt")
+            version = "3.22.1"
         }
     }
 

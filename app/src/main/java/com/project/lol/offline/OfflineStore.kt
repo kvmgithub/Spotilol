@@ -240,12 +240,12 @@ object OfflineStore {
             album = extras?.optString("album", "") ?: "",
             durationSec = extras?.optInt("durationSec", 0)?.takeIf { it > 0 },
             explicit = extras?.optBoolean("explicit", false) ?: false,
-            videoId = extras?.optString("videoId", null)?.ifBlank { null },
+            videoId = extras?.optString("videoId", "")?.ifBlank { null },
             ytTitle = extras?.optString("ytTitle", "") ?: "",
             ytArtist = extras?.optString("ytArtist", "") ?: "",
             ytAlbum = extras?.optString("ytAlbum", "") ?: "",
-            ytThumbnail = extras?.optString("ytThumb", null)?.ifBlank { null },
-            shareLink = extras?.optString("shareLink", null)?.ifBlank { null },
+            ytThumbnail = extras?.optString("ytThumb", "")?.ifBlank { null },
+            shareLink = extras?.optString("shareLink", "")?.ifBlank { null },
         )
     }
 

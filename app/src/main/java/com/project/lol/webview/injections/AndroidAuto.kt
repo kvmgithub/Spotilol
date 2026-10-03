@@ -414,9 +414,11 @@ window.pendingMediaRequests = window.pendingMediaRequests || new Set();
                     rawArtists.slice(2).forEach(pushItem);
 
                     AndBridge.onSearchCompleted(query, JSON.stringify(results));
+                    return results;
                 } catch (e) {
                     console.error('Search error for ' + query, e);
                     AndBridge.onSearchCompleted(query, '[]');
+                    return [];
                 }
             }
             window.searchMediaItems = searchMediaItems;

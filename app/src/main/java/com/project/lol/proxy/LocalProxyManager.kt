@@ -1,5 +1,8 @@
 package com.project.lol.proxy
 
+import com.project.lol.security.WebSecurityPolicy
+import com.project.lol.security.HttpFraming
+
 import android.content.ContentUris
 import android.content.ContentValues
 import android.content.Context
@@ -9,7 +12,6 @@ import android.os.Environment
 import android.provider.MediaStore
 import android.util.Base64
 import com.project.lol.util.Logger
-import androidx.core.content.edit
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKeys
 import org.bouncycastle.asn1.x500.X500Name
@@ -17,12 +19,12 @@ import org.bouncycastle.asn1.x509.BasicConstraints
 import org.bouncycastle.asn1.x509.Extension
 import org.bouncycastle.asn1.x509.GeneralName
 import org.bouncycastle.asn1.x509.GeneralNames
+import org.bouncycastle.asn1.x509.Time
 import org.bouncycastle.cert.jcajce.JcaX509CertificateConverter
 import org.bouncycastle.cert.jcajce.JcaX509v3CertificateBuilder
 import org.bouncycastle.operator.jcajce.JcaContentSignerBuilder
 import java.io.BufferedInputStream
 import java.io.BufferedOutputStream
-import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.InputStream
 import java.io.OutputStream
@@ -42,6 +44,7 @@ import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.Future
 import javax.net.ssl.HttpsURLConnection
 import javax.net.ssl.KeyManagerFactory
@@ -79,52 +82,22 @@ object LocalProxyManager {
 
     private fun getOrCreateKeystorePassword(context: Context): String {
         val prefs = securePrefs(context)
-        var password = try {
-            prefs.getString(KEY_PASSWORD, null)
-        } catch (_: Exception) {
-            null
-        }
-        if (password == null) {
-            val random = SecureRandom()
-            val bytes = ByteArray(32)
-            random.nextBytes(bytes)
-            password = Base64.encodeToString(bytes, Base64.NO_WRAP)
-            try {
-                prefs.edit { putString(KEY_PASSWORD, password) }
-            } catch (_: Exception) {}
-        }
+        val existing = prefs.getString(KEY_PASSWORD, null)
+        if (existing != null) return existing
+        val bytes = ByteArray(32).also { SecureRandom().nextBytes(it) }
+        val password = Base64.encodeToString(bytes, Base64.NO_WRAP)
+        check(prefs.edit().putString(KEY_PASSWORD, password).commit()) { "Cannot persist proxy CA password" }
         return password
     }
 
     private fun securePrefs(context: Context): SharedPreferences {
-        try {
-            val masterKeyAlias = MasterKeys.getOrCreate(MasterKeys.AES256_GCM_SPEC)
-            return EncryptedSharedPreferences.create(
-                KEYSTORE_PREFS,
-                masterKeyAlias,
-                context,
-                EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
-                EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
-            )
-        } catch (_: Exception) {
-            try {
-                val ks = KeyStore.getInstance("AndroidKeyStore")
-                ks.load(null)
-                ks.deleteEntry(MasterKeys.getOrCreate(MasterKeys.AES256_GCM_SPEC))
-            } catch (_: Exception) {}
-            return try {
-                val masterKeyAlias = MasterKeys.getOrCreate(MasterKeys.AES256_GCM_SPEC)
-                EncryptedSharedPreferences.create(
-                    KEYSTORE_PREFS,
-                    masterKeyAlias,
-                    context,
-                    EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
-                    EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
-                )
-            } catch (_: Exception) {
-                context.getSharedPreferences(KEYSTORE_PREFS, Context.MODE_PRIVATE)
-            }
-        }
+        // Failure must neither expose plaintext nor delete a master key used by other data.
+        val masterKeyAlias = MasterKeys.getOrCreate(MasterKeys.AES256_GCM_SPEC)
+        return EncryptedSharedPreferences.create(
+            KEYSTORE_PREFS, masterKeyAlias, context,
+            EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
+            EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
+        )
     }
 
     fun init(context: Context) {
@@ -148,21 +121,9 @@ object LocalProxyManager {
                     newKs.setKeyEntry(CA_ALIAS, caKeyPair!!.private, password.toCharArray(), arrayOf(caCert))
                     ksFile.outputStream().use { newKs.store(it, password.toCharArray()) }
                 } catch (e2: Exception) {
-                    Logger.w(TAG, "Failed to load/migrate CA, regenerating", e2)
-                    ksFile.delete()
-                    generateCA(ksFile, password)
+                    throw IllegalStateException("Cannot decrypt existing proxy CA; use normal mode or reset the CA explicitly", e2)
                 }
             }
-        }
-    }
-
-    private inline fun <T> withUsLocale(block: () -> T): T {
-        val previous = Locale.getDefault()
-        return try {
-            Locale.setDefault(Locale.US)
-            block()
-        } finally {
-            Locale.setDefault(previous)
         }
     }
 
@@ -176,11 +137,9 @@ object LocalProxyManager {
         val notBefore = Date()
         val notAfter = Date(notBefore.time + 365L * 24 * 60 * 60 * 1000L * 10)
 
-        val builder = withUsLocale {
-            JcaX509v3CertificateBuilder(
-                name, serial, notBefore, notAfter, name, caKeyPair!!.public
-            )
-        }
+        val builder = JcaX509v3CertificateBuilder(
+            name, serial, Time(notBefore, Locale.US), Time(notAfter, Locale.US), name, caKeyPair!!.public
+        )
 
         builder.addExtension(
             Extension.basicConstraints,
@@ -220,8 +179,10 @@ object LocalProxyManager {
         synchronized(this) {
             val p2 = threadPool
             if (p2 != null && !p2.isShutdown) return p2
-            return Executors.newFixedThreadPool(32) { r -> Thread(r, "LocalProxy-Worker").apply { isDaemon = true }
-            }.also { threadPool = it }
+            return java.util.concurrent.ThreadPoolExecutor(32, 32, 30, TimeUnit.SECONDS,
+                java.util.concurrent.ArrayBlockingQueue(32),
+                java.util.concurrent.ThreadFactory { r -> Thread(r, "LocalProxy-Worker").apply { isDaemon = true } }
+            ).also { threadPool = it }
         }
     }
 
@@ -274,7 +235,11 @@ object LocalProxyManager {
                     } catch (_: Exception) {
                         break
                     }
-                    pool().execute { handleConnection(client) }
+                    try {
+                        pool().execute { handleConnection(client) }
+                    } catch (_: java.util.concurrent.RejectedExecutionException) {
+                        client.close()
+                    }
                 }
             } catch (e: Exception) {
                 Logger.e(TAG, "Failed to start proxy", e)
@@ -373,16 +338,18 @@ object LocalProxyManager {
             }
         }
 
-        socket.soTimeout = 30000
-        socket.startHandshake()
-
-        val hostnameVerifier = HttpsURLConnection.getDefaultHostnameVerifier()
-        if (!hostnameVerifier.verify(host, socket.session)) {
-            Logger.e(TAG, "SECURITY ALERT: Hostname verification failed for $host. Possible network attack.")
-            throw SSLPeerUnverifiedException("Cannot verify hostname: $host")
+        try {
+            socket.soTimeout = 30000
+            socket.startHandshake()
+            val hostnameVerifier = HttpsURLConnection.getDefaultHostnameVerifier()
+            if (!hostnameVerifier.verify(host, socket.session)) {
+                throw SSLPeerUnverifiedException("Cannot verify hostname: $host")
+            }
+            return socket
+        } catch (e: Exception) {
+            runCatching { socket.close() }
+            throw e
         }
-
-        return socket
     }
 
     private fun handleConnection(client: Socket) {
@@ -391,14 +358,20 @@ object LocalProxyManager {
         try {
             val requestLine = readLine(client.inputStream) ?: return
 
-            if (requestLine.startsWith("CONNECT")) {
-                val hostPort = requestLine.split(" ")[1]
-                val host = hostPort.substringBefore(":")
-                val targetPort = hostPort.substringAfter(":").toIntOrNull() ?: 443
-                var line: String
-                do {
-                    line = readLine(client.inputStream) ?: break
-                } while (line.isNotEmpty())
+            val parts = requestLine.split(" ")
+            if (parts.size == 3 && parts[0] == "CONNECT" && parts[2] == "HTTP/1.1") {
+                val hostPort = parts[1]
+                val host = hostPort.substringBefore(":").lowercase(Locale.ROOT)
+                require(hostPort.lowercase(Locale.ROOT) == "$host:443" && WebSecurityPolicy.isProxyHost(host))
+                val targetPort = 443
+                var headerSize = 0
+                var headerCount = 0
+                while (true) {
+                    val line = readLine(client.inputStream) ?: throw java.io.EOFException("Truncated CONNECT")
+                    headerSize += line.length + 2
+                    require(headerSize <= 65_536 && ++headerCount <= 100)
+                    if (line.isEmpty()) break
+                }
                 handleConnect(client, host, targetPort)
             } else {
                 Logger.w(TAG, "Non-CONNECT request, ignoring: $requestLine")
@@ -496,7 +469,11 @@ object LocalProxyManager {
                         break
                     }
 
-                    val respHead = readHttpHead(upstreamIn, requestMethod)
+                    var respHead = readHttpHead(upstreamIn, requestMethod)
+                    while (respHead != null && extractStatusCode(respHead) in 100..199 && extractStatusCode(respHead) != 101) {
+                        writeHead(respHead, clientOut)
+                        respHead = readHttpHead(upstreamIn, requestMethod)
+                    }
                     if (respHead == null) {
                         reuseUpstream = false
                         break
@@ -558,19 +535,23 @@ object LocalProxyManager {
         if (statusLine.isEmpty()) return null
 
         val headers = mutableListOf<Pair<String, String>>()
+        var headerSize = statusLine.length + 2
         while (true) {
-            val line = readLine(input) ?: break
+            val line = readLine(input) ?: throw java.io.EOFException("Truncated HTTP headers")
+            headerSize += line.length + 2
+            require(headerSize <= 65_536 && headers.size < 100)
             if (line.isEmpty()) break
             val colon = line.indexOf(':')
-            if (colon > 0) {
-                headers.add(line.substring(0, colon).trim() to line.substring(colon + 1).trim())
-            }
+            require(colon > 0 && !line.startsWith(" ") && !line.startsWith("\t"))
+            val name = line.substring(0, colon)
+            require(name.matches(Regex("[!#$%&'*+.^_`|~0-9A-Za-z-]+")))
+            headers.add(name to line.substring(colon + 1).trim())
         }
 
         val isResponse = statusLine.startsWith("HTTP/")
         val noBody: Boolean
-        var contentLength = -1L
-        var isChunked = false
+        val contentLength: Long
+        val isChunked: Boolean
 
         if (isResponse) {
             val code = extractStatusCodeFromLine(statusLine)
@@ -579,17 +560,8 @@ object LocalProxyManager {
             noBody = false
         }
 
-        if (!noBody) {
-            for ((k, v) in headers) {
-                if (k.equals("Content-Length", ignoreCase = true)) {
-                    contentLength = v.trim().toLongOrNull() ?: -1L
-                }
-                if (k.equals("Transfer-Encoding", ignoreCase = true) &&
-                    v.equals("chunked", ignoreCase = true)) {
-                    isChunked = true
-                }
-            }
-        }
+        contentLength = HttpFraming.contentLength(headers.map { it.first }, headers.map { it.second })
+        isChunked = headers.any { it.first.equals("Transfer-Encoding", true) }
 
         return HttpHead(statusLine, headers, contentLength, isChunked, noBody)
     }
@@ -650,17 +622,22 @@ object LocalProxyManager {
     private fun pipeChunkedBody(input: InputStream, output: OutputStream): Boolean {
         while (true) {
             val sizeLine = readLine(input) ?: return true
-            if (sizeLine.isBlank()) continue
+            require(sizeLine.isNotBlank())
 
             output.write((sizeLine + "\r\n").toByteArray(Charsets.ISO_8859_1))
-            val chunkSize = sizeLine.split(";")[0].trim().toLongOrNull(16) ?: return true
+            val sizeToken = sizeLine.substringBefore(";")
+            require(sizeToken.matches(Regex("[0-9a-fA-F]+")))
+            val chunkSize = sizeToken.toLongOrNull(16) ?: throw java.io.IOException("Invalid chunk size")
 
             if (chunkSize == 0L) {
                 // Zero-or-more trailer header lines can follow the final chunk, terminated
                 // by a blank line. Consume all of them so
                 // nothing is left sitting unread on the socket.
+                var trailerSize = 0
                 while (true) {
                     val trailerLine = readLine(input) ?: return true
+                    trailerSize += trailerLine.length + 2
+                    require(trailerSize <= 65_536)
                     output.write((trailerLine + "\r\n").toByteArray(Charsets.ISO_8859_1))
                     if (trailerLine.isEmpty()) break
                 }
@@ -670,7 +647,8 @@ object LocalProxyManager {
 
             pipeExactBytes(input, output, chunkSize)
             val crlf = readLine(input) ?: return true
-            output.write((crlf + "\r\n").toByteArray(Charsets.ISO_8859_1))
+            require(crlf.isEmpty()) { "Invalid chunk terminator" }
+            output.write("\r\n".toByteArray(Charsets.ISO_8859_1))
         }
     }
 
@@ -736,11 +714,9 @@ object LocalProxyManager {
         val notBefore = Date()
         val notAfter = Date(notBefore.time + 365L * 24 * 60 * 60 * 1000L)
 
-        val builder = withUsLocale {
-            JcaX509v3CertificateBuilder(
-                issuer, serial, notBefore, notAfter, subject, domainKeyPair.public
-            )
-        }
+        val builder = JcaX509v3CertificateBuilder(
+            issuer, serial, Time(notBefore, Locale.US), Time(notAfter, Locale.US), subject, domainKeyPair.public
+        )
 
         val san = GeneralNames(GeneralName(GeneralName.dNSName, domain))
         builder.addExtension(Extension.subjectAlternativeName, false, san)
@@ -753,23 +729,11 @@ object LocalProxyManager {
         return Pair(cert, domainKeyPair)
     }
 
-    private fun readLine(input: InputStream): String? {
-        val baos = ByteArrayOutputStream()
-        var prev = 0
-        while (true) {
-            val b = input.read()
-            if (b == -1) return if (baos.size() == 0) null else baos.toString("ISO-8859-1")
-            if (b == 10 && prev == 13) {
-                val bytes = baos.toByteArray()
-                return String(bytes, 0, bytes.size - 1, Charsets.ISO_8859_1)
-            }
-            baos.write(b)
-            prev = b
-        }
-    }
+    private fun readLine(input: InputStream): String? = HttpFraming.readLine(input, 8192)
 
     private fun modifyRequestHeaders(msg: HttpHead) {
-        msg.headers.removeAll { it.first.equals("X-Requested-With", ignoreCase = true) }
+        msg.headers.removeAll { it.first.equals("X-Requested-With", ignoreCase = true) ||
+            it.first.equals("Expect", ignoreCase = true) || it.first.equals("Proxy-Authorization", ignoreCase = true) }
 
         // Strip ALL sec-ch-ua-* headers - basic AND extended.
         // The basic 3 we replaced; the extended ones (full-version-list,
@@ -975,7 +939,7 @@ object LocalProxyManager {
         var client: SSLSocket? = null
 
         return try {
-            val ctx = getOrCreateSSLContext("localhost")
+            val ctx = getOrCreateSSLContext("open.spotify.com")
 
             listener = ServerSocket(0, 1, java.net.InetAddress.getByName("127.0.0.1"))
             val port = listener.localPort
@@ -987,7 +951,7 @@ object LocalProxyManager {
                     try {
                         accepted = listener.accept()
                         val tls = ctx.socketFactory.createSocket(
-                            accepted, "localhost", port, true
+                            accepted, "open.spotify.com", port, true
                         ) as SSLSocket
                         serverTls = tls
                         tls.useClientMode = false
@@ -997,15 +961,18 @@ object LocalProxyManager {
                 }
             } catch (_: Exception) {}
 
-            client = SSLSocketFactory.getDefault()
-                .createSocket("127.0.0.1", port) as SSLSocket
+            val loopback = Socket("127.0.0.1", port)
+            client = try {
+                (SSLSocketFactory.getDefault() as SSLSocketFactory).createSocket(loopback, "open.spotify.com", port, true) as SSLSocket
+            } catch (e: Exception) {
+                loopback.close()
+                throw e
+            }
             client.soTimeout = 3000
             client.startHandshake()
 
             HttpsURLConnection.getDefaultHostnameVerifier()
-                .verify("localhost", client.session)
-
-            true
+                .verify("open.spotify.com", client.session)
         } catch (_: Exception) {
             false
         } finally {

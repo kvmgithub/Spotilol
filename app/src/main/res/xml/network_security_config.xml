@@ -1,9 +1,23 @@
 <?xml version="1.0" encoding="utf-8"?>
 <network-security-config>
     <base-config cleartextTrafficPermitted="false">
-        <trust-anchors>
-            <certificates src="system" />
-            <certificates src="user" />
-        </trust-anchors>
+        <trust-anchors><certificates src="system" /></trust-anchors>
     </base-config>
+    <!-- User CAs are required only for hosts routed through the optional local proxy. -->
+    <domain-config cleartextTrafficPermitted="false">
+        <domain includeSubdomains="true">spotify.com</domain>
+        <domain includeSubdomains="false">spotify.link</domain>
+        <domain includeSubdomains="true">scdn.co</domain>
+        <domain includeSubdomains="true">spotifycdn.com</domain>
+        <domain includeSubdomains="true">spotifycdn.net</domain>
+        <domain includeSubdomains="false">accounts.google.com</domain>
+        <domain includeSubdomains="false">consent.google.com</domain>
+        <domain includeSubdomains="false">www.google.com</domain>
+        <domain includeSubdomains="true">gstatic.com</domain>
+        <domain includeSubdomains="true">googleusercontent.com</domain>
+        <domain includeSubdomains="false">www.facebook.com</domain>
+        <domain includeSubdomains="false">m.facebook.com</domain>
+        <domain includeSubdomains="false">appleid.apple.com</domain>
+        <trust-anchors><certificates src="system" /><certificates src="user" /></trust-anchors>
+    </domain-config>
 </network-security-config>

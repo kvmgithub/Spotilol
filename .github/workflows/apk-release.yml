@@ -1,0 +1,92 @@
+name: APK release
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build:
+    if: github.repository == 'kvmgithub/Spotilol' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3
+        with:
+          cmdline-tools-version: 15641748
+      - name: Install Android build dependencies
+        run: sdkmanager 'platforms;android-37.0' 'build-tools;37.0.0' 'ndk;28.2.13676358' 'cmake;3.22.1'
+      - name: Prepare signing and version
+        env:
+          APK_SIGNING_BUNDLE: ${{ secrets.APK_SIGNING_BUNDLE }}
+        run: |
+          python3 - <<'PY'
+          import os, json, base64
+          from pathlib import Path
+          bundle = json.loads(os.environ['APK_SIGNING_BUNDLE'])
+          key = Path(os.environ['RUNNER_TEMP']) / 'release.p12'
+          key.write_bytes(base64.b64decode(bundle['keystore'], validate=True))
+          key.chmod(0o600)
+          password = bundle['password']
+          print('::add-mask::' + password)
+          version = 1000 + int(os.environ['GITHUB_RUN_NUMBER'])
+          with open(os.environ['GITHUB_ENV'], 'a') as out:
+              out.write(f'APK_KEYSTORE={key}\nAPK_KEY_PASSWORD={password}\nAPK_KEY_ALIAS=release\n')
+              out.write(f'APK_VERSION_CODE={version}\nAPK_VERSION_NAME=1.1.{version}\n')
+          PY
+      - name: Check security regressions
+        run: bash tests/security/run.sh
+      - name: Build and test ARM64 release
+        run: |
+          ./gradlew :app:testDebugUnitTest :app:lintRelease :app:assembleRelease \
+            --no-daemon --no-configuration-cache --console=plain \
+            -Pkotlin.incremental=false -PforkApplicationId=com.project.lol.fork \
+            -PforkVersionCode="$APK_VERSION_CODE" -PforkVersionName="$APK_VERSION_NAME" \
+            -PforkAbis=arm64-v8a
+      - name: Verify and name APK
+        run: |
+          mkdir -p release-assets
+          apk="release-assets/Spotilol-arm64-${APK_VERSION_NAME}.apk"
+          cp app/build/outputs/apk/release/app-release.apk "$apk"
+          "$ANDROID_HOME/build-tools/37.0.0/apksigner" verify --verbose "$apk"
+          python3 - "$apk" <<'PY'
+          import sys, zipfile
+          with zipfile.ZipFile(sys.argv[1]) as apk:
+              abis = {p.split('/')[1] for p in apk.namelist() if p.startswith('lib/') and p.endswith('.so')}
+              assert abis == {'arm64-v8a'}, abis
+          PY
+          "$ANDROID_HOME/build-tools/37.0.0/aapt" dump badging "$apk" > "$RUNNER_TEMP/apk-metadata.txt"
+          python3 - <<'PY'
+          import os, re
+          from pathlib import Path
+          data = (Path(os.environ['RUNNER_TEMP']) / 'apk-metadata.txt').read_text()
+          line = next(x for x in data.splitlines() if x.startswith('package:'))
+          fields = dict(re.findall(r"(\w+)='([^']*)'", line))
+          assert fields['name'] == 'com.project.lol.fork', fields
+          assert fields['versionCode'] == os.environ['APK_VERSION_CODE'], fields
+          assert fields['versionName'] == os.environ['APK_VERSION_NAME'], fields
+          assert 'application-debuggable' not in data
+          PY
+          (cd release-assets && sha256sum *.apk > SHA256SUMS.txt)
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="v${APK_VERSION_NAME}"
+          printf 'ARM64 release for commit `%s`.\n\nPackage: `com.project.lol.fork`. Installs alongside the original app.\n\nAPK signature remains stable across releases.\n' "$GITHUB_SHA" > "$RUNNER_TEMP/release-notes.md"
+          if ! gh release view "$tag" >/dev/null 2>&1; then
+            gh release create "$tag" --target "$GITHUB_SHA" --title "Spotilol ${APK_VERSION_NAME}" --notes-file "$RUNNER_TEMP/release-notes.md" --draft
+          fi
+          gh release upload "$tag" release-assets/* --clobber
+          release_id=$(gh release view "$tag" --json databaseId --jq .databaseId)
+          gh api --method PATCH "repos/$GITHUB_REPOSITORY/releases/$release_id" -F draft=false -f make_latest=legacy > /dev/null
+      - name: Remove signing material
+        if: always()
+        run: rm -f "$RUNNER_TEMP/release.p12"

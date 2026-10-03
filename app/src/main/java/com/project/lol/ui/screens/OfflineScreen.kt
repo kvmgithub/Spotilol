@@ -79,6 +79,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
@@ -145,6 +146,7 @@ fun OfflineScreen(
     onExit: () -> Unit,
 ) {
     val context = LocalContext.current
+    val resources = LocalResources.current
     val scope = rememberCoroutineScope()
     val focusManager = LocalFocusManager.current
     val keyboardController = LocalSoftwareKeyboardController.current
@@ -266,7 +268,7 @@ fun OfflineScreen(
             val ok = withContext(Dispatchers.IO) { OfflineStore.deleteSong(context, song) }
             songs = songs.filterNot { it.id == song.id && it.uri == song.uri }
             if (!ok) {
-                Toast.makeText(context, context.getString(R.string.offline_toast_could_not_delete_file), Toast.LENGTH_SHORT).show()
+                Toast.makeText(context, resources.getString(R.string.offline_toast_could_not_delete_file), Toast.LENGTH_SHORT).show()
             }
         }
     }
@@ -285,7 +287,7 @@ fun OfflineScreen(
             if (failed > 0) {
                 Toast.makeText(
                     context,
-                    if (failed == 1) context.getString(R.string.offline_toast_could_not_delete_one_file) else context.getString(R.string.offline_toast_could_not_delete_files, failed),
+                    if (failed == 1) resources.getString(R.string.offline_toast_could_not_delete_one_file) else resources.getString(R.string.offline_toast_could_not_delete_files, failed),
                     Toast.LENGTH_SHORT
                 ).show()
                 songs = withContext(Dispatchers.IO) { OfflineStore.loadSongs(context) }
@@ -306,6 +308,17 @@ fun OfflineScreen(
 
     DisposableEffect(Unit) {
         val ctrl = object : OfflineMediaService.OfflineController {
+            override fun onPlayFromSearch(query: String?) {
+                if (query.isNullOrBlank()) {
+                    if (!isPlaying) {
+                        if (currentIndex >= 0) togglePlayPause() else if (songs.isNotEmpty()) play(0)
+                    }
+                } else {
+                    val match = searchEngine.filter(songs, query.take(1024), songExtractor).firstOrNull()
+                    val index = songs.indexOf(match)
+                    if (index >= 0) play(index)
+                }
+            }
             override fun onPlayPause() = togglePlayPause()
             override fun onNext() = step(1)
             override fun onPrev() = step(-1)
@@ -1040,6 +1053,7 @@ private fun OfflineSongRow(
 @Composable
 private fun SongCover(song: OfflineSong, size: Dp, corner: Dp) {
     val context = LocalContext.current
+    val resources = LocalResources.current
     var bitmap by remember(song.id, song.uri) { mutableStateOf<Bitmap?>(null) }
 
     LaunchedEffect(song.id, song.uri) {

@@ -446,6 +446,11 @@ class MediaNotificationService : MediaBrowserServiceCompat() {
         clientUid: Int,
         rootHints: Bundle?
     ): BrowserRoot? {
+        val ownedPackages = packageManager.getPackagesForUid(clientUid) ?: return null
+        if (clientPackageName !in ownedPackages) return null
+        val caller = androidx.media.MediaSessionManager.RemoteUserInfo(clientPackageName, -1, clientUid)
+        if (clientUid != android.os.Process.myUid() &&
+            !androidx.media.MediaSessionManager.getSessionManager(this).isTrustedForMediaControl(caller)) return null
         val andAuto = getSharedPreferences("spotilol_prefs", MODE_PRIVATE)
             .getBoolean("AndAuto", true)
         if (!andAuto) return null
@@ -502,19 +507,23 @@ class MediaNotificationService : MediaBrowserServiceCompat() {
         extras: Bundle?,
         result: Result<MutableList<MediaBrowserCompat.MediaItem>>
     ) {
-        if (query.isEmpty()) {
+        if (query.isBlank() || query.length > 1024 || pendingSearchCallbacks.size >= 32) {
             result.sendResult(mutableListOf())
             return
         }
         result.detach()
-        pendingSearchCallbacks[query] = result
-        wakeAndRun("if (typeof window.searchMediaItems === 'function') window.searchMediaItems('$query');")
+        pendingSearchCallbacks.put(query, result)?.sendResult(mutableListOf())
+        Handler(Looper.getMainLooper()).postDelayed({
+            if (pendingSearchCallbacks.remove(query, result)) result.sendResult(mutableListOf())
+        }, 20_000)
+        wakeAndRun("if (typeof window.searchMediaItems === 'function') window.searchMediaItems(${org.json.JSONObject.quote(query)});")
     }
 
     private fun wakeAndRun(js: String) {
         val wv = webView ?: return
         Handler(Looper.getMainLooper()).post {
             try {
+                if (!com.project.lol.security.WebSecurityPolicy.isPlayer(wv.url)) return@post
                 wv.resumeTimers()
                 wv.onResume()
                 wv.dispatchWindowVisibilityChanged(android.view.View.VISIBLE)
@@ -599,6 +608,10 @@ class MediaNotificationService : MediaBrowserServiceCompat() {
             wakeAndRun("actPlayPause(true);")
         }
 
+        override fun onPlayFromSearch(query: String?, extras: Bundle?) {
+            wakeAndRun(MediaSearch.playSearchScript(query))
+        }
+
         override fun onPause() {
             wakeAndRun("actPlayPause(false);")
         }
@@ -630,9 +643,9 @@ class MediaNotificationService : MediaBrowserServiceCompat() {
         override fun onPlayFromMediaId(mediaId: String?, extras: Bundle?) {
             val context = lastActiveContextId
             if (context != null && mediaId != null) {
-                wakeAndRun("playFromUri('$mediaId', '$context');")
+                wakeAndRun("playFromUri(${org.json.JSONObject.quote(mediaId)}, ${org.json.JSONObject.quote(context)});")
             } else {
-                wakeAndRun("playFromUri('$mediaId');")
+                if (mediaId != null) wakeAndRun("playFromUri(${org.json.JSONObject.quote(mediaId)});")
             }
         }
     }
@@ -648,11 +661,7 @@ class MediaNotificationService : MediaBrowserServiceCompat() {
             addAction(ACTION_WIDGET_REFRESH)
             addAction(Intent.ACTION_MEDIA_BUTTON)
         }
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            registerReceiver(actionReceiver, filter, RECEIVER_NOT_EXPORTED)
-        } else {
-            registerReceiver(actionReceiver, filter)
-        }
+        androidx.core.content.ContextCompat.registerReceiver(this, actionReceiver, filter, androidx.core.content.ContextCompat.RECEIVER_NOT_EXPORTED)
     }
 
     private fun registerDisconnectReceivers() {

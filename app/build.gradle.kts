@@ -3,8 +3,6 @@ import java.util.Properties
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
-    id("com.google.gms.google-services")
-    id("com.google.firebase.crashlytics")
     id("org.jetbrains.kotlin.plugin.serialization")
 }
 
@@ -19,15 +17,16 @@ val keystoreProperties = Properties().apply {
 android {
     namespace = "com.project.lol"
     compileSdk = 37
+    ndkVersion = "28.2.13676358"
 
     defaultConfig {
-        applicationId = "com.project.lol"
+        applicationId = providers.gradleProperty("forkApplicationId").orElse("com.project.lol").get()
         minSdk = 28
         targetSdk = 36
-        versionCode = 18
-        versionName = "1.1.8"
+        versionCode = providers.gradleProperty("forkVersionCode").orElse("18").get().toInt()
+        versionName = providers.gradleProperty("forkVersionName").orElse("1.1.8").get()
         ndk {
-            abiFilters += listOf("arm64-v8a", "armeabi-v7a")
+            abiFilters += providers.gradleProperty("forkAbis").orElse("arm64-v8a,armeabi-v7a").get().split(",")
         }
     }
 
@@ -38,10 +37,10 @@ android {
 
     signingConfigs {
         create("release") {
-            storeFile = rootProject.file("keystore/${keystoreProperties.getProperty("storeFile")}")
-            storePassword = keystoreProperties.getProperty("storePassword")
-            keyAlias = keystoreProperties.getProperty("keyAlias")
-            keyPassword = keystoreProperties.getProperty("keyPassword")
+            storeFile = System.getenv("APK_KEYSTORE")?.let { file(it) } ?: rootProject.file("keystore/${keystoreProperties.getProperty("storeFile")}")
+            storePassword = System.getenv("APK_KEY_PASSWORD") ?: keystoreProperties.getProperty("storePassword")
+            keyAlias = System.getenv("APK_KEY_ALIAS") ?: keystoreProperties.getProperty("keyAlias")
+            keyPassword = System.getenv("APK_KEY_PASSWORD") ?: keystoreProperties.getProperty("keyPassword")
         }
     }
 
@@ -66,6 +65,8 @@ android {
 }
 
 dependencies {
+    testImplementation("junit:junit:4.13.2")
+    testImplementation("org.json:json:20240303")
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.appcompat)
     implementation(libs.material)
@@ -74,18 +75,6 @@ dependencies {
     implementation(libs.bouncyprov)
     implementation(libs.bouncypkix)
     implementation(libs.security.crypto)
-
-    // Firebase
-    implementation(platform("com.google.firebase:firebase-bom:34.16.0"))
-    implementation("com.google.firebase:firebase-analytics") {
-        exclude(group = "com.google.firebase", module = "protolite-well-known-types")
-    }
-    implementation("com.google.firebase:firebase-crashlytics") {
-        exclude(group = "com.google.firebase", module = "protolite-well-known-types")
-    }
-    implementation("com.google.firebase:firebase-perf") {
-        exclude(group = "com.google.firebase", module = "protolite-well-known-types")
-    }
 
     // Jetpack Compose
     implementation(platform(libs.compose.bom))

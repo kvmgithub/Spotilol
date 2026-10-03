@@ -71,9 +71,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import androidx.core.view.WindowCompat
-import com.google.firebase.analytics.FirebaseAnalytics
-import com.google.firebase.crashlytics.FirebaseCrashlytics
-import com.google.firebase.perf.FirebasePerformance
 import com.project.lol.BuildConfig
 import com.project.lol.R
 import com.project.lol.proxy.LocalProxyManager
@@ -109,17 +106,6 @@ class SplashActivity : ComponentActivity() {
             ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
         } else {
             ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
-        }
-
-        FirebaseCrashlytics.getInstance()
-        // Analytics/Performance are not needed for first frame; init off the main thread.
-        lifecycleScope.launch(Dispatchers.Default) {
-            FirebasePerformance.getInstance()
-            FirebaseAnalytics.getInstance(this@SplashActivity)
-                .logEvent(FirebaseAnalytics.Event.APP_OPEN, Bundle().apply {
-                    putString(FirebaseAnalytics.Param.SCREEN_NAME, "Spotilol")
-                    putString(FirebaseAnalytics.Param.SCREEN_CLASS, "SplashActivity")
-                })
         }
 
         setContent {
@@ -170,10 +156,20 @@ class SplashActivity : ComponentActivity() {
                 if (checkTrigger == 0) return@LaunchedEffect
                 withContext(Dispatchers.IO) {
                     if (prefs.getString("ConnectionMode", "normal") == "proxy") {
-                        LocalProxyManager.init(this@SplashActivity)
-                        LocalProxyManager.start()
-                        awaitProxyBound()
-                        certInstalled = LocalProxyManager.isCAInstalled()
+                        try {
+                            LocalProxyManager.init(this@SplashActivity)
+                            LocalProxyManager.start()
+                            awaitProxyBound()
+                            certInstalled = LocalProxyManager.isCAInstalled()
+                        } catch (e: Exception) {
+                            LocalProxyManager.stop()
+                            prefs.edit().putString("ConnectionMode", "normal").commit()
+                            certInstalled = true
+                            runOnUiThread {
+                                android.widget.Toast.makeText(this@SplashActivity,
+                                    "Secure proxy initialization failed; using normal mode", android.widget.Toast.LENGTH_LONG).show()
+                            }
+                        }
                     } else {
                         LocalProxyManager.stop()
                         certInstalled = true

@@ -45,7 +45,7 @@ object CandidateScorer {
             .trim()
 
     private val anyLatinTransliterator by lazy {
-        runCatching {
+        if (android.os.Build.VERSION.SDK_INT < 29) null else runCatching {
             android.icu.text.Transliterator.getInstance("Any-Latin; Latin-ASCII")
         }.getOrNull()
     }
@@ -77,7 +77,7 @@ object CandidateScorer {
                 value,
                 foldLatinDiacritics(value),
                 transliterateCyrillic(value),
-                anyLatinTransliterator?.transliterate(value),
+                if (android.os.Build.VERSION.SDK_INT >= 29) anyLatinTransliterator?.transliterate(value) else null,
             )
                 .map(::normalizedForMatch)
                 .filter { it.isNotBlank() }

@@ -14,7 +14,7 @@ import com.project.lol.webview.helpers.JsUtils.stripConsoleLogs
  * are left alone.
  *
  * Performance notes (this rewrite):
- *  - the scan is driven by native `indexOf` searches, not a per-char loop;
+ *  - console candidates use `indexOf`; literal delimiters use one forward scan;
  *  - the output buffer is lazy: inputs with no strippable call are returned
  *    as the same instance with zero allocation;
  *  - the regex/division heuristic no longer allocates substrings;
@@ -158,16 +158,18 @@ object JsUtils {
         return sb?.toString() ?: code
     }
 
-    /** Next index >= [from] holding a quote or '/', or -1. Intrinsified. */
+    /**
+     * Scan each region once. Four independent indexOf calls repeatedly search
+     * the entire remaining suffix when a delimiter type is absent, making
+     * quote-heavy payloads quadratic and blocking player initialization.
+     */
     private fun nextLiteral(code: String, from: Int): Int {
-        var best = code.indexOf('"', from)
-        var idx = code.indexOf('\'', from)
-        if (idx != -1 && (best == -1 || idx < best)) best = idx
-        idx = code.indexOf('`', from)
-        if (idx != -1 && (best == -1 || idx < best)) best = idx
-        idx = code.indexOf('/', from)
-        if (idx != -1 && (best == -1 || idx < best)) best = idx
-        return best
+        for (i in from until code.length) {
+            when (code[i]) {
+                '"', '\'', '`', '/' -> return i
+            }
+        }
+        return -1
     }
 
     /**

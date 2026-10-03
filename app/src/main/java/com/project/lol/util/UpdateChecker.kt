@@ -6,7 +6,7 @@ class UpdateChecker(private val context: Context) {
 
     companion object {
         private const val TAG = "update"
-        private const val OWNER = "lyssadev"
+        private const val OWNER = "kvmgithub"
         private const val REPO = "Spotilol"
         private const val PREFS_NAME = "spotilol_prefs"
         private const val KEY_LAST_CHECK = "LastUpdateCheck"

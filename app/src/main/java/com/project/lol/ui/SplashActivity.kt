@@ -71,9 +71,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import androidx.core.view.WindowCompat
-import com.google.firebase.analytics.FirebaseAnalytics
-import com.google.firebase.crashlytics.FirebaseCrashlytics
-import com.google.firebase.perf.FirebasePerformance
 import com.project.lol.BuildConfig
 import com.project.lol.R
 import com.project.lol.proxy.LocalProxyManager
@@ -109,17 +106,6 @@ class SplashActivity : ComponentActivity() {
             ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
         } else {
             ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
-        }
-
-        FirebaseCrashlytics.getInstance()
-        // Analytics/Performance are not needed for first frame; init off the main thread.
-        lifecycleScope.launch(Dispatchers.Default) {
-            FirebasePerformance.getInstance()
-            FirebaseAnalytics.getInstance(this@SplashActivity)
-                .logEvent(FirebaseAnalytics.Event.APP_OPEN, Bundle().apply {
-                    putString(FirebaseAnalytics.Param.SCREEN_NAME, "Spotilol")
-                    putString(FirebaseAnalytics.Param.SCREEN_CLASS, "SplashActivity")
-                })
         }
 
         setContent {

@@ -1,0 +1,85 @@
+name: PR device-test APK
+on:
+  push:
+    branches: [pr-device-tests]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build:
+    if: ${{ github.repository == 'kvmgithub/Spotilol' && github.ref == 'refs/heads/pr-device-tests' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3
+        with:
+          cmdline-tools-version: 15641748
+          packages: platform-tools
+      - name: Install Android build dependencies
+        run: sdkmanager 'platforms;android-37.0' 'build-tools;37.0.0' 'ndk;28.2.13676358' 'cmake;3.22.1'
+      - name: Check PR security regressions
+        run: bash tests/security/run.sh
+      - name: Prepare test signing
+        env:
+          APK_SIGNING_BUNDLE: ${{ secrets.APK_SIGNING_BUNDLE }}
+        run: |
+          python3 - <<'PY'
+          import os, json, base64
+          from pathlib import Path
+          bundle = json.loads(os.environ['APK_SIGNING_BUNDLE'])
+          key = Path(os.environ['RUNNER_TEMP']) / 'release.p12'
+          key.write_bytes(base64.b64decode(bundle['keystore'], validate=True))
+          key.chmod(0o600)
+          password = bundle['password']
+          print('::add-mask::' + password)
+          with open(os.environ['GITHUB_ENV'], 'a') as out:
+              out.write(f'APK_KEYSTORE={key}\nAPK_KEY_PASSWORD={password}\nAPK_KEY_ALIAS=release\n')
+          PY
+      - name: Prepare isolated packaging and original Firebase configuration
+        run: python3 .github/scripts/pr_test_build.py prepare
+      - name: Build and test telemetry-preserving ARM64 APK
+        run: |
+          ./gradlew :app:testDebugUnitTest :app:lintRelease :app:assembleRelease \
+            -x :app:uploadCrashlyticsMappingFileRelease \
+            --no-daemon --no-configuration-cache --console=plain -Pkotlin.incremental=false
+      - name: Verify source variant, Firebase components, tests and APK signature
+        run: python3 .github/scripts/pr_test_build.py verify
+      - name: Publish test APK
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="pr103-24f2d3b-build$GITHUB_RUN_NUMBER"
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+          text = (
+              "Device-test build for PR #103, source commit 24f2d3b4a71a45311283e22762297e18948f1c25.\n\n"
+              "Original Firebase Analytics, Crashlytics and Performance SDKs, initialization and events are retained. "
+              "Their public configuration is restored from the official 1.1.8 APK.\n\n"
+              "Package: com.project.lol.prtest. Launcher label: Spotilol PR-Test. "
+              "Installs alongside the original app and the telemetry-free fork; a fresh login is required.\n\n"
+              "Only packaging differs from the PR: application ID, label/version, ARM64 ABI and test signing. "
+              "Crashlytics mapping upload is skipped for this build.\n\n"
+              "Standalone security tests, Android JVM tests, release lint and APK verification are required before publication. "
+              "Proxy/certificate mode and Android Auto still require physical-device testing.\n"
+          )
+          (Path(os.environ["RUNNER_TEMP"]) / "release-notes.md").write_text(text)
+          PY
+          if ! gh release view "$tag" >/dev/null 2>&1; then
+            gh release create "$tag" --target "$GITHUB_SHA" --title "PR 103 device test $APK_VERSION_NAME" \
+              --notes-file "$RUNNER_TEMP/release-notes.md" --draft --prerelease
+          fi
+          gh release upload "$tag" release-assets/* --clobber
+          release_id=$(gh release view "$tag" --json databaseId --jq .databaseId)
+          gh api --method PATCH "repos/$GITHUB_REPOSITORY/releases/$release_id" \
+            -F draft=false -F prerelease=true -f make_latest=false > /dev/null
+      - name: Remove signing material
+        if: always()
+        run: rm -f "$RUNNER_TEMP/release.p12"

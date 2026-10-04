@@ -105,9 +105,6 @@ class MediaNotificationService : MediaBrowserServiceCompat() {
         var instance: MediaNotificationService? = null
         private var appContext: Context? = null
 
-        @Volatile
-        private var taskRemoved = false
-
         @JvmStatic
         fun onMediaItemsLoaded(parentId: String, json: String) {
             val result = pendingCallbacks.remove(parentId) ?: return
@@ -189,6 +186,8 @@ class MediaNotificationService : MediaBrowserServiceCompat() {
             Handler(Looper.getMainLooper()).post { result.sendResult(finalItems) }
         }
     }
+
+    private val lifetime = MediaServiceLifetime()
 
     private lateinit var mediaSession: MediaSessionCompat
     private var isPlaying = false
@@ -423,8 +422,9 @@ class MediaNotificationService : MediaBrowserServiceCompat() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        Logger.d(TAG, "onStartCommand startId=$startId action=${intent?.action ?: "none"} taskRemoved=$taskRemoved")
-        if (taskRemoved) {
+        val acceptStart = lifetime.acceptStart()
+        Logger.d(TAG, "onStartCommand startId=$startId action=${intent?.action ?: "none"} acceptStart=$acceptStart")
+        if (!acceptStart) {
             stopSelf()
             return START_NOT_STICKY
         }
@@ -1016,7 +1016,7 @@ class MediaNotificationService : MediaBrowserServiceCompat() {
         val stopOnSwipe = getSharedPreferences("spotilol_prefs", MODE_PRIVATE)
             .getBoolean("SwipeStop", true)
         if (stopOnSwipe) {
-            taskRemoved = true
+            lifetime.markTaskRemoved()
             if (::mediaSession.isInitialized) {
                 try { mediaSession.isActive = false } catch (_: Exception) {}
             }

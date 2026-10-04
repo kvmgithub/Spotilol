@@ -57,12 +57,13 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          tag="pr103-24f2d3b-build$GITHUB_RUN_NUMBER"
+          tag="pr103-b7a721a-build$GITHUB_RUN_NUMBER"
           python3 - <<'PY'
           import os
           from pathlib import Path
           text = (
-              "Device-test build for PR #103, source commit 24f2d3b4a71a45311283e22762297e18948f1c25.\n\n"
+              "Device-test build for PR #103, source commit b7a721a8c56296eb4a1511963cde4329d0ee0e3b.\n\n"
+              "This build also fixes media-service restart after the app task is removed and reopened.\n\n"
               "Original Firebase Analytics, Crashlytics and Performance SDKs, initialization and events are retained. "
               "Their public configuration is restored from the official 1.1.8 APK.\n\n"
               "Package: com.project.lol.prtest. Launcher label: Spotilol PR-Test. "

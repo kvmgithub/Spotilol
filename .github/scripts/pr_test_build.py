@@ -11,7 +11,7 @@ import urllib.request
 import xml.etree.ElementTree as ET
 import zipfile
 
-SOURCE_COMMIT = "24f2d3b4a71a45311283e22762297e18948f1c25"
+SOURCE_COMMIT = "b7a721a8c56296eb4a1511963cde4329d0ee0e3b"
 ORIGINAL_URL = "https://github.com/lyssadev/Spotilol/releases/download/1.1.8/app-release.apk"
 ORIGINAL_SHA256 = "4161b817758a76103df58635846e40d44984ddb75d533a6881e44a3b4e1d01e5"
 PACKAGE = "com.project.lol.prtest"
@@ -138,7 +138,7 @@ def verify():
     tests = sum(int(report.attrib["tests"]) for report in reports)
     failures = sum(int(report.attrib.get("failures", 0)) + int(report.attrib.get("errors", 0))
                    for report in reports)
-    assert tests == 14 and failures == 0, (tests, failures)
+    assert tests == 16 and failures == 0, (tests, failures)
     lint = ET.parse("app/build/reports/lint-results-release.xml").getroot()
     lint_errors = [issue for issue in lint.findall("issue")
                    if issue.attrib.get("severity", "").lower() in ("fatal", "error")]

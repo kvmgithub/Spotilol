@@ -145,8 +145,10 @@ def verify():
     assert not lint_errors, "Release lint reported errors"
     signature = command(str(Path(os.environ["ANDROID_HOME"]) / "build-tools/37.0.0/apksigner"),
                         "verify", "--verbose", "--print-certs", str(apk))
-    digest = next(line.split(": ", 1)[1] for line in signature.splitlines()
-                  if line.startswith("Signer #1 certificate SHA-256 digest:"))
+    fingerprints = set(re.findall(
+        r"Signer[^\n]*certificate SHA-256 digest:\s*([0-9a-fA-F]{64})", signature))
+    assert len(fingerprints) == 1, "Expected exactly one signing certificate"
+    digest = fingerprints.pop().lower()
     sha256 = hashlib.sha256(apk.read_bytes()).hexdigest()
     (output / "SHA256SUMS.txt").write_text(f"{sha256}  {apk.name}\n")
     record = {

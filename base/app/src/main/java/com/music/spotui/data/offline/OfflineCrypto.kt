@@ -1,0 +1,181 @@
+package com.music.spotui.data.offline
+
+import android.content.Context
+import android.net.Uri
+import android.security.keystore.KeyGenParameterSpec
+import android.security.keystore.KeyProperties
+import androidx.annotation.OptIn
+import androidx.media3.common.C
+import androidx.media3.common.util.UnstableApi
+import androidx.media3.datasource.BaseDataSource
+import androidx.media3.datasource.DataSource
+import androidx.media3.datasource.DataSpec
+import androidx.media3.datasource.DefaultDataSource
+import java.io.File
+import java.io.IOException
+import java.io.RandomAccessFile
+import java.math.BigInteger
+import java.security.KeyStore
+import java.security.SecureRandom
+import javax.crypto.Cipher
+import javax.crypto.KeyGenerator
+import javax.crypto.SecretKey
+import javax.crypto.spec.GCMParameterSpec
+import javax.crypto.spec.IvParameterSpec
+import javax.crypto.spec.SecretKeySpec
+
+/**
+ * Downloaded songs are kept encrypted (AES-CTR), so they only play in Myspoti on this
+ * phone: copied out of the app, a file is noise.
+ *
+ * The file key is random, and stored wrapped by a key of the Android Keystore that
+ * never leaves the phone (nor its secure hardware). File layout: "MSE1", a 16-byte IV,
+ * then the encrypted audio. CTR mode lets the player seek anywhere.
+ */
+object OfflineCrypto {
+    private val MAGIC = "MSE1".toByteArray()
+    private const val IV_BYTES = 16
+    const val HEADER = 4 + IV_BYTES
+    private const val KEYSTORE_ALIAS = "myspoti_offline"
+    private const val PREFS = "offline_crypto"
+
+    @Volatile private var key: SecretKey? = null
+
+    /** The file key; made on first use. Null only when the Keystore lost its key. */
+    fun key(context: Context): SecretKey = key ?: synchronized(this) {
+        key ?: loadOrCreate(context).also { key = it }
+    }
+
+    private fun loadOrCreate(context: Context): SecretKey {
+        val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        val wrapped = prefs.getString("key", null)
+        val ks = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
+        val master = (ks.getKey(KEYSTORE_ALIAS, null) as? SecretKey)
+        if (wrapped != null && master != null) {
+            runCatching {
+                val raw = android.util.Base64.decode(wrapped, android.util.Base64.NO_WRAP)
+                val c = Cipher.getInstance("AES/GCM/NoPadding")
+                c.init(Cipher.DECRYPT_MODE, master, GCMParameterSpec(128, raw.copyOfRange(0, 12)))
+                return SecretKeySpec(c.doFinal(raw, 12, raw.size - 12), "AES")
+            }
+        }
+        // No key yet (or the Keystore's is gone: older files can no longer be read).
+        val newMaster = master ?: KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, "AndroidKeyStore").apply {
+            init(KeyGenParameterSpec.Builder(KEYSTORE_ALIAS, KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT)
+                .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
+                .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
+                .setKeySize(256).build())
+        }.generateKey()
+        val fileKey = ByteArray(32).also { SecureRandom().nextBytes(it) }
+        val c = Cipher.getInstance("AES/GCM/NoPadding").apply { init(Cipher.ENCRYPT_MODE, newMaster) }
+        val sealed = c.iv + c.doFinal(fileKey)
+        prefs.edit().putString("key", android.util.Base64.encodeToString(sealed, android.util.Base64.NO_WRAP)).commit()
+        return SecretKeySpec(fileKey, "AES")
+    }
+
+    fun isEncrypted(file: File): Boolean = runCatching {
+        file.length() >= HEADER && file.inputStream().use { s -> ByteArray(4).also { s.read(it) }.contentEquals(MAGIC) }
+    }.getOrDefault(false)
+
+    /** Writes [plain] encrypted to [out]. */
+    fun encrypt(context: Context, plain: File, out: File) {
+        val iv = ByteArray(IV_BYTES).also { SecureRandom().nextBytes(it) }
+        val c = cipher(key(context), iv, 0)
+        out.outputStream().buffered(256 * 1024).use { o ->
+            o.write(MAGIC); o.write(iv)
+            plain.inputStream().use { i ->
+                val buf = ByteArray(256 * 1024)
+                while (true) {
+                    val n = i.read(buf)
+                    if (n < 0) break
+                    o.write(c.update(buf, 0, n))
+                }
+            }
+            c.doFinal().takeIf { it.isNotEmpty() }?.let(o::write)
+        }
+    }
+
+    /** Encrypts [file] in place (through a temporary file next to it). */
+    fun encryptInPlace(context: Context, file: File) {
+        if (isEncrypted(file)) return
+        val tmp = File(file.parentFile, file.name + ".enc")
+        try {
+            encrypt(context, file, tmp)
+            if (!tmp.renameTo(file)) throw IOException("could not replace ${file.name}")
+        } finally {
+            tmp.delete()
+        }
+    }
+
+    /** AES-CTR positioned at byte [offset] of the stream (the caller skips offset % 16). */
+    internal fun cipher(key: SecretKey, iv: ByteArray, offset: Long): Cipher {
+        val counter = BigInteger(1, iv).add(BigInteger.valueOf(offset / 16))
+        val bytes = counter.toByteArray().let { b ->
+            when {
+                b.size > 16 -> b.copyOfRange(b.size - 16, b.size) // wrapped around
+                b.size < 16 -> ByteArray(16 - b.size) + b
+                else -> b
+            }
+        }
+        return Cipher.getInstance("AES/CTR/NoPadding").apply { init(Cipher.ENCRYPT_MODE, key, IvParameterSpec(bytes)) }
+            .also { c -> val skip = (offset % 16).toInt(); if (skip > 0) c.update(ByteArray(skip)) }
+    }
+
+    /** The player's data source: decrypts downloaded files, reads anything else as usual. */
+    @OptIn(UnstableApi::class)
+    class Factory(private val context: Context) : DataSource.Factory {
+        private val fallback = DefaultDataSource.Factory(context)
+        override fun createDataSource(): DataSource = Switching(context, fallback.createDataSource())
+    }
+
+    @OptIn(UnstableApi::class)
+    private class Switching(private val context: Context, private val other: DataSource) : BaseDataSource(false) {
+        private var raf: RandomAccessFile? = null
+        private var cipher: Cipher? = null
+        private var uri: Uri? = null
+        private var left = 0L
+        private var usingOther = false
+
+        override fun open(dataSpec: DataSpec): Long {
+            uri = dataSpec.uri
+            val file = dataSpec.uri.takeIf { it.scheme == "file" }?.path?.let(::File)
+            if (file == null || !isEncrypted(file)) {
+                usingOther = true
+                return other.open(dataSpec)
+            }
+            transferInitializing(dataSpec)
+            val r = RandomAccessFile(file, "r")
+            val iv = ByteArray(IV_BYTES)
+            r.seek(4); r.readFully(iv)
+            val total = file.length() - HEADER
+            if (dataSpec.position > total) { r.close(); throw IOException("position past the end") }
+            r.seek(HEADER + dataSpec.position)
+            cipher = cipher(key(context), iv, dataSpec.position)
+            raf = r
+            left = if (dataSpec.length != C.LENGTH_UNSET.toLong()) dataSpec.length else total - dataSpec.position
+            transferStarted(dataSpec)
+            return left
+        }
+
+        override fun read(buffer: ByteArray, offset: Int, length: Int): Int {
+            if (usingOther) return other.read(buffer, offset, length)
+            if (length == 0) return 0
+            if (left == 0L) return C.RESULT_END_OF_INPUT
+            val r = raf ?: return C.RESULT_END_OF_INPUT
+            val n = r.read(buffer, offset, minOf(length.toLong(), left).toInt())
+            if (n < 0) return C.RESULT_END_OF_INPUT
+            cipher!!.update(buffer, offset, n, buffer, offset)
+            left -= n
+            bytesTransferred(n)
+            return n
+        }
+
+        override fun getUri(): Uri? = if (usingOther) other.uri else uri
+
+        override fun close() {
+            if (usingOther) { usingOther = false; other.close(); return }
+            raf?.close(); raf = null; cipher = null
+            if (uri != null) { uri = null; transferEnded() }
+        }
+    }
+}

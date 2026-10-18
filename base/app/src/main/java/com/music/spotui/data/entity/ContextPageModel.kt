@@ -1,0 +1,17 @@
+package com.music.spotui.data.entity
+
+/** Everything the album / playlist page shows, loaded by Spotify id. */
+data class ContextPageModel(
+    val uri: String,
+    val type: String, // "album" | "playlist"
+    val name: String,
+    val coverUri: String,
+    val description: String = "",
+    val ownerName: String = "",
+    val ownerAvatar: String = "",
+    val ownerUri: String = "",
+    val metaLine: String = "",
+    val explicit: Boolean = false,
+    val tracks: List<SongsModel> = emptyList(),
+    val complete: Boolean = true,
+)

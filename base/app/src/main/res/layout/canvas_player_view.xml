@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The Canvas clip. A TextureView, not the default SurfaceView: a SurfaceView shows black
+     until the first frame (a flash over the screen behind), and the controller is off from
+     inflation, so its previous / next buttons never appear. -->
+<androidx.media3.ui.PlayerView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@android:color/transparent"
+    app:surface_type="texture_view"
+    app:use_controller="false"
+    app:auto_show="false"
+    app:show_buffering="never"
+    app:use_artwork="false"
+    app:resize_mode="zoom"
+    app:shutter_background_color="@android:color/transparent"
+    app:keep_content_on_player_reset="true" />

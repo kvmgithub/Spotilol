@@ -1,0 +1,187 @@
+package app.myspoti.api
+
+/** What a uri points to. */
+enum class MediaKind {
+    TRACK, ALBUM, ARTIST, PLAYLIST, SHOW, EPISODE, AUDIOBOOK, CHAPTER, USER, GENRE,
+    /** Liked Songs, Your Episodes and other built-in collections. */
+    COLLECTION,
+    FOLDER, UNKNOWN;
+
+    companion object {
+        fun of(uri: Uri): MediaKind = when {
+            uri.startsWith("spotify:track:") -> TRACK
+            uri.startsWith("spotify:album:") -> ALBUM
+            uri.startsWith("spotify:artist:") -> ARTIST
+            uri.startsWith("spotify:playlist:") -> PLAYLIST
+            uri.startsWith("spotify:show:") -> SHOW
+            uri.startsWith("spotify:episode:") -> EPISODE
+            uri.startsWith("spotify:audiobook:") -> AUDIOBOOK
+            uri.startsWith("spotify:chapter:") -> CHAPTER
+            uri.startsWith("spotify:user:") && ":collection" in uri -> COLLECTION
+            uri.startsWith("spotify:user:") -> USER
+            uri.startsWith("spotify:genre:") || uri.startsWith("spotify:page:") -> GENRE
+            uri.startsWith("spotify:collection:") -> COLLECTION
+            uri.startsWith("spotify:folder:") || uri.contains(":folder:") -> FOLDER
+            else -> UNKNOWN
+        }
+    }
+}
+
+/** A tile in a shelf: home, browse, search top results, "fans also like"... */
+data class MediaCard(
+    val uri: Uri,
+    val kind: MediaKind,
+    val title: String,
+    val subtitle: String?,
+    val images: List<Image>,
+)
+
+data class Shelf(val uri: Uri?, val title: String?, val items: List<MediaCard>, val total: Int)
+
+// --- Home and browse ---------------------------------------------------------
+
+enum class HomeFilter(val facet: String) { ALL(""), MUSIC("music-chip"), PODCASTS("podcasts-chip"), AUDIOBOOKS("audiobooks-chip") }
+
+data class HomeFeed(val greeting: String, val filters: List<HomeFilter>, val shelves: List<Shelf>)
+
+data class Category(val uri: Uri, val title: String, val images: List<Image>, val color: String?)
+
+data class BrowsePage(val uri: Uri, val title: String, val shelves: List<Shelf>)
+
+// --- Library -----------------------------------------------------------------
+
+enum class LibraryFilter(val id: String?) { ALL(null), PLAYLISTS("Playlists"), ARTISTS("Artists"), ALBUMS("Albums"), PODCASTS("Podcasts"), AUDIOBOOKS("Audiobooks") }
+
+enum class LibrarySort(val id: String?) { RECENTS(null), RECENTLY_ADDED("Recently Added"), ALPHABETICAL("Alphabetical"), CREATOR("Creator"), CUSTOM("Custom Order") }
+
+data class LibraryItem(
+    val uri: Uri,
+    val kind: MediaKind,
+    val name: String,
+    val subtitle: String?,
+    val images: List<Image>,
+    val pinned: Boolean,
+    val addedAt: String?,
+    /** Items in a folder, tracks in Liked Songs. */
+    val count: Int? = null,
+)
+
+data class SavedTrack(val track: Track, val addedAt: String?)
+
+// --- Users -------------------------------------------------------------------
+
+data class Account(
+    val uri: Uri,
+    val username: String,
+    val name: String,
+    val images: List<Image>,
+    val premium: Boolean,
+    val country: String?,
+)
+
+data class UserProfile(
+    val uri: Uri,
+    val name: String,
+    val images: List<Image>,
+    val followers: Int?,
+    val following: Int?,
+    val publicPlaylists: List<Playlist>,
+)
+
+enum class TimeRange { SHORT_TERM, MEDIUM_TERM, LONG_TERM }
+
+data class TopContent(val artists: List<Artist>, val tracks: List<Track>)
+
+/** A friend's latest listen (friend activity). */
+data class FriendActivity(val user: UserRef, val track: Track?, val contextUri: Uri?, val timestampMs: Long)
+
+data class UserRef(val uri: Uri, val name: String, val imageUrl: String?)
+
+// --- Podcasts and audiobooks -------------------------------------------------
+
+data class Show(
+    val uri: Uri,
+    val name: String,
+    val publisher: String,
+    val description: String?,
+    val images: List<Image>,
+    val saved: Boolean,
+    val rating: Double?,
+    val topics: List<String>,
+)
+
+data class Episode(
+    val uri: Uri,
+    val name: String,
+    val description: String?,
+    val durationMs: Long,
+    val releaseDate: String?,
+    val images: List<Image>,
+    val show: AlbumRef?,
+    /** Where the user stopped, and whether they finished it. */
+    val playedPositionMs: Long,
+    val played: Boolean,
+    val explicit: Boolean,
+    val playable: Boolean,
+    val previewUrl: String?,
+)
+
+data class Audiobook(
+    val uri: Uri,
+    val name: String,
+    val authors: List<String>,
+    val narrators: List<String>,
+    val description: String?,
+    val images: List<Image>,
+    val chapterCount: Int,
+)
+
+// --- Track extras ------------------------------------------------------------
+
+data class LyricsLine(val startMs: Long, val endMs: Long?, val text: String, val words: List<LyricsWord>? = null)
+
+data class LyricsWord(val startMs: Long, val text: String)
+
+data class Lyrics(
+    val lines: List<LyricsLine>,
+    val synced: Boolean,
+    val language: String?,
+    val provider: String?,
+    /** ARGB colours from Spotify's lyrics card. */
+    val background: Int?,
+    val text: Int?,
+    val highlight: Int?,
+)
+
+data class Canvas(val uri: Uri, val videoUrl: String, val type: String)
+
+data class Credits(val roles: List<CreditRole>)
+
+data class CreditRole(val role: String, val artists: List<ArtistRef>)
+
+// --- Devices and Jam ---------------------------------------------------------
+
+data class Device(
+    val id: String,
+    val name: String,
+    val type: String,
+    val active: Boolean,
+    val volume: Double?,
+    /** This app's own player. */
+    val local: Boolean,
+)
+
+enum class JamAvailability { AVAILABLE, RESTRICTED, UNKNOWN }
+
+data class JamMember(val userUri: Uri, val name: String, val imageUrl: String?, val host: Boolean)
+
+data class JamSession(
+    val id: String,
+    val joinToken: String?,
+    val inviteLink: String?,
+    val members: List<JamMember>,
+    val isHost: Boolean,
+    val queueOnly: Boolean,
+)
+
+data class HistoryEntry(val uri: Uri, val kind: MediaKind, val name: String, val images: List<Image>, val playedAtMs: Long?)

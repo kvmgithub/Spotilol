@@ -1,0 +1,48 @@
+package com.music.spotui.data
+
+import android.content.Context
+import com.bumptech.glide.Glide
+import com.bumptech.glide.Priority
+import com.bumptech.glide.load.DataSource
+import com.bumptech.glide.load.Options
+import com.bumptech.glide.load.data.DataFetcher
+import com.bumptech.glide.load.model.GlideUrl
+import com.bumptech.glide.load.model.ModelLoader
+import com.bumptech.glide.load.model.ModelLoaderFactory
+import com.bumptech.glide.load.model.MultiModelLoaderFactory
+import com.bumptech.glide.load.model.stream.HttpGlideUrlLoader
+import java.io.InputStream
+
+/**
+ * Images under the data saver: Glide still shows what its disk cache holds, and asks
+ * the network for nothing (see [DataSaver]).
+ */
+object DataSaverGlide {
+    fun install(context: Context) {
+        Glide.get(context).registry.replace(GlideUrl::class.java, InputStream::class.java, Factory())
+    }
+
+    private class Factory : ModelLoaderFactory<GlideUrl, InputStream> {
+        override fun build(multiFactory: MultiModelLoaderFactory): ModelLoader<GlideUrl, InputStream> =
+            Loader(HttpGlideUrlLoader())
+        override fun teardown() {}
+    }
+
+    private class Loader(private val inner: ModelLoader<GlideUrl, InputStream>) : ModelLoader<GlideUrl, InputStream> {
+        override fun buildLoadData(model: GlideUrl, width: Int, height: Int, options: Options): ModelLoader.LoadData<InputStream>? {
+            val data = inner.buildLoadData(model, width, height, options) ?: return null
+            return ModelLoader.LoadData(data.sourceKey, data.alternateKeys, Fetcher(data.fetcher))
+        }
+        override fun handles(model: GlideUrl) = inner.handles(model)
+    }
+
+    private class Fetcher(private val inner: DataFetcher<InputStream>) : DataFetcher<InputStream> {
+        override fun loadData(priority: Priority, callback: DataFetcher.DataCallback<in InputStream>) {
+            if (DataSaver.active) callback.onLoadFailed(DataSaver.Blocked()) else inner.loadData(priority, callback)
+        }
+        override fun cleanup() = inner.cleanup()
+        override fun cancel() = inner.cancel()
+        override fun getDataClass(): Class<InputStream> = inner.dataClass
+        override fun getDataSource(): DataSource = inner.dataSource
+    }
+}

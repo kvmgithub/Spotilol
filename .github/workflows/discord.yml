@@ -1,0 +1,27 @@
+# Posts (or re-posts) a release's announcement on Discord, by hand: Actions > Discord
+# announcement > Run workflow. Releases published by the Android workflow announce
+# themselves; this one is for an older release or a second try.
+name: Discord announcement
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag, e.g. v1.0.5 (empty = the latest release)"
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+jobs:
+  announce:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Discord announcement
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          GITHUB_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag }}
+        run: python3 tools/discord_release.py "$TAG"

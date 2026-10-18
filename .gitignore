@@ -1,0 +1,14 @@
+# build outputs
+build/
+.gradle/
+.kotlin/
+*.apk
+*.zip
+dist/
+local.properties
+# device captures (logs can contain session data)
+tools/captures/
+base/tools/captures/
+__pycache__/
+.idea/
+PROMPT-*.md

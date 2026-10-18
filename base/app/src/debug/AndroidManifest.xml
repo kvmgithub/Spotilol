@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application>
+        <!-- Debug builds only: tools/playback_test.py drives the player through it. DUMP is held
+             by the adb shell, not by other apps. -->
+        <receiver
+            android:name="com.music.spotui.di.TestControlReceiver"
+            android:exported="true"
+            android:permission="android.permission.DUMP">
+            <intent-filter>
+                <action android:name="app.myspoti.TEST" />
+            </intent-filter>
+        </receiver>
+    </application>
+</manifest>

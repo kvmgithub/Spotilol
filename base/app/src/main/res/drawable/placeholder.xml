@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Artwork placeholder (loading / missing image): a plain dark tile, as in the official app. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="64dp" android:height="64dp"
+    android:viewportWidth="64" android:viewportHeight="64">
+    <path android:fillColor="#282828" android:pathData="M0,0h64v64h-64z" />
+</vector>

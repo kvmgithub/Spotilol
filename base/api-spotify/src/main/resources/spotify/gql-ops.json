@@ -1,0 +1,723 @@
+{
+ "buildVersion": "web-player_2026-10-15_1792099594925_61b9bcdb1ef2",
+ "clientVersion": "1.3.6.1874.g61b9bcdb1ef2",
+ "bundles": 182,
+ "operations": {
+  "ArtistConcerts": {
+   "kind": "query",
+   "hash": "ef53c43b865496b9890b7167eab1dc614a8949ef9451b3c41184ea888de8bd2b"
+  },
+  "ArtistConcertsPageLocation": {
+   "kind": "query",
+   "hash": "320698465a352f0d0247ec8ed02471244106d4199820f99de4d0a785561c2b03"
+  },
+  "ConcertCampaign": {
+   "kind": "query",
+   "hash": "c7d2e205f8e9a86ff591b04dec97785769b403f8b936a0826c936d2ea0c4add9"
+  },
+  "ConcertGallery": {
+   "kind": "query",
+   "hash": "2712501d317e8fb585b74dfdbaeaf4f36f9d7d49fc8620b29e307b2fe0f053f7"
+  },
+  "SetItemsStateInWhatsNewFeed": {
+   "kind": "mutation",
+   "hash": "d889c8c936ab192af8ced595427f5ba2acdf63478fdc0a181c8d477f8322630e"
+  },
+  "accountAttributes": {
+   "kind": "query",
+   "hash": "d48062d0df0a256ff78ed9e232b83d238dcd710b371efd304b0e178b62595582"
+  },
+  "addComment": {
+   "kind": "mutation",
+   "hash": "504a54dcb144fc345869c93887152f53450bd41298b6edb57d9e3b1c5aae92e6"
+  },
+  "addCommentReaction": {
+   "kind": "mutation",
+   "hash": "0af9821ff5cc680412c61c470d55493fe26e6cf938101a93b18c7cc8e5590acb"
+  },
+  "addCommentReply": {
+   "kind": "mutation",
+   "hash": "d4046f61457dad19e9315f8829a92e6d162592729d08ed0f9fe70f4c04cd09ae"
+  },
+  "addToLibrary": {
+   "kind": "mutation",
+   "hash": "896ebcb47815681340860d121cb5d494e157e2a78d3950385cd54e0393c67148"
+  },
+  "addToPlaylist": {
+   "kind": "mutation",
+   "hash": "b907ad6b088d5bf7680fa81198996d58398c2d55dfcdf59fcc959e0be98a418a"
+  },
+  "addVenueToLibrary": {
+   "kind": "mutation",
+   "hash": "353cc0ecbf123f4166f6887a1478520dab08fc1de527aaca8d72c9851693620c"
+  },
+  "albumPreRelease": {
+   "kind": "query",
+   "hash": "e1a5537a42c3b8a687f10ae865c3b6776d6d797f8c0c272b2d40dc159a8e1a94"
+  },
+  "albumPreReleaseTracks": {
+   "kind": "query",
+   "hash": "dfbdcf2688995adc2c2196fcdd7802b2a5137a2549b361aa7fb23cd6493f4672"
+  },
+  "applyCurations": {
+   "kind": "mutation",
+   "hash": "05b739a3a73091c213385233b9d3ed8a857c2ca29d2eebadb3d04ed12e288697"
+  },
+  "applyCurationsV2": {
+   "kind": "mutation",
+   "hash": "8d106cadf80dbe8dfaf62746b254b8e90aff782ba50c14a3c451b528b527a382"
+  },
+  "areEntitiesInLibrary": {
+   "kind": "query",
+   "hash": "134337999233cc6fdd6b1e6dbf94841409f04a946c5c7b744b09ba0dfe5a85ed"
+  },
+  "assistedCurationSearch": {
+   "kind": "query",
+   "hash": "f78953bf9207d73493c27284103f5aeb6e728876d5793851bf79bc706127ff70"
+  },
+  "assistedCurationSearchAlbum": {
+   "kind": "query",
+   "hash": "e33489c81fdab1986d8b785fb9bf13993a2d5ff171190c575963f97e525870fe"
+  },
+  "assistedCurationSearchArtist": {
+   "kind": "query",
+   "hash": "a562324cea8976b4d51f08cee971bb180ce9279c947d27e0814675220b160cf7"
+  },
+  "browseAll": {
+   "kind": "query",
+   "hash": "dbd8b55e09a58afc52eab438bc228ba28fd72ac2f2148c6c26354980e4579001"
+  },
+  "browsePage": {
+   "kind": "query",
+   "hash": "f5c4e6d668f5716464a231c1cc8b22c1cbf6ad68b09929fd7de813a30581298b"
+  },
+  "browseSection": {
+   "kind": "query",
+   "hash": "b13c1cccbfcb6947753c2613411b3566485c21fd5f36d80a80bb64be61ba2d51"
+  },
+  "canvas": {
+   "kind": "query",
+   "hash": "575138ab27cd5c1b3e54da54d0a7cc8d85485402de26340c2145f0f6bb5e7a9f"
+  },
+  "centralisedStatePlayerOptions": {
+   "kind": "query",
+   "hash": "e2dcfcab470854d4d1c7cb1a851438f14fe0a94d57db7f0b9dde492559d5395d"
+  },
+  "changeAttributes": {
+   "kind": "mutation",
+   "hash": "c51f514c143b5a4ff830bb2e85c3bef7441814ae4e3392a671f476c903c487ac"
+  },
+  "concert": {
+   "kind": "query",
+   "hash": "9b582a69061f6648858515c2aa6d4a2273ac49b74eb5dbc612bc1299a9f2f13e"
+  },
+  "concertConcepts": {
+   "kind": "query",
+   "hash": "a409c1eb39b6345e7993d424d2408b65a6699bafc2b8a03217033e517cd76b72"
+  },
+  "concertCount": {
+   "kind": "query",
+   "hash": "29be9d486e073a49268e13ed9e2d2180187e669fcb7a19b98011aca7ab61b141"
+  },
+  "concertFeed": {
+   "kind": "query",
+   "hash": "9cae2dbee3f47904c60bab45256260b3ddb9844d5ef25038c17112619d14ce9a"
+  },
+  "concertLocationDetails": {
+   "kind": "query",
+   "hash": "b13f195349f188fee25480ae889d782852d68663bf07743c654244454750d681"
+  },
+  "concertLocationsByLatLon": {
+   "kind": "query",
+   "hash": "8a059d072a17a1199feb21fe846271f1680eda87010c832852ced0c55c6c7c96"
+  },
+  "concertNotInterestedSet": {
+   "kind": "mutation",
+   "hash": "81c188764fbf5c76d6b10a47c7b3623b46d9d13d69663a3774cfeae89d52e16e"
+  },
+  "concertNotInterestedUndo": {
+   "kind": "mutation",
+   "hash": "6e7189ddd2537fa7f9700324986c1f062790746df9183066077952e5ca13494c"
+  },
+  "concertRoutingCardVisuals": {
+   "kind": "query",
+   "hash": "a69f1a97f02c81533bd4e4ac2fed4669cb35a44a294e36a02c14df892d63ff0f"
+  },
+  "countryHubContent": {
+   "kind": "query",
+   "hash": "0e82bf24f321731e43423d9cdce71aa154ee876cd12b055e7c3af4dcb44c9225"
+  },
+  "countryHubsPage": {
+   "kind": "query",
+   "hash": "6c2e4b04d8836507c2ad09c954f27a6c98d8b0a761f99ef6f4dc9bbe7834ba55"
+  },
+  "curateItems": {
+   "kind": "mutation",
+   "hash": "7ec153d699355ef54da22366723b66b11aae0c288b166dc6813b70ac91901af1"
+  },
+  "decorateContextEpisodesOrChapters": {
+   "kind": "query",
+   "hash": "383de00240775c39a6afe0b1055dc562b2a3930894201f9762f3fc32a74971c7"
+  },
+  "decorateContextTracks": {
+   "kind": "query",
+   "hash": "383de00240775c39a6afe0b1055dc562b2a3930894201f9762f3fc32a74971c7"
+  },
+  "decorateQueuedByUsers": {
+   "kind": "query",
+   "hash": "33fe7085b4a9dde404955eeee4f8f93aa7a8e55028058354bc707727d8a7890d"
+  },
+  "deleteComment": {
+   "kind": "mutation",
+   "hash": "9ecb2804fc1c8f85f8112ffc962b038a31a1c63d59bcf8b5fb23cb2765b8b6d9"
+  },
+  "deleteCommentReaction": {
+   "kind": "mutation",
+   "hash": "b93a40eaa470fcaaa886352e3268e3e5c6e303e11e8b849490e98ba158796cca"
+  },
+  "deleteCommentReply": {
+   "kind": "mutation",
+   "hash": "5cef2a525100a08976bf6079771d5b88b1ec8b0fe5eee402185a7449e53d494c"
+  },
+  "deleteLocation": {
+   "kind": "mutation",
+   "hash": "2f681a7c30da3bc905c469374aa2983d0d00a1b6ba88e5fdd6a23caa02057971"
+  },
+  "editablePlaylists": {
+   "kind": "query",
+   "hash": "d5c4b8096437dcc2ac9528c91dfcd299e35b747cda2f8f75d28f41f49c5092ba"
+  },
+  "episodeSponsoredContent": {
+   "kind": "query",
+   "hash": "a5c1fe722b60c29ad247ea3df57ace52043382a7f080d525f58745db78a42618"
+  },
+  "fetchEntitiesForRecentlyPlayed": {
+   "kind": "query",
+   "hash": "cf5d2e94ffd82788470788ae1f6090cc3e9e774fb8fd383580634c6e6f50f7be"
+  },
+  "fetchExtractedColorAndImageForAlbumEntity": {
+   "kind": "query",
+   "hash": "b2d6d99fb6237952dfa6638385f9c6085f1b1fb9d0468753ca6ad98ff45adc6f"
+  },
+  "fetchExtractedColorAndImageForArtistEntity": {
+   "kind": "query",
+   "hash": "b2d6d99fb6237952dfa6638385f9c6085f1b1fb9d0468753ca6ad98ff45adc6f"
+  },
+  "fetchExtractedColorAndImageForEpisodeEntity": {
+   "kind": "query",
+   "hash": "b2d6d99fb6237952dfa6638385f9c6085f1b1fb9d0468753ca6ad98ff45adc6f"
+  },
+  "fetchExtractedColorAndImageForPlaylistEntity": {
+   "kind": "query",
+   "hash": "b2d6d99fb6237952dfa6638385f9c6085f1b1fb9d0468753ca6ad98ff45adc6f"
+  },
+  "fetchExtractedColorAndImageForPodcastEntity": {
+   "kind": "query",
+   "hash": "b2d6d99fb6237952dfa6638385f9c6085f1b1fb9d0468753ca6ad98ff45adc6f"
+  },
+  "fetchExtractedColorAndImageForTrackEntity": {
+   "kind": "query",
+   "hash": "b2d6d99fb6237952dfa6638385f9c6085f1b1fb9d0468753ca6ad98ff45adc6f"
+  },
+  "fetchExtractedColorForAlbumEntity": {
+   "kind": "query",
+   "hash": "b2d6d99fb6237952dfa6638385f9c6085f1b1fb9d0468753ca6ad98ff45adc6f"
+  },
+  "fetchExtractedColorForArtistEntity": {
+   "kind": "query",
+   "hash": "b2d6d99fb6237952dfa6638385f9c6085f1b1fb9d0468753ca6ad98ff45adc6f"
+  },
+  "fetchExtractedColorForEpisodeEntity": {
+   "kind": "query",
+   "hash": "b2d6d99fb6237952dfa6638385f9c6085f1b1fb9d0468753ca6ad98ff45adc6f"
+  },
+  "fetchExtractedColorForPlaylistEntity": {
+   "kind": "query",
+   "hash": "b2d6d99fb6237952dfa6638385f9c6085f1b1fb9d0468753ca6ad98ff45adc6f"
+  },
+  "fetchExtractedColorForPodcastEntity": {
+   "kind": "query",
+   "hash": "b2d6d99fb6237952dfa6638385f9c6085f1b1fb9d0468753ca6ad98ff45adc6f"
+  },
+  "fetchExtractedColorForTrackEntity": {
+   "kind": "query",
+   "hash": "b2d6d99fb6237952dfa6638385f9c6085f1b1fb9d0468753ca6ad98ff45adc6f"
+  },
+  "fetchExtractedColors": {
+   "kind": "query",
+   "hash": "36e90fcaea00d47c695fce31874efeb2519b97d4cd0ee1abfb4f8dc9348596ea"
+  },
+  "fetchLibraryTracks": {
+   "kind": "query",
+   "hash": "087278b20b743578a6262c2b0b4bcd20d879c503cc359a2285baf083ef944240"
+  },
+  "fetchPlaylist": {
+   "kind": "query",
+   "hash": "21ea11a6ac75a5f3e01fd365d29c18e0a4a8b7dc09f89bbb5d73910190c6acaf"
+  },
+  "fetchPlaylistContents": {
+   "kind": "query",
+   "hash": "21ea11a6ac75a5f3e01fd365d29c18e0a4a8b7dc09f89bbb5d73910190c6acaf"
+  },
+  "fetchPlaylistMetadata": {
+   "kind": "query",
+   "hash": "21ea11a6ac75a5f3e01fd365d29c18e0a4a8b7dc09f89bbb5d73910190c6acaf"
+  },
+  "followUsers": {
+   "kind": "mutation",
+   "hash": "c00e0cb6c7766e7230fc256cf4fe07aec63b53d1160a323940fce7b664e95596"
+  },
+  "getAlbum": {
+   "kind": "query",
+   "hash": "11c9cad9cb24c4f9e25ef9456f68621cfd6006a90f679e729c1d2f2fd70dfe16"
+  },
+  "getAlbumNameAndTracks": {
+   "kind": "query",
+   "hash": "8628ad33de3267d7bef516c76a746979a5f98891a2c9eaff3dfec828abdcd983"
+  },
+  "getArtistNameAndTracks": {
+   "kind": "query",
+   "hash": "0adaf1a1a8a94c7ed095639c4d9456d2b1cfac16ac511d5dd2b01b6dd89f748a"
+  },
+  "getAudiobooksMetadata": {
+   "kind": "query",
+   "hash": "523c71c64749a628f83e6b31a122c76663243730bf02df01fd64abf0f62f572f"
+  },
+  "getCommentsForEntity": {
+   "kind": "query",
+   "hash": "5075cb710c32d369eb5b67f6abdfd11a48d58214795064181a7da830b5fc84b6"
+  },
+  "getDynamicColors": {
+   "kind": "query",
+   "hash": "f0f112945d6d745bd8ff790317bbf8d310036da75df33130490e9d6dc96c59d9"
+  },
+  "getDynamicColorsByUris": {
+   "kind": "query",
+   "hash": "f0f112945d6d745bd8ff790317bbf8d310036da75df33130490e9d6dc96c59d9"
+  },
+  "getEpisodeName": {
+   "kind": "query",
+   "hash": "508f9db2e7dc340c338950dc67a6045ee1406703646f23b760986fa689c239b1"
+  },
+  "getEpisodeOrChapter": {
+   "kind": "query",
+   "hash": "5f77db47e5a2ce6680330bb61317aa09e17ddd1d189513cb218e7cd3e43288be"
+  },
+  "getLists": {
+   "kind": "query",
+   "hash": "130589ef0ac5ffc096b08ab11c031292812f91620665af1a339112ca3016c5c1"
+  },
+  "getListsContents": {
+   "kind": "query",
+   "hash": "130589ef0ac5ffc096b08ab11c031292812f91620665af1a339112ca3016c5c1"
+  },
+  "getListsMetadata": {
+   "kind": "query",
+   "hash": "130589ef0ac5ffc096b08ab11c031292812f91620665af1a339112ca3016c5c1"
+  },
+  "getPodcastOrBookName": {
+   "kind": "query",
+   "hash": "631676b4cf1eb7c93d1133e3f1f17e5bfe8d6a5e2fb9560148bac61f1531f267"
+  },
+  "getReactions": {
+   "kind": "query",
+   "hash": "0d209bf9507779887fe2b3032d1afd8f35de8425b01aead094698ff1abecda71"
+  },
+  "getReplies": {
+   "kind": "query",
+   "hash": "4c45f55fdfd691e08ad983d5c914baf5581824a81b2da1cdb8a9dad747c012bf"
+  },
+  "getTrack": {
+   "kind": "query",
+   "hash": "a8ef9e9f02b836feb0da3003c31dbb30decc6f4b473ef89ca88c882386d668de"
+  },
+  "getTrackName": {
+   "kind": "query",
+   "hash": "3dee761788854e8dd9239e13ce0d712da031fb8c2036f096a1c765062b410660"
+  },
+  "getVideoTrackAssociatedAlbum": {
+   "kind": "query",
+   "hash": "e9ecdc49f7777062fc841415262d47c3927e09ab6e6845b420a373caec602812"
+  },
+  "home": {
+   "kind": "query",
+   "hash": "5fb7da7a03ee2776c0670856609cb85a189a3cecc36cc160b91cde79063b9cf1"
+  },
+  "homePinnedSections": {
+   "kind": "query",
+   "hash": "5fb7da7a03ee2776c0670856609cb85a189a3cecc36cc160b91cde79063b9cf1"
+  },
+  "homeSection": {
+   "kind": "query",
+   "hash": "5fb7da7a03ee2776c0670856609cb85a189a3cecc36cc160b91cde79063b9cf1"
+  },
+  "inferredUserLocation": {
+   "kind": "query",
+   "hash": "5db4c507ea735d2a1f37bd1166eca2c1a0e3387bb875ebca5d6031b6eccceeba"
+  },
+  "internalLinkRecommenderEpisode": {
+   "kind": "query",
+   "hash": "122f5c777aae5c0918baec11cd646b7034b8f213f260097b4d229ad947ec7f93"
+  },
+  "internalLinkRecommenderShow": {
+   "kind": "query",
+   "hash": "6c369ff272a666b31fef1629c169925a1bd80f372195396c82304142cacd89e8"
+  },
+  "internalLinkRecommenderTrack": {
+   "kind": "query",
+   "hash": "c77098ee9d6ee8ad3eb844938722db60570d040b49f41f5ec6e7be9160a7c86b"
+  },
+  "isCurated": {
+   "kind": "query",
+   "hash": "e4ed1f91a2cc5415befedb85acf8671dc1a4bf3ca1a5b945a6386101a22e28a6"
+  },
+  "isCuratedEntities": {
+   "kind": "query",
+   "hash": "af6bb0d2691f78f9169e1ba2dfed34a414bb4994e858f81487d6a26b95280566"
+  },
+  "isFollowingUsers": {
+   "kind": "query",
+   "hash": "c00e0cb6c7766e7230fc256cf4fe07aec63b53d1160a323940fce7b664e95596"
+  },
+  "libraryV3": {
+   "kind": "query",
+   "hash": "390c78e5b951029bad359785e69b07b536a509c581cbcd0aded5e5067f187455"
+  },
+  "lookupChildEntities": {
+   "kind": "query",
+   "hash": "91ce02e32b19123de231dc8de91fe4b9ab84eca087d4c015549308d77fbb6d10"
+  },
+  "lookupDebug": {
+   "kind": "query",
+   "hash": "6953237e41493792c4e838ebe9532a4cad6a6c11d77229fb524a5e966b855fef"
+  },
+  "lookupEntityImages": {
+   "kind": "query",
+   "hash": "35e3dfa923e93cd4840a8f7847058d08d0f5a7862c158644a32a59ca28b6122c"
+  },
+  "moveItemsInPlaylist": {
+   "kind": "mutation",
+   "hash": "b907ad6b088d5bf7680fa81198996d58398c2d55dfcdf59fcc959e0be98a418a"
+  },
+  "npvPageContent": {
+   "kind": "query",
+   "hash": "6e58365b05723c3f917b0df611cbd11dae31d36cc3e71a8dd73d72300b663b46"
+  },
+  "npvV2TrackSupplementalSections": {
+   "kind": "query",
+   "hash": "3268e307f08330b620de5c161a03b48acf66ec57164eac446e0653694a485764"
+  },
+  "pinLibraryItem": {
+   "kind": "mutation",
+   "hash": "896ebcb47815681340860d121cb5d494e157e2a78d3950385cd54e0393c67148"
+  },
+  "playlistPermissions": {
+   "kind": "query",
+   "hash": "e43d1d35f231cf289c23c9d9c489f4a4f502e4eda09839c530608f107b6556b8"
+  },
+  "playlistSection": {
+   "kind": "query",
+   "hash": "2615df403a9043c1d7d3094fbeb4c9653b07b11a33d8081fbd31f0f7959ff4a1"
+  },
+  "profileAttributes": {
+   "kind": "query",
+   "hash": "08ffb4730af3746e04a8301396f20875dbbce10c75243803091a9274eacc8ac0"
+  },
+  "queryAlbumMerch": {
+   "kind": "query",
+   "hash": "3ef44ed6f17be67299538fe77faffab4075aeaf9e1085f10fc835592266711b5"
+  },
+  "queryAlbumTrackUris": {
+   "kind": "query",
+   "hash": "a2a17981f8439ca1798f56260277d9d7800ec0ca7040053b564e0f975d8aa344"
+  },
+  "queryAlbumTracks": {
+   "kind": "query",
+   "hash": "11c9cad9cb24c4f9e25ef9456f68621cfd6006a90f679e729c1d2f2fd70dfe16"
+  },
+  "queryArtistAboutModal": {
+   "kind": "query",
+   "hash": "702e29a866e0b4b4fabdf974454512a2c32d93643b1969b7a3a0dd92084f05f6"
+  },
+  "queryArtistAppearsOn": {
+   "kind": "query",
+   "hash": "9a4bb7a20d6720fe52d7b47bc001cfa91940ddf5e7113761460b4a288d18a4c1"
+  },
+  "queryArtistDiscographyAlbums": {
+   "kind": "query",
+   "hash": "5e07d323febb57b4a56a42abbf781490e58764aa45feb6e3dc0591564fc56599"
+  },
+  "queryArtistDiscographyAll": {
+   "kind": "query",
+   "hash": "5e07d323febb57b4a56a42abbf781490e58764aa45feb6e3dc0591564fc56599"
+  },
+  "queryArtistDiscographyCompilations": {
+   "kind": "query",
+   "hash": "5e07d323febb57b4a56a42abbf781490e58764aa45feb6e3dc0591564fc56599"
+  },
+  "queryArtistDiscographyOverview": {
+   "kind": "query",
+   "hash": "5e07d323febb57b4a56a42abbf781490e58764aa45feb6e3dc0591564fc56599"
+  },
+  "queryArtistDiscographySingles": {
+   "kind": "query",
+   "hash": "5e07d323febb57b4a56a42abbf781490e58764aa45feb6e3dc0591564fc56599"
+  },
+  "queryArtistDiscoveredOn": {
+   "kind": "query",
+   "hash": "71c2392e4cecf6b48b9ad1311ae08838cbdabcfd189c6bf0c66c2430b8dcfdb1"
+  },
+  "queryArtistFeaturing": {
+   "kind": "query",
+   "hash": "20842d6d9d2d28ef945984b68cb927bb33edd00eab84a8da1667def21f1f2c54"
+  },
+  "queryArtistMinimal": {
+   "kind": "query",
+   "hash": "53d3f76582c49ad0a05dc685955f20dc2a5f2209b192e5446e5e4e623ce23a48"
+  },
+  "queryArtistOverview": {
+   "kind": "query",
+   "hash": "9f8134ef565e78621f1e1793555bd6633c5ac144ae0f89604ed3ae3f80b3c8e6"
+  },
+  "queryArtistPlaylists": {
+   "kind": "query",
+   "hash": "54f7e5a5a2af05b7dc98526df376a46c6b15c05440c8dfdc8f6cecb1a807eca7"
+  },
+  "queryArtistRelated": {
+   "kind": "query",
+   "hash": "3d031d6cb22a2aa7c8d203d49b49df731f58b1e2799cc38d9876d58771aa66f3"
+  },
+  "queryArtistRelatedVideos": {
+   "kind": "query",
+   "hash": "e4bbb4f420ad5786caa7028e2943542f13c8138f5c40736292b8499ac9672ce6"
+  },
+  "queryBookChapters": {
+   "kind": "query",
+   "hash": "8f342d1c624755901657fa65cbb80dd3bacbcca2f6d802f570ae3269d59a403e"
+  },
+  "queryInlineCurationSearchAlbum": {
+   "kind": "query",
+   "hash": "122fd4817f7e9cd7b944c3103d9c81a950668423ba9d2008413b5291f9d7e547"
+  },
+  "queryInlineCurationSearchArtist": {
+   "kind": "query",
+   "hash": "be42f25d92bdadac4082e6581d35b771c3b5e8bbdd1b76c279d0924a5975f12e"
+  },
+  "queryInlineCurationSearchV2": {
+   "kind": "query",
+   "hash": "331ddd828a4db217046345833863f59f907d269947dd6f924009f6ab35743b70"
+  },
+  "queryInlineCurationSearchV2Booklists": {
+   "kind": "query",
+   "hash": "331ddd828a4db217046345833863f59f907d269947dd6f924009f6ab35743b70"
+  },
+  "queryMoreByArtist": {
+   "kind": "query",
+   "hash": "24c137a56995c042eef9d23b14539a6d9b9b154aff12ce77230f652c9e4d6b64"
+  },
+  "queryNpvArtist": {
+   "kind": "query",
+   "hash": "e1ae46a21911a3075c1aa29bf09a6c60f9a45b6a2b1132429f10ad06c299b5d7"
+  },
+  "queryNpvEpisode": {
+   "kind": "query",
+   "hash": "5704293e4a52b987c87bc11afe210aaca52813405c85ff8d0632e7587ebc6e18"
+  },
+  "queryPodcastEpisodes": {
+   "kind": "query",
+   "hash": "3539d746cf882f3909660de40b4ef472b3f5893a0761d617c282541de5d412c5"
+  },
+  "queryShowMetadataV2": {
+   "kind": "query",
+   "hash": "b475447846f37cc426add800b995a7859c169c53c72b62de6338c0c40a5dacea"
+  },
+  "queryTrackArtists": {
+   "kind": "query",
+   "hash": "ee2b038198f5e62c679c3996584d9249bbee55fe69fc212271c56492a022c798"
+  },
+  "queryTrackCreditsGroupedModal": {
+   "kind": "query",
+   "hash": "f135fb9be58a72d041ab5d214d817021a272405d883860468e2627afb01a3ca9"
+  },
+  "queryWhatsNewFeed": {
+   "kind": "query",
+   "hash": "d889c8c936ab192af8ced595427f5ba2acdf63478fdc0a181c8d477f8322630e"
+  },
+  "recentSearches": {
+   "kind": "query",
+   "hash": "ece96d7b82c820fb9938dd1df50dee3e53737d808c3883e3d01c467c423601b0"
+  },
+  "recents": {
+   "kind": "query",
+   "hash": "698be5892a3cc95331deebeff463d05dfdd5febf5254bea30b895b5a93dfb584"
+  },
+  "removeFromLibrary": {
+   "kind": "mutation",
+   "hash": "896ebcb47815681340860d121cb5d494e157e2a78d3950385cd54e0393c67148"
+  },
+  "removeFromPlaylist": {
+   "kind": "mutation",
+   "hash": "b907ad6b088d5bf7680fa81198996d58398c2d55dfcdf59fcc959e0be98a418a"
+  },
+  "removeRecentSearches": {
+   "kind": "mutation",
+   "hash": "ece96d7b82c820fb9938dd1df50dee3e53737d808c3883e3d01c467c423601b0"
+  },
+  "removeVenueFromLibrary": {
+   "kind": "mutation",
+   "hash": "353cc0ecbf123f4166f6887a1478520dab08fc1de527aaca8d72c9851693620c"
+  },
+  "requestPromoCode": {
+   "kind": "mutation",
+   "hash": "e90e712768b6041ed97f49184289f5fe0d8841134dd715f1f79c704994cd0ac7"
+  },
+  "saveLocation": {
+   "kind": "mutation",
+   "hash": "5502351e9f201ae29014ca55d3b24b755ba261a1a9eb35fb498cb4c7df419353"
+  },
+  "saveRecentSearches": {
+   "kind": "mutation",
+   "hash": "ece96d7b82c820fb9938dd1df50dee3e53737d808c3883e3d01c467c423601b0"
+  },
+  "searchAlbums": {
+   "kind": "query",
+   "hash": "202cb3305e31e5a0767ba7925f28bd728cf8f8b0217e6da43909056071cd70e9"
+  },
+  "searchArtists": {
+   "kind": "query",
+   "hash": "7bf95d754fdbe32c8b161fbbe54d1ae50974900df4dce4c8f1afcbcad153224d"
+  },
+  "searchAudiobooks": {
+   "kind": "query",
+   "hash": "e05ac765d02c084f8783d3c1572b23d57761c43f47eb8b87ce2f9ccced3fa068"
+  },
+  "searchAuthors": {
+   "kind": "query",
+   "hash": "4a9d403a7cbc7e19da5520d619a865472b35382b043bfa458154e73a5c6f46bd"
+  },
+  "searchConcertLocations": {
+   "kind": "query",
+   "hash": "43ededefcba8b3f519fd0c2d6c025dfeec9f742cf47d04a3c3711d95b27deda3"
+  },
+  "searchDesktop": {
+   "kind": "query",
+   "hash": "eef7cc54888d91bdd6802623477873caa3948ae173a0c34fd86827b267e94c03"
+  },
+  "searchEpisodes": {
+   "kind": "query",
+   "hash": "dbc56e15e7c1254f11d499e8647343bbf28a5594e14a8f5c8b1e7eee67a55740"
+  },
+  "searchFullEpisodes": {
+   "kind": "query",
+   "hash": "397a4e93a21d140d088cfd26641133c5146a2f5f08e420654868153e720f5571"
+  },
+  "searchGenres": {
+   "kind": "query",
+   "hash": "9e1c0e056c46239dd1956ea915b988913c87c04ce3dadccdb537774490266f46"
+  },
+  "searchModalEntityPage": {
+   "kind": "query",
+   "hash": "25d73ce01f3011ff8b37f44c23ebbad18610db1a2cec2c84f20c1e822c748524"
+  },
+  "searchModalResults": {
+   "kind": "query",
+   "hash": "9a79751378a306d87d9789fa0c4a8f7c7213891c47a3993a0d0b58ff26514e59"
+  },
+  "searchPlaylists": {
+   "kind": "query",
+   "hash": "d520014e748f9ea44f7707d8df1819867ac1205e8b7f3e28f22fe5fc858921b1"
+  },
+  "searchPodcasts": {
+   "kind": "query",
+   "hash": "0195d9f61b43606d490bca64c3456e3593528cea6cc05c7e822c7c42beed0f4e"
+  },
+  "searchSuggestions": {
+   "kind": "query",
+   "hash": "f244254b94c0e824d458ac216e0f8406a73f2f69a9ff52831a2f78fa774ff6ce"
+  },
+  "searchTopResultsList": {
+   "kind": "query",
+   "hash": "dd78eaff943eba629ed70ee25517b9cea0dcaa41193e2592ae2727660b21892c"
+  },
+  "searchTopResultsOnly": {
+   "kind": "query",
+   "hash": "cb32d0ff697131db6d34f174f7d2fa931c6a8b6be22aabc8c6cc086da4a0f744"
+  },
+  "searchTracks": {
+   "kind": "query",
+   "hash": "b02683192a98dde7966b5e6655a79eeb62713eab703eda9902c932818dd52751"
+  },
+  "searchUsers": {
+   "kind": "query",
+   "hash": "8f358dd82e62f61dd4ceaa9f8cd0889e644c9b707f1b724fbfb356a757cb7e5a"
+  },
+  "seoRecommendedTrackPlaylistDesktop": {
+   "kind": "query",
+   "hash": "2121830f81030dea46648d65a05c430cd822f08db6aaa18c7f35cc9b93c22396"
+  },
+  "showItemsPlayedState": {
+   "kind": "query",
+   "hash": "4a070b9bfab2e8537a5271e6839bc3ef51501dcac8170b5fb69a98f967c5fb60"
+  },
+  "similarAlbumsBasedOnThisTrack": {
+   "kind": "query",
+   "hash": "1d1f93a737498adca2c892c73af87fc0b052afe4e1a33c989540c32413dfae17"
+  },
+  "similarAudiobooks": {
+   "kind": "query",
+   "hash": "d62da1bbf5859e5a156da1f52ce21a73a642f925db717a179fd89626b27a80b8"
+  },
+  "smartShuffle": {
+   "kind": "query",
+   "hash": "3384085be84fbf2f855b024f99bc06cded1c0fd71af3a8fb8abb84e9656faba2"
+  },
+  "thisisPlaylistExtension": {
+   "kind": "query",
+   "hash": "906c2e14927400c8a71645c647576ce032f837a112d5e6f9375b19c80445c8cf"
+  },
+  "trackPreview": {
+   "kind": "query",
+   "hash": "fc26ffc7a1a4f93bd4c2d705649f7dba1de34005b3dc2915549847a9959405d8"
+  },
+  "undoConcertCampaignNotInterested": {
+   "kind": "mutation",
+   "hash": "efb05c3c9a617885cbce2c90a5cc758ec79dc13807d988489a2fe5b83739bfe1"
+  },
+  "unfollowUsers": {
+   "kind": "mutation",
+   "hash": "c00e0cb6c7766e7230fc256cf4fe07aec63b53d1160a323940fce7b664e95596"
+  },
+  "unpinLibraryItem": {
+   "kind": "mutation",
+   "hash": "896ebcb47815681340860d121cb5d494e157e2a78d3950385cd54e0393c67148"
+  },
+  "userAccountId": {
+   "kind": "query",
+   "hash": "c56c2b33c2ded49960530771844ed482ffc1518169fb3d0dda91ac1608b019e2"
+  },
+  "userLocation": {
+   "kind": "query",
+   "hash": "079939378ca79b67c6d047be9152ea940d21f10bbfa2f5d4cf4d8320d87774c2"
+  },
+  "userTopContent": {
+   "kind": "query",
+   "hash": "61b7353d3625780022dbc63d459eb64cd609e7e5e2a820f9160d65030efe2e15"
+  },
+  "venue": {
+   "kind": "query",
+   "hash": "6c55ebc91fc13a25d7df590c4a9031dd1dcdc25716192d7f848a8270f49d2c13"
+  },
+  "watchFeedEntity": {
+   "kind": "query",
+   "hash": "d1a805f815ee0c20281330317d8c00c8fce9026686a86c38bc700ccaefb9ac5c"
+  },
+  "watchFeedView": {
+   "kind": "query",
+   "hash": "ce10864fccc53ca77c422143ee027bacf220f9d714e27ec592905334079ad743"
+  },
+  "whatsNewFeedNewItems": {
+   "kind": "query",
+   "hash": "d889c8c936ab192af8ced595427f5ba2acdf63478fdc0a181c8d477f8322630e"
+  }
+ }
+}

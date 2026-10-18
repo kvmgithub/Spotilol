@@ -1,0 +1,28 @@
+// Android host: runs the Web Player in a WebView and exposes it as a MyspotiApi, plus the
+// playback service (media session, notification, Android Auto browsing).
+plugins {
+    alias(libs.plugins.android.library)
+}
+
+android {
+    namespace = "app.myspoti.host.android"
+    compileSdk = 37
+
+    defaultConfig {
+        minSdk = 29
+    }
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
+    }
+}
+
+dependencies {
+    api(project(":api-spotify"))
+    implementation(libs.androidx.core.ktx)
+    implementation(libs.androidx.webkit)
+    implementation(libs.androidx.media)
+    implementation(libs.serialization.json)
+    implementation(libs.okhttp)
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")
+}

@@ -1,0 +1,153 @@
+package app.myspoti.host.cdp
+
+import app.myspoti.spotify.bridge.AdBlock
+import app.myspoti.spotify.bridge.BridgeHost
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.buildJsonArray
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.int
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.put
+import kotlinx.serialization.json.putJsonObject
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import okhttp3.Response
+import okhttp3.WebSocket
+import okhttp3.WebSocketListener
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicInteger
+
+/**
+ * [BridgeHost] on a desktop Chrome started with `--remote-debugging-port`.
+ *
+ * Attaches to the open.spotify.com tab (or opens one), relays bridge messages through a CDP
+ * binding, and fails ad audio requests ([AdBlock]) with `BlockedByClient`, like the
+ * Android host does in `shouldInterceptRequest`.
+ */
+class CdpHost private constructor(private val socket: WebSocket, private val listener: Listener) : BridgeHost {
+
+    override val messages: SharedFlow<String> = listener.messages
+
+    /** Suspends until the next page load; the API re-injects the bridge then. */
+    suspend fun awaitLoad() { listener.pageLoads.first() }
+
+    override suspend fun evaluate(script: String) {
+        send("Runtime.evaluate", buildJsonObject { put("expression", script); put("awaitPromise", false) })
+    }
+
+    suspend fun navigate(url: String) {
+        send("Page.navigate", buildJsonObject { put("url", url) })
+    }
+
+    suspend fun reload() {
+        send("Page.reload", buildJsonObject {})
+    }
+
+    fun close() = socket.close(1000, null)
+
+    private suspend fun send(method: String, params: JsonObject): JsonObject = listener.send(socket, method, params)
+
+    internal class Listener : WebSocketListener() {
+        val messages = MutableSharedFlow<String>(extraBufferCapacity = 256)
+        private val ids = AtomicInteger(0)
+        private val pending = ConcurrentHashMap<Int, CompletableDeferred<JsonObject>>()
+        val opened = CompletableDeferred<Unit>()
+        private val loads = MutableSharedFlow<Unit>(extraBufferCapacity = 4)
+        val pageLoads: SharedFlow<Unit> = loads
+
+        suspend fun send(ws: WebSocket, method: String, params: JsonObject): JsonObject {
+            val id = ids.incrementAndGet()
+            val waiter = CompletableDeferred<JsonObject>()
+            pending[id] = waiter
+            ws.send(buildJsonObject { put("id", id); put("method", method); put("params", params) }.toString())
+            return try { withTimeout(30_000) { waiter.await() } } finally { pending.remove(id) }
+        }
+
+        override fun onOpen(webSocket: WebSocket, response: Response) { opened.complete(Unit) }
+
+        override fun onMessage(webSocket: WebSocket, text: String) {
+            val msg = json.parseToJsonElement(text).jsonObject
+            msg["id"]?.let { id ->
+                val waiter = pending.remove(id.jsonPrimitive.int) ?: return
+                msg["error"]?.let { waiter.completeExceptionally(IllegalStateException(it.toString())) }
+                    ?: waiter.complete(msg["result"]?.jsonObject ?: JsonObject(emptyMap()))
+                return
+            }
+            val params = msg["params"]?.jsonObject ?: return
+            when (msg["method"]?.jsonPrimitive?.content) {
+                "Runtime.bindingCalled" ->
+                    if (params["name"]?.jsonPrimitive?.content == BINDING) messages.tryEmit(params["payload"]!!.jsonPrimitive.content)
+                "Fetch.requestPaused" -> {
+                    val requestId = params["requestId"]!!.jsonPrimitive.content
+                    val request = params["request"]!!.jsonObject
+                    val url = request["url"]!!.jsonPrimitive.content
+                    val method = request["method"]?.jsonPrimitive?.content ?: "GET"
+                    val post = request["postData"]?.jsonPrimitive?.content
+                    val reply = if (post != null && AdBlock.isDeviceRegistration(method, url)) {
+                        val body = java.util.Base64.getEncoder().encodeToString(AdBlock.withoutAdFormats(post).toByteArray())
+                        buildJsonObject { put("id", ids.incrementAndGet()); put("method", "Fetch.continueRequest"); putJsonObject("params") { put("requestId", requestId); put("postData", body) } }
+                    } else if (AdBlock.isBlocked(url)) {
+                        buildJsonObject { put("id", ids.incrementAndGet()); put("method", "Fetch.failRequest"); putJsonObject("params") { put("requestId", requestId); put("errorReason", "BlockedByClient") } }
+                    } else {
+                        buildJsonObject { put("id", ids.incrementAndGet()); put("method", "Fetch.continueRequest"); putJsonObject("params") { put("requestId", requestId) } }
+                    }
+                    webSocket.send(reply.toString())
+                }
+                "Page.loadEventFired" -> loads.tryEmit(Unit)
+            }
+        }
+
+        override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
+            opened.completeExceptionally(t)
+            pending.values.forEach { it.completeExceptionally(t) }
+        }
+    }
+
+    companion object {
+        const val BINDING = "__mspHostPost"
+        private val json = Json { ignoreUnknownKeys = true }
+
+        /** Attaches to the Web Player tab of the Chrome listening on [cdpUrl]. */
+        suspend fun connect(cdpUrl: String = "http://localhost:9222", http: OkHttpClient = defaultHttp): CdpHost {
+            val targets = withContext(Dispatchers.IO) {
+                http.newCall(Request.Builder().url("$cdpUrl/json/list").build()).execute().use { it.body.string() }
+            }
+            val page = json.parseToJsonElement(targets).jsonArray.map { it.jsonObject }.firstOrNull {
+                it["type"]?.jsonPrimitive?.content == "page" && it["url"]!!.jsonPrimitive.content.startsWith("https://open.spotify.com")
+            } ?: withContext(Dispatchers.IO) {
+                val created = http.newCall(Request.Builder().url("$cdpUrl/json/new?https://open.spotify.com/").put(okhttp3.RequestBody.EMPTY).build())
+                    .execute().use { it.body.string() }
+                json.parseToJsonElement(created).jsonObject
+            }
+            val wsUrl = page["webSocketDebuggerUrl"]!!.jsonPrimitive.content
+            val listener = Listener()
+            val socket = http.newWebSocket(Request.Builder().url(wsUrl).build(), listener)
+            listener.opened.await()
+            val host = CdpHost(socket, listener)
+            host.send("Runtime.enable", buildJsonObject {})
+            host.send("Page.enable", buildJsonObject {})
+            host.send("Runtime.addBinding", buildJsonObject { put("name", BINDING) })
+            host.send("Fetch.enable", buildJsonObject {
+                put("patterns", buildJsonArray {
+                    AdBlock.blockedHosts.forEach { h -> add(buildJsonObject { put("urlPattern", "*://$h/*") }) }
+                    AdBlock.blockedPaths.forEach { p -> add(buildJsonObject { put("urlPattern", "*spclient*$p*") }) }
+                    add(buildJsonObject { put("urlPattern", "*/track-playback/v1/devices") })
+                })
+            })
+            return host
+        }
+
+        private val defaultHttp = OkHttpClient.Builder().readTimeout(0, TimeUnit.MILLISECONDS).build()
+    }
+}

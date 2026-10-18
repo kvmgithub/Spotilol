@@ -1,0 +1,49 @@
+name: Signing diagnostic
+on:
+  push:
+    branches: [signing-diagnostic-1.2.4]
+permissions:
+  contents: read
+jobs:
+  certificate:
+    if: github.repository == 'kvmgithub/Spotilol'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407
+        with:
+          cmdline-tools-version: 15641748
+          packages: platform-tools
+      - run: sdkmanager 'build-tools;37.0.0'
+      - name: Compare public certificate fingerprints
+        env:
+          APK_SIGNING_BUNDLE: ${{ secrets.APK_SIGNING_BUNDLE }}
+        run: |
+          python3 - <<'PY'
+          import os, json, base64, hashlib, subprocess
+          from pathlib import Path
+          root = Path(os.environ['RUNNER_TEMP'])
+          apk, key, cert = root / 'previous.apk', root / 'probe.p12', root / 'probe.der'
+          try:
+              subprocess.run(['curl', '--fail', '--location', '--retry', '3', 'https://github.com/kvmgithub/Spotilol/releases/download/v1.1.1002/Spotilol-arm64-1.1.1002.apk', '--output', str(apk)], check=True)
+              assert hashlib.sha256(apk.read_bytes()).hexdigest() == '4b775569b10353142f571d6e3f62587785b688ac6b943fa427a76148c5e71ddc'
+              signer = Path(os.environ['ANDROID_HOME']) / 'build-tools/37.0.0/apksigner'
+              data = subprocess.run([str(signer), 'verify', '--print-certs', str(apk)], check=True, capture_output=True, text=True).stdout
+              print('Published APK certificate fields:')
+              for line in data.splitlines():
+                  if 'certificate' in line.lower() and 'SHA-256' in line:
+                      print(line)
+              bundle = json.loads(os.environ['APK_SIGNING_BUNDLE'])
+              key.write_bytes(base64.b64decode(bundle['keystore'], validate=True))
+              key.chmod(0o600)
+              env = dict(os.environ, PROBE_KEY_PASSWORD=bundle['password'])
+              subprocess.run(['keytool', '-exportcert', '-alias', 'release', '-keystore', str(key), '-storepass:env', 'PROBE_KEY_PASSWORD', '-file', str(cert)], env=env, check=True, capture_output=True)
+              print('Stored release certificate SHA-256 digest:', hashlib.sha256(cert.read_bytes()).hexdigest())
+          finally:
+              key.unlink(missing_ok=True)
+              cert.unlink(missing_ok=True)
+          PY

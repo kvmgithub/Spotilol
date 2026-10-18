@@ -458,11 +458,7 @@ class MediaNotificationService : Service() {
             addAction(ACTION_FAVORITE)
             addAction(Intent.ACTION_MEDIA_BUTTON)
         }
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            registerReceiver(actionReceiver, filter, RECEIVER_NOT_EXPORTED)
-        } else {
-            registerReceiver(actionReceiver, filter)
-        }
+        ContextCompat.registerReceiver(this, actionReceiver, filter, ContextCompat.RECEIVER_NOT_EXPORTED)
     }
 
     private fun registerDisconnectReceivers() {

@@ -1017,6 +1017,7 @@ fun SettingsContent(
 @Composable
 private fun DeviceInfoExportTile() {
     val context = LocalContext.current
+    val resources = LocalResources.current
     val clipboard = LocalClipboard.current
     val scope = rememberCoroutineScope()
 
@@ -1035,13 +1036,13 @@ private fun DeviceInfoExportTile() {
                     )
                     Toast.makeText(
                         context,
-                        context.getString(R.string.settings_device_info_copied),
+                        resources.getString(R.string.settings_device_info_copied),
                         Toast.LENGTH_SHORT
                     ).show()
                 } else {
                     Toast.makeText(
                         context,
-                        context.getString(R.string.settings_device_info_failed),
+                        resources.getString(R.string.settings_device_info_failed),
                         Toast.LENGTH_SHORT
                     ).show()
                 }
@@ -1981,6 +1982,7 @@ private fun LoggerList(
 private fun LogRow(entry: LogEntry, expanded: Boolean, onToggle: () -> Unit) {
     val clipboard = LocalClipboard.current
     val context = LocalContext.current
+    val resources = LocalResources.current
     val scope = rememberCoroutineScope()
     val color = logLevelColor(entry.level)
     val dim = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.65f)
@@ -1988,7 +1990,7 @@ private fun LogRow(entry: LogEntry, expanded: Boolean, onToggle: () -> Unit) {
     fun copyEntry() {
         scope.launch {
             clipboard.setClipEntry(ClipData.newPlainText("spotilol_log", entry.line()).toClipEntry())
-            Toast.makeText(context, context.getString(R.string.logger_entry_copied), Toast.LENGTH_SHORT).show()
+            Toast.makeText(context, resources.getString(R.string.logger_entry_copied), Toast.LENGTH_SHORT).show()
         }
     }
 

@@ -13,6 +13,7 @@ The delta from Lite is necessary security hardening, tests, update routing and s
 - Native authority is restricted to approved main-frame origins by OriginScopedBridge. No addJavascriptInterface fallback.
 - Player and login have separate method authority. Add new player callbacks to WebSecurityPolicy, BridgeScript and OriginScopedBridge together, with tests.
 - NativeFetch must enforce HTTPS host/port allowlists, request/response limits, a total call timeout, strict transport headers, scoped cookies and no redirects. Never return Set-Cookie to JavaScript. Its binary transport is used by Canvas protobuf requests.
+- WebView native sniffing is limited to validated HTTPS GET/HEAD requests for approved ad-audio host families or exact Google auth hosts, without redirects. Substring ad classification alone never authorizes a native request.
 - ProfileManager must never delete keys automatically or fall back to plaintext. Failed reads must not become empty writes. Cookie restoration validates domains and preserves Secure/HttpOnly.
 - Navigation, intents, OAuth popups and DRM decisions use WebSecurityPolicy.
 - Logger and exported reports share the security LogRedactor. Never log session values just because a redactor exists.

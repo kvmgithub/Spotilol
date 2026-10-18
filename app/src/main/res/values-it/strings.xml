@@ -144,6 +144,9 @@
     <string name="main_webview_version_unknown">N/A</string>
     <string name="main_account_saved">Account salvato</string>
     <string name="main_profile_load_failed">Impossibile caricare il profilo</string>
+    <string name="main_secure_webview_required">Impossibile avviare il lettore web. Aggiorna Android System WebView e riprova.</string>
+    <string name="main_profile_save_failed">Impossibile salvare il profilo in modo sicuro</string>
+    <string name="main_profile_delete_failed">Impossibile eliminare il profilo</string>
     <string name="main_profile_deleted">Profilo eliminato</string>
     <string name="main_cache_cleared">Cache svuotata correttamente</string>
     <string name="main_all_data_cleared">Tutti i dati cancellati, accedi di nuovo</string>

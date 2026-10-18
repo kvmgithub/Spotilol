@@ -1,6 +1,6 @@
 # Changelog
 
-Fork-side release notes for Spotilol Lite — one entry per upstream sync: what upstream brought, what the fork cut, and notable adaptations. Upstream's own release notes live on the [upstream GitHub releases](https://github.com/lyssadev/Spotilol/releases); don't duplicate them here.
+Fork-side release notes for Spotilol Lite: the preserved upstream features, Lite's removals and this fork's security adaptations. The original upstream repository is unavailable; the current functional baseline is [AdNenio/Spotilol-Lite](https://github.com/AdNenio/Spotilol-Lite).
 
 ## Hardened fork integration — 2026-10-18
 

@@ -10,6 +10,7 @@ public final class WebSecurityPolicy {
     private static final Set<String> LINKS = Set.of("open.spotify.com", "spotify.com", "www.spotify.com", "play.spotify.com", "spotify.link");
     private static final Set<String> LOGIN = Set.of("accounts.spotify.com", "accounts.google.com", "consent.google.com", "www.facebook.com", "m.facebook.com", "appleid.apple.com");
     private static final Set<String> API = Set.of("open.spotify.com", "api.spotify.com", "api-partner.spotify.com", "clienttoken.spotify.com", "spclient.wg.spotify.com");
+    private static final Set<String> AD_AUDIO_HOSTS = Set.of("akamaized.net", "scdn.co", "spotifycdn.com", "amillionads.com", "2mdn.net", "adxcel.com");
 
     private static final Set<String> PLAYER_METHODS = Set.of(
         "nFetch", "loginDetected", "deferMessage", "wakeUp", "wakeOff", "cssInjected", "dbg", "clearDebugLog",
@@ -55,8 +56,11 @@ public final class WebSecurityPolicy {
         return "accounts.google.com".equals(host) || "consent.google.com".equals(host);
     }
     public static boolean isNativeSniff(String url, String method, boolean adAudioCandidate) {
-        return ("GET".equals(method) || "HEAD".equals(method)) && httpsHost(url) != null
-            && (adAudioCandidate || isGoogleAuth(url));
+        if (!"GET".equals(method) && !"HEAD".equals(method)) return false;
+        String host = httpsHost(url);
+        if (host == null) return false;
+        return isGoogleAuth(url) || (adAudioCandidate && AD_AUDIO_HOSTS.stream()
+            .anyMatch(domain -> host.equals(domain) || host.endsWith("." + domain)));
     }
     public static boolean isPlayer(String url) { return "open.spotify.com".equals(httpsHost(url)); }
     public static boolean isAccounts(String url) { return "accounts.spotify.com".equals(httpsHost(url)); }

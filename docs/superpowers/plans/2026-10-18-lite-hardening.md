@@ -6,15 +6,15 @@ The existing Lite player, video features, UI and background lifecycle are the fu
 
 ## Integration tasks
 
-- [ ] Import the Lite tree without rewriting either repository's history.
-- [ ] Restore trusted-origin/main-frame bridge authorization and adapt its allowed methods to Lite's timer, volume, expanded-player, context-menu and video-fullscreen callbacks.
-- [ ] Restrict native HTTP destinations, headers, cookies, redirects, request sizes, response sizes and request lifetime. Keep this transport testable without Android.
-- [ ] Preserve encrypted profiles on read/key/write failures; validate restored cookie domains and restore Secure/HttpOnly attributes.
-- [ ] Restore strict navigation, deep-link, popup and DRM checks while retaining Lite's WebViewHost lifetime and navigation-token logic.
-- [ ] Preserve Lite's expanded diagnostic redaction and restore protections for JSON credentials and full URL queries.
-- [ ] Retain applicable Java/JavaScript/JVM tests, removing proxy/download/Android Auto tests. Add coverage for the new bridge methods, native transport and redaction.
-- [ ] Point updates to kvmgithub/Spotilol and retain notification-only update behavior.
-- [ ] Adapt ARM64 signed-release automation to the Java/Kotlin-only application, preserving its key and monotonically increasing version code.
+- [x] Import the Lite tree without rewriting either repository's history.
+- [x] Restore trusted-origin/main-frame bridge authorization and adapt its allowed methods to Lite's timer, volume, expanded-player, context-menu and video-fullscreen callbacks.
+- [x] Restrict native HTTP destinations, headers, cookies, redirects, request sizes, response sizes and request lifetime. Keep this transport testable without Android.
+- [x] Preserve encrypted profiles on read/key/write failures; validate restored cookie domains and restore Secure/HttpOnly attributes.
+- [x] Restore strict navigation, deep-link, popup and DRM checks while retaining Lite's WebViewHost lifetime and navigation-token logic.
+- [x] Preserve Lite's expanded diagnostic redaction and restore protections for JSON credentials and full URL queries.
+- [x] Retain applicable Java/JavaScript/JVM tests, removing proxy/download/Android Auto tests. Add coverage for the new bridge methods, native transport and redaction.
+- [x] Point updates to kvmgithub/Spotilol and retain notification-only update behavior.
+- [x] Adapt ARM64 signed-release automation to the Java/Kotlin-only application, preserving its key and monotonically increasing version code.
 - [ ] Run standalone tests, JVM tests, release lint and signed release assembly; inspect the resulting APK and final diff.
 
 ## Review focus

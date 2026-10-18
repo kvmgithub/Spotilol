@@ -49,6 +49,7 @@ object WebViewHost {
         return created
     }
 
+    @androidx.annotation.OptIn(markerClass = [WebSettingsCompat.ExperimentalBackForwardCache::class])
     fun ensure(context: Context): WebView {
         webView?.let { return it }
         val app = context.applicationContext

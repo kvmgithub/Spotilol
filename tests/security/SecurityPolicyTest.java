@@ -32,6 +32,10 @@ public class SecurityPolicyTest {
         check(WebSecurityPolicy.isNativeSniff("https://accounts.google.com/login", "GET", false), "Google login sniff");
         check(WebSecurityPolicy.isNativeSniff("https://consent.google.com/", "HEAD", false), "Google consent HEAD sniff");
         check(WebSecurityPolicy.isNativeSniff("https://audio.scdn.co/audio/example", "GET", true), "ad candidate HTTPS sniff");
+        for (String url : new String[]{"https://127.0.0.1/?scdn.co/audio/", "https://evil.test/?scdn.co/audio/", "https://scdn.co.evil.test/audio/", "https://evilscdn.co/audio/", "https://audio.scdn.co:8443/audio/"})
+            check(!WebSecurityPolicy.isNativeSniff(url, "GET", true), "ad sniff destination rejected: " + url);
+        for (String host : new String[]{"a.akamaized.net", "scdn.co", "audio.spotifycdn.com", "amillionads.com", "a.2mdn.net", "adxcel.com"})
+            check(WebSecurityPolicy.isNativeSniff("https://" + host + "/audio/example", "HEAD", true), "approved ad host: " + host);
         for (String url : new String[]{"https://x.google.attacker.test/", "https://youtube.com/", "https://accounts.google.com:8443/", "http://accounts.google.com/"})
             check(!WebSecurityPolicy.isNativeSniff(url, "GET", false), "untrusted auth sniff rejected: " + url);
         check(!WebSecurityPolicy.isNativeSniff("http://audio.scdn.co/audio/example", "GET", true), "cleartext ad sniff rejected");

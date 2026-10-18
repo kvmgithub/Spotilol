@@ -56,14 +56,14 @@ jobs:
         run: |
           python3 - <<'PY'
           from pathlib import Path
-          import re, xml.etree.ElementTree as ET
+          import xml.etree.ElementTree as ET
           for report in sorted(Path('app/build/test-results').rglob('TEST-*.xml')):
               suite = ET.parse(report).getroot()
               print(f"{suite.get('name')}: {suite.get('tests')} tests, {suite.get('failures')} failures, {suite.get('errors')} errors")
           for report in Path('app/build/intermediates/lint_intermediate_text_report').rglob('lint-results-release.txt'):
               lines = report.read_text().splitlines()
               for index, line in enumerate(lines):
-                  if re.search(r': Error: .*\[\w+\]$', line):
+                  if ': Error: ' in line:
                       print('\n'.join(lines[index:index + 4]))
           PY
       - name: Verify and name APK

@@ -54,6 +54,10 @@ public final class WebSecurityPolicy {
         String host = httpsHost(url);
         return "accounts.google.com".equals(host) || "consent.google.com".equals(host);
     }
+    public static boolean isNativeSniff(String url, String method, boolean adAudioCandidate) {
+        return ("GET".equals(method) || "HEAD".equals(method)) && httpsHost(url) != null
+            && (adAudioCandidate || isGoogleAuth(url));
+    }
     public static boolean isPlayer(String url) { return "open.spotify.com".equals(httpsHost(url)); }
     public static boolean isAccounts(String url) { return "accounts.spotify.com".equals(httpsHost(url)); }
     public static boolean isBridgeOrigin(String origin) {

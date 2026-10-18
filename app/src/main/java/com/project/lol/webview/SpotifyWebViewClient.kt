@@ -356,12 +356,12 @@ class SpotifyWebViewClient(
         // Only ad-audio candidates and Google auth URLs need the native sniff below.
         // Everything else goes straight to the WebView, which would otherwise fetch
         // it a second time after this blocking request returns null.
-        if (!isAdAudioUrl(url) && !isGoogleAuthUrl(url)) return null
+        if (!WebSecurityPolicy.isNativeSniff(url, request.method, isAdAudioUrl(url))) return null
         try {
             val conn = URL(url).openConnection() as HttpURLConnection
             try {
                 conn.requestMethod = request.method
-                conn.instanceFollowRedirects = true
+                conn.instanceFollowRedirects = false
                 conn.connectTimeout = 5000
                 conn.readTimeout = 5000
                 val isGoogle = isGoogleAuthUrl(url)
@@ -416,16 +416,7 @@ class SpotifyWebViewClient(
         return null
     }
 
-    private fun isGoogleAuthUrl(url: String?): Boolean {
-        if (url == null) return false
-        val host = runCatching { android.net.Uri.parse(url).host }.getOrNull()
-            ?.lowercase() ?: return false
-        return host == "google.com" ||
-            host.endsWith(".google.com") ||
-            host.contains(".google.") ||
-            host.endsWith(".youtube.com") ||
-            host == "youtube.com"
-    }
+    private fun isGoogleAuthUrl(url: String?): Boolean = WebSecurityPolicy.isGoogleAuth(url)
 
     private fun injectPlayerControl(view: WebView) {
         val prefs = view.context.getSharedPreferences("spotilol_prefs", 0)

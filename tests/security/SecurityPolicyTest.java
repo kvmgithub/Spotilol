@@ -29,6 +29,15 @@ public class SecurityPolicyTest {
         check(WebSecurityPolicy.isBridgeOrigin("https://open.spotify.com"), "player origin");
         check(WebSecurityPolicy.isBridgeOrigin("https://accounts.spotify.com"), "login origin");
         check(!WebSecurityPolicy.isBridgeOrigin("https://open.spotify.com/path"), "origin only");
+        check(WebSecurityPolicy.isNativeSniff("https://accounts.google.com/login", "GET", false), "Google login sniff");
+        check(WebSecurityPolicy.isNativeSniff("https://consent.google.com/", "HEAD", false), "Google consent HEAD sniff");
+        check(WebSecurityPolicy.isNativeSniff("https://audio.scdn.co/audio/example", "GET", true), "ad candidate HTTPS sniff");
+        for (String url : new String[]{"https://x.google.attacker.test/", "https://youtube.com/", "https://accounts.google.com:8443/", "http://accounts.google.com/"})
+            check(!WebSecurityPolicy.isNativeSniff(url, "GET", false), "untrusted auth sniff rejected: " + url);
+        check(!WebSecurityPolicy.isNativeSniff("http://audio.scdn.co/audio/example", "GET", true), "cleartext ad sniff rejected");
+        for (String method : new String[]{"POST", "PUT", "DELETE", "OPTIONS"})
+            check(!WebSecurityPolicy.isNativeSniff("https://accounts.google.com/login", method, false), "non-read sniff rejected: " + method);
+        check(!WebSecurityPolicy.isNativeSniff("https://open.spotify.com/", "GET", false), "unrelated request bypasses sniff");
         check("héllo".equals(BoundedInput.readUtf8(new ByteArrayInputStream("héllo".getBytes(StandardCharsets.UTF_8)), 6)), "UTF-8 exact byte limit");
         boolean exceeded = false;
         try { BoundedInput.readUtf8(new ByteArrayInputStream(new byte[7]), 6); }

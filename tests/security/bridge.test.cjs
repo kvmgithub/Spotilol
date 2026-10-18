@@ -36,3 +36,16 @@ test('legacy fire-and-forget methods and synchronous visibility remain usable', 
   const {w,sent}=page(); w.AndBridge.recMediaPosition(1234); assert.equal(sent[0].args[0],1234);
   assert.equal(w.AndBridge.isWoke(),true); w.document.visibilityState='hidden'; assert.equal(w.AndBridge.isWoke(),false);
 });
+test('Lite player callbacks remain available without restoring removed features', () => {
+  const {w,sent}=page();
+  const calls={openVolumeDialog:[],playerExpanded:[true],wideVideo:[true],ctxMenuState:[false],enterVideoFullscreen:[],exitVideoFullscreen:[]};
+  for(const [name,args] of Object.entries(calls)) {
+    assert.equal(typeof w.AndBridge[name], 'function', name);
+    w.AndBridge[name](...args);
+    assert.equal(sent.at(-1).method,name);
+    assert.deepEqual(sent.at(-1).args,args);
+  }
+  for(const name of ['downloadTrack','downloadCollection','skipDownload','cancelDownload','enterPip','enterPipVideo','onMediaItemsLoaded','onSearchCompleted']) {
+    assert.equal(w.AndBridge[name],undefined,name);
+  }
+});

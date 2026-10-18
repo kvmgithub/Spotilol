@@ -33,9 +33,9 @@ object BridgeScript {
     }
     var methods = origin === 'https://accounts.spotify.com' ? ['loginDetected'] : [
         'loginDetected','deferMessage','wakeUp','wakeOff','cssInjected','dbg','clearDebugLog',
-        'recAdContentIds','playLoaded','recMediaPosition','recMediaStatus','onMediaItemsLoaded',
-        'onSearchCompleted','manageTShut','manageTSleep','recAccountName','openTimerDialog',
-        'enterPip','enterPipVideo','downloadTrack','downloadCollection','skipDownload','cancelDownload'
+        'recAdContentIds','playLoaded','recMediaPosition','recMediaStatus',
+        'manageTShut','manageTSleep','recAccountName','openTimerDialog','openVolumeDialog',
+        'playerExpanded','wideVideo','ctxMenuState','enterVideoFullscreen','exitVideoFullscreen'
     ];
     methods.forEach(function(method) {
         bridge[method] = function() { return send(method, Array.prototype.slice.call(arguments), false); };

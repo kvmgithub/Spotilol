@@ -1,13 +1,13 @@
 name: APK release
 on:
   push:
-    branches: [main]
+    branches: [main, lite-hardened-1.2.4]
   workflow_dispatch:
 permissions:
   contents: read
 jobs:
   build:
-    if: github.repository == 'kvmgithub/Spotilol' && github.ref == 'refs/heads/main'
+    if: github.repository == 'kvmgithub/Spotilol'
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     permissions:
@@ -23,7 +23,7 @@ jobs:
           cmdline-tools-version: 15641748
           packages: platform-tools
       - name: Install Android build dependencies
-        run: sdkmanager 'platforms;android-37.0' 'build-tools;37.0.0' 'ndk;28.2.13676358' 'cmake;3.22.1'
+        run: sdkmanager 'platforms;android-37.0' 'build-tools;37.0.0'
       - name: Prepare signing and version
         env:
           APK_SIGNING_BUNDLE: ${{ secrets.APK_SIGNING_BUNDLE }}
@@ -40,7 +40,7 @@ jobs:
           version = 1000 + int(os.environ['GITHUB_RUN_NUMBER'])
           with open(os.environ['GITHUB_ENV'], 'a') as out:
               out.write(f'APK_KEYSTORE={key}\nAPK_KEY_PASSWORD={password}\nAPK_KEY_ALIAS=release\n')
-              out.write(f'APK_VERSION_CODE={version}\nAPK_VERSION_NAME=1.1.{version}\n')
+              out.write(f'APK_VERSION_CODE={version}\nAPK_VERSION_NAME=1.2.{version}\n')
           PY
       - name: Check security regressions
         run: bash tests/security/run.sh
@@ -61,7 +61,8 @@ jobs:
           import sys, zipfile
           with zipfile.ZipFile(sys.argv[1]) as apk:
               abis = {p.split('/')[1] for p in apk.namelist() if p.startswith('lib/') and p.endswith('.so')}
-              assert abis == {'arm64-v8a'}, abis
+              assert abis <= {'arm64-v8a'}, abis
+              assert not any('firebase' in p.lower() for p in apk.namelist()), 'Firebase packaging found'
           PY
           "$ANDROID_HOME/build-tools/37.0.0/aapt" dump badging "$apk" > "$RUNNER_TEMP/apk-metadata.txt"
           python3 - <<'PY'
@@ -76,12 +77,31 @@ jobs:
           assert 'application-debuggable' not in data
           PY
           (cd release-assets && sha256sum *.apk > SHA256SUMS.txt)
+      - name: Verify update signing identity
+        run: |
+          previous="$RUNNER_TEMP/previous-fork.apk"
+          curl --fail --location --retry 3 'https://github.com/kvmgithub/Spotilol/releases/download/v1.1.1002/Spotilol-arm64-1.1.1002.apk' --output "$previous"
+          printf '%s  %s\n' '4b775569b10353142f571d6e3f62587785b688ac6b943fa427a76148c5e71ddc' "$previous" | sha256sum --check
+          "$ANDROID_HOME/build-tools/37.0.0/apksigner" verify --print-certs "$previous" > "$RUNNER_TEMP/previous-signature.txt"
+          "$ANDROID_HOME/build-tools/37.0.0/apksigner" verify --print-certs release-assets/*.apk > "$RUNNER_TEMP/new-signature.txt"
+          python3 - <<'PY'
+          import os, re
+          from pathlib import Path
+          root = Path(os.environ['RUNNER_TEMP'])
+          def certificate(name):
+              data = (root / name).read_text()
+              return re.findall(r'^Signer #\d+ certificate SHA-256 digest: (\S+)$', data, re.M)
+          old, new = certificate('previous-signature.txt'), certificate('new-signature.txt')
+          assert old and old == new, 'Signing certificate changed'
+          print('Update signing identity matches v1.1.1002')
+          PY
       - name: Publish release
+        if: github.ref == 'refs/heads/main'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           tag="v${APK_VERSION_NAME}"
-          printf 'ARM64 release for commit `%s`.\n\nPackage: `com.project.lol.fork`. Installs alongside the original app.\n\nAPK signature remains stable across releases.\n' "$GITHUB_SHA" > "$RUNNER_TEMP/release-notes.md"
+          printf 'Spotilol Lite 1.2.4 with trusted-origin bridge, bounded native HTTP, fail-closed encrypted profiles and regression tests.\n\nSource commit: `%s`.\n\nPackage: `com.project.lol.fork`. The signing certificate matches v1.1.1002, so this APK updates the existing fork.\n\nFirebase, downloads, Android Auto, widgets, proxy mode and system PiP are absent.\n\nStandalone tests, Android JVM tests, release lint and signed APK verification passed. Real-device testing of this new Lite-based build remains outstanding.\n' "$GITHUB_SHA" > "$RUNNER_TEMP/release-notes.md"
           if ! gh release view "$tag" >/dev/null 2>&1; then
             gh release create "$tag" --target "$GITHUB_SHA" --title "Spotilol ${APK_VERSION_NAME}" --notes-file "$RUNNER_TEMP/release-notes.md" --draft
           fi

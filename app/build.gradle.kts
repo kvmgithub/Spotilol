@@ -3,7 +3,6 @@ import java.util.Properties
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
-    id("org.jetbrains.kotlin.plugin.serialization")
 }
 
 val keystorePropertiesFile = rootProject.file("keystore/keystore.properties")
@@ -17,16 +16,15 @@ val keystoreProperties = Properties().apply {
 android {
     namespace = "com.project.lol"
     compileSdk = 37
-    ndkVersion = "28.2.13676358"
 
     defaultConfig {
-        applicationId = providers.gradleProperty("forkApplicationId").orElse("com.project.lol").get()
+        applicationId = providers.gradleProperty("forkApplicationId").orElse("com.project.lol.fork").get()
         minSdk = 28
         targetSdk = 36
-        versionCode = providers.gradleProperty("forkVersionCode").orElse("18").get().toInt()
-        versionName = providers.gradleProperty("forkVersionName").orElse("1.1.8").get()
+        versionCode = providers.gradleProperty("forkVersionCode").orElse("1003").get().toInt()
+        versionName = providers.gradleProperty("forkVersionName").orElse("1.2.1003").get()
         ndk {
-            abiFilters += providers.gradleProperty("forkAbis").orElse("arm64-v8a,armeabi-v7a").get().split(",")
+            abiFilters += providers.gradleProperty("forkAbis").orElse("arm64-v8a").get().split(",")
         }
     }
 
@@ -37,16 +35,27 @@ android {
 
     signingConfigs {
         create("release") {
-            storeFile = System.getenv("APK_KEYSTORE")?.let { file(it) } ?: rootProject.file("keystore/${keystoreProperties.getProperty("storeFile")}")
-            storePassword = System.getenv("APK_KEY_PASSWORD") ?: keystoreProperties.getProperty("storePassword")
-            keyAlias = System.getenv("APK_KEY_ALIAS") ?: keystoreProperties.getProperty("keyAlias")
-            keyPassword = System.getenv("APK_KEY_PASSWORD") ?: keystoreProperties.getProperty("keyPassword")
+            // signing from env vars first (KEYSTORE_FILE/KEYSTORE_PASSWORD/KEY_ALIAS/KEY_PASSWORD),
+            // falling back to keystore/keystore.properties
+            val envStoreFile = System.getenv("APK_KEYSTORE") ?: System.getenv("KEYSTORE_FILE")
+            val envStorePass = System.getenv("APK_KEY_PASSWORD") ?: System.getenv("KEYSTORE_PASSWORD")
+            val envAlias = System.getenv("APK_KEY_ALIAS") ?: System.getenv("KEY_ALIAS")
+            val envKeyPass = System.getenv("APK_KEY_PASSWORD") ?: System.getenv("KEY_PASSWORD")
+            if (envStoreFile != null && envStorePass != null && envAlias != null && envKeyPass != null) {
+                storeFile = file(envStoreFile)
+                storePassword = envStorePass
+                keyAlias = envAlias
+                keyPassword = envKeyPass
+            } else {
+                storeFile = rootProject.file("keystore/${keystoreProperties.getProperty("storeFile")}")
+                storePassword = keystoreProperties.getProperty("storePassword")
+                keyAlias = keystoreProperties.getProperty("keyAlias")
+                keyPassword = keystoreProperties.getProperty("keyPassword")
+            }
         }
     }
 
     buildTypes {
-        debug {
-        }
         release {
             signingConfig = signingConfigs.getByName("release")
             isMinifyEnabled = true
@@ -72,9 +81,8 @@ dependencies {
     implementation(libs.material)
     implementation(libs.androidx.webkit)
     implementation(libs.androidx.media)
-    implementation(libs.bouncyprov)
-    implementation(libs.bouncypkix)
     implementation(libs.security.crypto)
+    implementation(libs.okhttp)
 
     // Jetpack Compose
     implementation(platform(libs.compose.bom))
@@ -88,27 +96,6 @@ dependencies {
     implementation(libs.lifecycle.runtime.compose)
     debugImplementation(libs.compose.ui.tooling)
 
-    // Glance (home screen widgets)
-    implementation(libs.glance.appwidget)
-    implementation(libs.glance.material3)
-
-    // Ktor + serialization (YouTube InnerTube client)
-    implementation(libs.ktor.client.core)
-    implementation(libs.ktor.client.okhttp)
-    implementation(libs.ktor.client.content.negotiation)
-    implementation(libs.ktor.client.encoding)
-    implementation(libs.ktor.serialization.json)
-    implementation(libs.serialization.json)
-
-    // NewPipe + YouTube streaming
-    implementation(libs.newpipeextractor)
-    implementation(libs.brotli)
-    implementation(libs.okhttp)
-
-    // Audio downloads: opus decoding, mp3 encoding
-    implementation(project(":lame"))
-    implementation(project(":opus"))
-
-    // Core library desugaring (required by NewPipeExtractor)
+    // Core library desugaring (java.time in Logger)
     coreLibraryDesugaring(libs.desugaring)
 }

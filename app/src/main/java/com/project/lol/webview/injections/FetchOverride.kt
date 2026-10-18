@@ -5,6 +5,13 @@ object FetchOverride {
             (function(){
                 if(window.oriFetch) return;
                 window.splOpHashes = window.splOpHashes || {};
+                window.__splLocalDevId = window.__splLocalDevId || null;
+                window.__splActiveDevId = window.__splActiveDevId || null;
+                window.__splRemoteActive = function(){
+                    try {
+                        return !!(window.__splLocalDevId && window.__splActiveDevId && window.__splActiveDevId !== window.__splLocalDevId);
+                    } catch(e){ return false; }
+                };
                 var orig = window.fetch.bind(window);
                 window.oriFetch = orig;
                 window.fetch = function(input, init) {
@@ -27,16 +34,19 @@ object FetchOverride {
                     }
                     var url = typeof input==='string' ? input : (input ? input.url : '');
                     if(url && url.indexOf) {
-                        var m = url.match(/\/from\/([A-Za-z0-9_-]+)\/to\//);
+                        var m = url.match(/\/from\/([A-Za-z0-9_-]+)\/to\/([A-Za-z0-9_-]+)/);
                         if(m && m[1]) window.spotDevId = m[1];
+                        if(m && m[1] && !window.__splLocalDevId) window.__splLocalDevId = m[1];
+                        if(m && m[2]) window.__splActiveDevId = m[2];
                         var m2 = url.match(/connect-state\/v1\/player\/(?:command|transfer)\/from\/([A-Za-z0-9_-]+)\/to\/([A-Za-z0-9_-]+)/);
-                        if(m2 && m2[2]) window.spotDevId = m2[2];
+                        if(m2 && m2[2]) { window.spotDevId = m2[2]; window.__splActiveDevId = m2[2]; }
                         var m3 = url.match(/\/track-playback\/v1\/devices/);
                         if(m3 && init && init.body) {
                             try {
                                 var pb = typeof init.body==='string' ? JSON.parse(init.body) : init.body;
-                                if(pb && pb.device && pb.device.device_id && pb.device.device_id!==window.spotDevId) {
-                                    window.spotDevId = pb.device.device_id;
+                                if(pb && pb.device && pb.device.device_id) {
+                                    if(!window.__splLocalDevId) window.__splLocalDevId = pb.device.device_id;
+                                    if(pb.device.device_id!==window.spotDevId) window.spotDevId = pb.device.device_id;
                                 }
                             } catch(e){}
                         }
@@ -57,18 +67,20 @@ object FetchOverride {
                         }
                     }
                     var method = (init && init.method) ? String(init.method).toUpperCase() : 'GET';
+                    var gqlOp = null;
                     if(!window.__splOwnCall && url && url.indexOf && url.indexOf('api-partner.spotify.com/pathfinder/v2/query') !== -1 && init && init.body) {
                         try {
                             var qb = typeof init.body==='string' ? JSON.parse(init.body) : init.body;
                             if(qb && qb.operationName && qb.extensions && qb.extensions.persistedQuery && qb.extensions.persistedQuery.sha256Hash) {
                                 window.splOpHashes[qb.operationName] = qb.extensions.persistedQuery.sha256Hash;
+                                gqlOp = qb.operationName;
                             }
                         } catch(e){}
                     }
-                    if(!window.__spotilolUseProxy && url && url.indexOf && (url.indexOf('connect-state') !== -1 || url.indexOf('melody/v1/msg') !== -1 || url.indexOf('/track-playback/') !== -1) && window.mngFetch) {
+                    if(url && url.indexOf && (url.indexOf('connect-state') !== -1 || url.indexOf('melody/v1/msg') !== -1 || url.indexOf('/track-playback/') !== -1) && window.mngFetch) {
                         return window.mngFetch(input, init);
                     }
-                    if(window.ffDone && url && url.indexOf && url.indexOf('/track-playback/') !== -1 && method === 'PUT' && init && init.body) {
+                    if(window.ffDone && url && url.indexOf && url.indexOf('/track-playback/') !== -1 && method === 'PUT' && init && init.body && !window.__splRemoteActive()) {
                         try {
                             var pb = typeof init.body === 'string' ? JSON.parse(init.body) : init.body;
                             if(pb && pb.state_ref && pb.state_ref.paused === true && window.playing) {
@@ -79,6 +91,14 @@ object FetchOverride {
                         } catch(e){}
                     }
                     var p = orig.call(window, input, init);
+                    if(gqlOp === 'canvas' && window.__splFullPlayer) {
+                        return p.then(function(resp){
+                            return resp.clone().json().then(function(j){
+                                if(j && j.data && j.data.trackUnion) j.data.trackUnion.canvas = null;
+                                return new Response(JSON.stringify(j), {status: resp.status, statusText: resp.statusText, headers: resp.headers});
+                            }).catch(function(){ return resp; });
+                        });
+                    }
                     if(url && url.indexOf && url.indexOf('/metadata/4/track/') !== -1) {
                         p.then(function(resp){
                             try {
@@ -94,14 +114,24 @@ object FetchOverride {
                                                 name: j.name || null,
                                                 artist: (j.artist && j.artist.length) ? j.artist[0].name : null,
                                                 album: (j.album) ? j.album.name : null,
-                                                cover: (cg && cg.length) ? 'https://i.scdn.co/image/' + cg[0].file_id : null
+                                                cover: (cg && cg.length) ? 'https://i.scdn.co/image/' + cg[0].file_id : null,
+                                                trackNumber: (typeof j.number === 'number' && j.number > 0) ? j.number : null,
+                                                discNumber: (typeof j.disc_number === 'number' && j.disc_number > 0) ? j.disc_number : null,
+                                                year: (j.album && j.album.date && j.album.date.year) ? j.album.date.year : null
                                             };
-                                            window.__curTrackUri = j.canonical_uri;
-                                            window.__curTrackId = tid;
-                                            window.__curTrackName = j.name || null;
-                                            window.__curTrackArtist = (j.artist && j.artist.length) ? j.artist[0].name : null;
-                                            window.__curTrackAlbum = (j.album) ? j.album.name : null;
-                                            if(cg && cg.length) window.__curTrackCover = 'https://i.scdn.co/image/' + cg[0].file_id;
+                                            var splPlayingId = (typeof window.splPlayingTrackId === 'function')
+                                                ? window.splPlayingTrackId()
+                                                : (window.splTrackId || null);
+                                            if(!splPlayingId || tid === splPlayingId) {
+                                                window.__curTrackUri = j.canonical_uri;
+                                                window.__curTrackId = tid;
+                                                window.__curTrackName = j.name || null;
+                                                window.__curTrackArtist = (j.artist && j.artist.length) ? j.artist[0].name : null;
+                                                window.__curTrackAlbum = (j.album) ? j.album.name : null;
+                                                if(cg && cg.length) window.__curTrackCover = 'https://i.scdn.co/image/' + cg[0].file_id;
+                                                window.lastState = null;
+                                                if(window.updMedia && typeof track !== 'undefined'){ try{ window.updMedia(); }catch(e){} }
+                                            }
                                         }
                                     } catch(e){}
                                 });

@@ -1,6 +1,8 @@
 package com.project.lol.bridge
 
 import android.app.Activity
+import android.os.Handler
+import android.os.Looper
 import android.view.View
 import android.webkit.CookieManager
 import android.widget.Toast
@@ -8,39 +10,35 @@ import com.project.lol.R
 import com.project.lol.service.MediaNotificationService
 import com.project.lol.webview.helpers.AdIdStore
 import org.json.JSONArray
-import org.json.JSONObject
 import java.lang.ref.WeakReference
-import okhttp3.OkHttpClient
-import okhttp3.Request
-import okhttp3.RequestBody.Companion.toRequestBody
-import okhttp3.MediaType.Companion.toMediaTypeOrNull
-import com.project.lol.security.WebSecurityPolicy
-import com.project.lol.security.BoundedInput
-import java.util.concurrent.TimeUnit
-import java.util.Locale
-import com.project.lol.offline.DownloadManager
 import com.project.lol.util.Logger
+import com.project.lol.webview.helpers.NavToken
 
 class SpotifyBridge(activityRef: WeakReference<Activity>) {
 
     companion object {
-        private const val DESKTOP_UA =
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36"
-
         private const val TAG = "bridge"
         private const val CALL = "bridge.call"
     }
 
-    private val activityRef = activityRef
+    @Volatile
+    private var activityRef = activityRef
+    private val mainHandler = Handler(Looper.getMainLooper())
+
+    fun rebind(ref: WeakReference<Activity>) {
+        activityRef = ref
+    }
     var onLoginDetected: (() -> Unit)? = null
     var onPlayLoaded: (() -> Unit)? = null
     var onMediaStatus: ((String) -> Unit)? = null
     var onMediaPosition: ((Long) -> Unit)? = null
     var onTimerDialogRequest: (() -> Unit)? = null
-    var onEnterPipRequest: (() -> Unit)? = null
-    var onEnterPipVideoRequest: ((Int, Int) -> Unit)? = null
-    var onDownloadTrack: ((String) -> Unit)? = null
-    var onDownloadCollection: ((String) -> Unit)? = null
+    var onVolumeDialogRequest: (() -> Unit)? = null
+    var onEnterVideoFullscreen: (() -> Unit)? = null
+    var onExitVideoFullscreen: (() -> Unit)? = null
+    var onPlayerExpanded: ((Boolean) -> Unit)? = null
+    var onWideVideo: ((Boolean) -> Unit)? = null
+    var onCtxMenuState: ((Boolean) -> Unit)? = null
 
     fun loginDetected() {
         val activity = activityRef.get() ?: return
@@ -69,7 +67,7 @@ class SpotifyBridge(activityRef: WeakReference<Activity>) {
     }
 
     fun isWoke(): Boolean {
-        val activity = activityRef.get() ?: return false
+        val activity = activityRef.get() ?: return true
         val visible = activity.window?.decorView?.visibility == View.VISIBLE
         Logger.v(CALL, "isWoke -> $visible")
         return visible
@@ -105,16 +103,20 @@ class SpotifyBridge(activityRef: WeakReference<Activity>) {
             val v = arr.optString(i, "")
             if (v.isNotEmpty()) ids.add(v)
         }
-        if (ids.isNotEmpty()) {
-            AdIdStore.addAll(ids)
-            Logger.d(CALL, "recAdContentIds: ${ids.size}")
+        if (ids.isEmpty()) return
+        val token = NavToken.current()
+        mainHandler.post {
+            if (token != NavToken.current()) {
+                Logger.d(CALL, "recAdContentIds: dropped ${ids.size} stale ids")
+                return@post
+            }
+            if (AdIdStore.addAll(ids)) Logger.d(CALL, "recAdContentIds: ${ids.size}")
         }
     }
 
     fun playLoaded() {
-        val activity = activityRef.get() ?: return
-        Logger.i(TAG, "play loaded, web player ready")
-        activity.runOnUiThread {
+        Logger.i(TAG, "player loaded, web player ready")
+        activityRef.get()?.runOnUiThread {
             onPlayLoaded?.invoke()
         }
     }
@@ -131,16 +133,6 @@ class SpotifyBridge(activityRef: WeakReference<Activity>) {
             onMediaStatus?.invoke(it)
             MediaNotificationService.instance?.updateFromMediaStatus(it)
         }
-    }
-
-    fun onMediaItemsLoaded(parentId: String?, json: String?) {
-        Logger.d(CALL, "media items parent=$parentId size=${json?.length ?: 0}")
-        parentId?.let { MediaNotificationService.onMediaItemsLoaded(it, json ?: "[]") }
-    }
-
-    fun onSearchCompleted(query: String?, json: String?) {
-        Logger.d(CALL, "search completed query=$query size=${json?.length ?: 0}")
-        query?.let { MediaNotificationService.onSearchCompleted(it, json ?: "[]") }
     }
 
     fun manageTShut(enabled: Boolean) {
@@ -171,110 +163,64 @@ class SpotifyBridge(activityRef: WeakReference<Activity>) {
         }
     }
 
-    fun enterPip() {
+    fun openVolumeDialog() {
         val activity = activityRef.get() ?: return
-        Logger.i(CALL, "enterPip")
+        Logger.d(CALL, "openVolumeDialog")
         activity.runOnUiThread {
-            onEnterPipRequest?.invoke()
+            onVolumeDialogRequest?.invoke()
         }
     }
 
-    fun enterPipVideo(w: Int, h: Int) {
+    fun playerExpanded(expanded: Boolean) {
         val activity = activityRef.get() ?: return
-        Logger.i(CALL, "enterPipVideo ${w}x$h")
+        Logger.v(CALL, "playerExpanded=$expanded")
         activity.runOnUiThread {
-            onEnterPipVideoRequest?.invoke(w, h)
+            onPlayerExpanded?.invoke(expanded)
         }
     }
 
-    fun downloadTrack(json: String?) {
-        Logger.i(CALL, "downloadTrack (${json?.length ?: 0} chars)")
-        json?.let { onDownloadTrack?.invoke(it) }
-    }
-
-    @Suppress("unused")
-    fun downloadCollection(json: String?) {
-        Logger.i(CALL, "downloadCollection (${json?.length ?: 0} chars)")
-        json?.let { onDownloadCollection?.invoke(it) }
-    }
-
-    @Suppress("unused")
-    fun skipDownload() {
-        Logger.i(CALL, "skipDownload")
-        DownloadManager.skipCurrent()
-    }
-
-    @Suppress("unused")
-    fun cancelDownload() {
-        Logger.i(CALL, "cancelDownload")
-        DownloadManager.cancelAll()
-    }
-
-    private val fetchClient by lazy {
-        OkHttpClient.Builder()
-            .followRedirects(false).followSslRedirects(false)
-            .connectTimeout(10, TimeUnit.SECONDS).readTimeout(10, TimeUnit.SECONDS)
-            .callTimeout(15, TimeUnit.SECONDS).build()
-    }
-
-    fun nFetch(url: String, optsJson: String?): String {
-        return try {
-            require(WebSecurityPolicy.isNativeFetch(url)) { "Untrusted native request target" }
-            require((optsJson?.length ?: 0) <= 1_048_576) { "Request too large" }
-            val opts = if (optsJson.isNullOrBlank()) JSONObject() else JSONObject(optsJson)
-            val method = opts.optString("method", "GET").uppercase(Locale.ROOT)
-            require(method in setOf("GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"))
-            val body = if (opts.has("body") && !opts.isNull("body")) opts.getString("body") else null
-            require((body?.toByteArray(Charsets.UTF_8)?.size ?: 0) <= 1_048_576)
-            val headers = opts.optJSONObject("headers") ?: JSONObject()
-            require(headers.length() <= 64)
-            val builder = Request.Builder().url(url)
-            val blocked = setOf("cookie", "cookie2", "host", "origin", "referer", "connection",
-                "content-length", "transfer-encoding", "proxy-authorization", "proxy-connection",
-                "te", "trailer", "upgrade", "accept-encoding", "user-agent", "x-requested-with")
-            var headerBytes = 0
-            headers.keys().forEach { key ->
-                val lower = key.lowercase(Locale.ROOT)
-                if (lower !in blocked && !lower.startsWith("sec-") && !headers.isNull(key)) {
-                    val value = headers.getString(key)
-                    headerBytes += key.length + value.length
-                    require(headerBytes <= 16_384)
-                    builder.header(key, value)
-                }
-            }
-            builder.header("User-Agent", DESKTOP_UA)
-                .header("sec-ch-ua-platform", "\"Windows\"")
-                .header("sec-ch-ua-mobile", "?0")
-                .header("sec-ch-ua", "\"Chromium\";v=\"150\", \"Google Chrome\";v=\"150\"")
-                .header("Origin", "https://open.spotify.com")
-                .header("Referer", "https://open.spotify.com/")
-            if (WebSecurityPolicy.isCookieHost(url)) {
-                CookieManager.getInstance().getCookie(url)?.takeIf { it.isNotEmpty() }?.let { builder.header("Cookie", it) }
-            }
-            val requestBody = when (method) {
-                "GET", "HEAD" -> { require(body.isNullOrEmpty()); null }
-                "POST", "PUT", "PATCH" -> (body ?: "").toRequestBody(headers.optString("Content-Type").toMediaTypeOrNull())
-                else -> body?.toRequestBody(headers.optString("Content-Type").toMediaTypeOrNull())
-            }
-            fetchClient.newCall(builder.method(method, requestBody).build()).execute().use { response ->
-                require(response.code !in setOf(300, 301, 302, 303, 305, 307, 308)) { "Native redirects are not permitted" }
-                if (WebSecurityPolicy.isCookieHost(url)) {
-                    response.headers.values("Set-Cookie").forEach { CookieManager.getInstance().setCookie(url, it) }
-                    CookieManager.getInstance().flush()
-                }
-                val responseBody = response.body.byteStream().use { BoundedInput.readUtf8(it, 4_194_304) }
-                val responseHeaders = JSONObject()
-                response.headers.names().forEach { key ->
-                    if (!key.equals("Set-Cookie", true) && !key.equals("Set-Cookie2", true)) {
-                        responseHeaders.put(key, response.header(key))
-                    }
-                }
-                JSONObject().put("status", response.code).put("body", responseBody)
-                    .put("headers", responseHeaders).toString()
-            }
-        } catch (_: Exception) {
-            Logger.w(TAG, "native request rejected or failed")
-            "{\"status\":0,\"body\":\"Native request rejected or failed\",\"headers\":{}}"
+    fun wideVideo(showing: Boolean) {
+        val activity = activityRef.get() ?: return
+        Logger.v(CALL, "wideVideo=$showing")
+        activity.runOnUiThread {
+            onWideVideo?.invoke(showing)
         }
     }
+
+    fun ctxMenuState(open: Boolean) {
+        val activity = activityRef.get() ?: return
+        Logger.v(CALL, "ctxMenuState=$open")
+        activity.runOnUiThread {
+            onCtxMenuState?.invoke(open)
+        }
+    }
+
+    fun enterVideoFullscreen() {
+        val activity = activityRef.get() ?: return
+        Logger.i(CALL, "enterVideoFullscreen")
+        activity.runOnUiThread {
+            onEnterVideoFullscreen?.invoke()
+        }
+    }
+
+    fun exitVideoFullscreen() {
+        val activity = activityRef.get() ?: return
+        Logger.i(CALL, "exitVideoFullscreen")
+        activity.runOnUiThread {
+            onExitVideoFullscreen?.invoke()
+        }
+    }
+
+    private val nativeFetch by lazy {
+        com.project.lol.security.NativeFetch(
+            readCookies = { CookieManager.getInstance().getCookie(it) },
+            storeCookies = { url, cookies ->
+                val manager = CookieManager.getInstance()
+                cookies.forEach { manager.setCookie(url, it) }
+                manager.flush()
+            },
+        )
+    }
+
+    fun nFetch(url: String, optsJson: String?): String = nativeFetch.execute(url, optsJson)
 }

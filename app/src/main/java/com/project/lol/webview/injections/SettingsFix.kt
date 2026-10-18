@@ -44,73 +44,35 @@ object SettingsFix {
                 return isSpotifyUrl(url) || isOAuthUrl(url);
             }
 
-            function hardBlock(el) {
-                if (el.__splHardBlocked) return;
-                el.__splHardBlocked = true;
-                el.addEventListener('click', function(e) {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    return false;
-                }, true);
-                el.addEventListener('auxclick', function(e) {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    return false;
-                }, true);
-                el.addEventListener('pointerdown', function(e) {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    return false;
-                }, true);
-            }
-
-            function interceptAll() {
-                var links = document.querySelectorAll('a[target="_blank"]');
-                for (var i = 0; i < links.length; i++) {
-                    var a = links[i];
-                    if (a.__splIntercepted) continue;
-                    a.__splIntercepted = true;
-
-                    a.addEventListener('click', function(e) {
-                        var href = this.href || '';
-                        if (!href || href.charAt(0) === '#') return;
-                        if (isAllowed(href)) return;
-
-                        e.preventDefault();
-                        e.stopPropagation();
-                        try { AndBridge.dbg('s', 'Blocked external nav: ' + href); } catch(err) {}
-                        return false;
-                    }, true);
-
-                    a.addEventListener('auxclick', function(e) {
-                        var href = this.href || '';
-                        if (!href || isAllowed(href)) return;
-                        e.preventDefault();
-                        e.stopPropagation();
-                        return false;
-                    }, true);
-                }
-
+            function hidePromos() {
                 var badges = document.querySelectorAll('ms-store-badge');
                 for (var i = 0; i < badges.length; i++) {
-                    hardBlock(badges[i]);
                     badges[i].style.pointerEvents = 'none';
                 }
 
                 var imgs = document.querySelectorAll('img[src*="get.microsoft.com"]');
                 for (var i = 0; i < imgs.length; i++) {
-                    hardBlock(imgs[i]);
                     imgs[i].style.pointerEvents = 'none';
                     imgs[i].style.display = 'none';
                 }
             }
 
-            interceptAll();
+            function onExternalClick(e) {
+                var a = e.target && e.target.closest ? e.target.closest('a[target="_blank"]') : null;
+                if (!a) return;
+                var href = a.href || '';
+                if (!href || href.charAt(0) === '#') return;
+                if (isAllowed(href)) return;
+                e.preventDefault();
+                e.stopPropagation();
+                try { AndBridge.dbg('s', 'Blocked external nav: ' + href); } catch(err) {}
+            }
 
-            var obs = new MutationObserver(function() { interceptAll(); });
-            obs.observe(document.documentElement, {
-                childList: true, subtree: true
-            });
+            document.addEventListener('click', onExternalClick, true);
+            document.addEventListener('auxclick', onExternalClick, true);
+
+            hidePromos();
+            setInterval(hidePromos, 5000);
         })();
     """
 }

@@ -100,6 +100,7 @@ object TrackObserver {
             }
 
             function check() {
+                if (window.__splBusy) return;
                 const id = currentId();
                 if (id) return emit(id, 'href');
 
@@ -144,7 +145,7 @@ object TrackObserver {
                 const el = document.querySelector(SEL);
                 if (el && el !== root) attach(el);
                 else if (!el && root) detach();
-            }, 1000);
+            }, 2000);
 
             window.__npStop = stop;
 

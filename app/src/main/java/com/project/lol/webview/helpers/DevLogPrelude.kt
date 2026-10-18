@@ -4,6 +4,7 @@ object DevLogPrelude {
 
     fun js(): String = """
         (function(){
+            window.__splDbgOn=true;
             function send(lvl,m){
                 try{ AndBridge.dbg(lvl,String(m)); }catch(e){}
             }

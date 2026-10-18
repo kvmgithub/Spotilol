@@ -7,34 +7,31 @@ import android.content.SharedPreferences
 import android.net.Uri
 import android.os.Build
 import android.provider.Settings
-import android.webkit.CookieManager
-import android.webkit.WebStorage
-import android.webkit.WebView
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.StringRes
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
@@ -42,7 +39,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
@@ -50,14 +47,13 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.PlainTooltip
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.RadioButtonDefaults
 import androidx.compose.material3.SecondaryScrollableTabRow
-import androidx.compose.material3.Slider
-import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
@@ -71,7 +67,6 @@ import androidx.compose.material3.rememberTooltipState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -81,114 +76,90 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalClipboard
-import androidx.compose.ui.platform.toClipEntry
 import androidx.compose.ui.platform.LocalConfiguration
-import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalResources
+import androidx.compose.ui.platform.toClipEntry
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.webkit.WebViewCompat
 import com.project.lol.R
-import com.project.lol.offline.DownloadFolder
-import com.project.lol.offline.DownloadFormat
-import com.project.lol.offline.DownloadPrefs
 import com.project.lol.profile.ProfileManager
-import com.project.lol.proxy.LocalProxyManager
 import com.project.lol.service.MediaNotificationService
+import com.project.lol.ui.SplashActivity
 import com.project.lol.ui.components.ChangelogDialog
 import com.project.lol.ui.theme.SpotifyTheme
+import com.project.lol.util.AppLocale
+import com.project.lol.util.BatterySaver
 import com.project.lol.util.BuildInfo
-import com.project.lol.util.GitHubApi
-import com.project.lol.util.GitHubRelease
+import com.project.lol.util.DeviceInfo
 import com.project.lol.util.LogEntry
+import com.project.lol.util.LogExport
 import com.project.lol.util.LogFilter
 import com.project.lol.util.LogLevel
 import com.project.lol.util.Logger
-import com.project.lol.util.MarkdownText
-import com.project.lol.webview.helpers.LyricsTheme
+import com.project.lol.util.Logger.isAutoScroll
 import compose.icons.TablerIcons
-import compose.icons.tablericons.AlertTriangle
+import compose.icons.tablericons.ArrowDown
 import compose.icons.tablericons.ArrowsMinimize
 import compose.icons.tablericons.ArrowsSort
 import compose.icons.tablericons.ArrowsUpDown
+import compose.icons.tablericons.Battery
 import compose.icons.tablericons.BrandDiscord
 import compose.icons.tablericons.BrightnessUp
 import compose.icons.tablericons.Brush
 import compose.icons.tablericons.Bug
-import compose.icons.tablericons.Car
-import compose.icons.tablericons.Check
 import compose.icons.tablericons.ChevronRight
 import compose.icons.tablericons.Click
 import compose.icons.tablericons.CloudOff
 import compose.icons.tablericons.Code
-import compose.icons.tablericons.ColorSwatch
+import compose.icons.tablericons.Copy
 import compose.icons.tablericons.DeviceMobile
-import compose.icons.tablericons.Download
 import compose.icons.tablericons.EyeOff
+import compose.icons.tablericons.FileDownload
 import compose.icons.tablericons.Flask
-import compose.icons.tablericons.Folder
 import compose.icons.tablericons.InfoCircle
 import compose.icons.tablericons.Language
 import compose.icons.tablericons.Link
 import compose.icons.tablericons.Moon
+import compose.icons.tablericons.Movie
 import compose.icons.tablericons.Palette
 import compose.icons.tablericons.PlayerPlay
-import compose.icons.tablericons.Playlist
 import compose.icons.tablericons.Power
+import compose.icons.tablericons.Rocket
 import compose.icons.tablericons.RotateClockwise2
 import compose.icons.tablericons.Shield
+import compose.icons.tablericons.Terminal2
 import compose.icons.tablericons.Trash
 import compose.icons.tablericons.TrashOff
 import compose.icons.tablericons.User
 import compose.icons.tablericons.UserPlus
-import compose.icons.tablericons.WaveSine
+import compose.icons.tablericons.Video
 import compose.icons.tablericons.X
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
-import kotlin.math.roundToInt
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.text.SimpleDateFormat
+import java.util.Date
 
-private val PalettePresets = listOf(
-    R.string.settings_palette_default to null,
-    R.string.settings_palette_spotify_green to "#1DB954",
-    R.string.settings_palette_purple to "#BB86FC",
-    R.string.settings_palette_blue to "#2196F3",
-    R.string.settings_palette_red to "#E53935",
-    R.string.settings_palette_orange to "#FB8C00",
-    R.string.settings_palette_pink to "#EC407A",
-    R.string.settings_palette_teal to "#26A69A",
-    R.string.settings_palette_yellow to "#FDD835",
-    R.string.settings_palette_cyan to "#00BCD4"
-)
-
-private fun parsePaletteColor(hex: String?): Color? {
-    if (hex.isNullOrBlank()) return null
-    return runCatching { Color(android.graphics.Color.parseColor(hex)) }.getOrNull()
-}
-
-private fun formatHex(color: Color): String {
-    val r = (color.red * 255f).roundToInt()
-    val g = (color.green * 255f).roundToInt()
-    val b = (color.blue * 255f).roundToInt()
-    return "#" + String.format(Locale.US, "%02X%02X%02X", r, g, b)
-}
 private const val DEBUG_UNLOCK_TAPS = 5
+private const val LOGGER_WIDE_BREAKPOINT = 600
+private const val LYRICS_WIDE_BREAKPOINT = 600
 
 private enum class SettingsTab(@StringRes val labelRes: Int) {
     Appearance(R.string.settings_tab_appearance),
@@ -205,8 +176,6 @@ private enum class SettingsTab(@StringRes val labelRes: Int) {
 fun SettingsContent(
     modifier: Modifier = Modifier,
     prefs: SharedPreferences,
-    materialYou: Boolean,
-    onMaterialYouChange: (Boolean) -> Unit,
     amoledThemeState: Boolean,
     onAmoledThemeChange: (Boolean) -> Unit,
     hideTopBar: Boolean,
@@ -215,87 +184,64 @@ fun SettingsContent(
     onLandscapeModeChange: (Boolean) -> Unit,
     keepScreenOn: Boolean,
     onKeepScreenOnChange: (Boolean) -> Unit,
-    paletteSeed: String?,
-    onPaletteSeedChange: (String?) -> Unit,
-    onConnectionModeChange: (String) -> Unit,
-    onOfflineModeChange: (Boolean) -> Unit,
     onSaveProfile: (String, String) -> Unit,
     onLoadProfile: (String) -> Unit,
     onDeleteProfile: (String) -> Unit,
     onClearCache: () -> Unit,
     onClearData: () -> Unit,
+    onClearThirdParty: () -> Unit,
     onDebugToggle: (Boolean) -> Unit = {},
     blockServiceWorker: Boolean,
     onBlockServiceWorkerChange: (Boolean) -> Unit
 ) {
     var autoplayMode by remember { mutableStateOf(prefs.getString("APlayMode", "disabled") ?: "disabled") }
     var takeControl by remember { mutableStateOf(prefs.getBoolean("TakeControl", true)) }
-    var andAuto by remember { mutableStateOf(prefs.getBoolean("AndAuto", true)) }
-    var closeNowPlay by remember { mutableStateOf(prefs.getBoolean("CloseNowPlay", true)) }
-    var guiMode by remember { mutableStateOf(prefs.getString("GuiMode", "csshack") ?: "csshack") }
-    var customCss by remember { mutableStateOf(prefs.getString("CustomCss", "") ?: "") }
+    var closeNowPlay by remember { mutableStateOf(prefs.getBoolean("CloseNowPlay", false)) }
+    // dead code: gui mode is fixed to mobile css and js, see the appearance section
+    // var guiMode by remember { mutableStateOf(prefs.getString("GuiMode", "csshack") ?: "csshack") }
     var amoledTheme by remember { mutableStateOf(amoledThemeState) }
     var swipeStop by remember { mutableStateOf(prefs.getBoolean("SwipeStop", true)) }
     var btAutoPause by remember { mutableStateOf(prefs.getBoolean("BtAutoPause", false)) }
     var btAutoResume by remember { mutableStateOf(prefs.getBoolean("BtAutoResume", false)) }
     var hpAutoResume by remember { mutableStateOf(prefs.getBoolean("HpAutoResume", false)) }
     var playerMode by remember { mutableStateOf(prefs.getString("PlayerMode", "spotilol") ?: "spotilol") }
-    var connectionMode by remember { mutableStateOf(prefs.getString("ConnectionMode", "normal") ?: "normal") }
-    var offlineMode by remember { mutableStateOf(prefs.getBoolean("OfflineMode", false)) }
     var blockSW by remember { mutableStateOf(blockServiceWorker) }
     var hideEmptyPlayer by remember { mutableStateOf(prefs.getBoolean("HideEmptyPlayer", false)) }
+    var webCanvas by remember { mutableStateOf(prefs.getBoolean("WebCanvas", true)) }
+    var webVideos by remember { mutableStateOf(prefs.getBoolean("WebVideos", true)) }
     var playlistSortEnabled by remember { mutableStateOf(prefs.getBoolean("PlaylistSortEnabled", true)) }
     var showScrollbar by remember { mutableStateOf(prefs.getBoolean("ShowScrollbar", true)) }
-    var lyricsStyle by remember { mutableStateOf(prefs.getString("LyricsStyle", LyricsTheme.DEFAULT_STYLE) ?: LyricsTheme.DEFAULT_STYLE) }
+    var fastStartup by remember { mutableStateOf(prefs.getBoolean("FastStartup", false)) }
 
     val context = LocalContext.current
     val resources = LocalResources.current
+    var appLanguage by remember { mutableStateOf(AppLocale.current(context)) }
+    var showLanguageDialog by remember { mutableStateOf(false) }
     var profiles by remember { mutableStateOf(ProfileManager.getProfiles(context)) }
 
-    var showConnectionModeDialog by remember { mutableStateOf(false) }
     var showSaveAccountDialog by remember { mutableStateOf(false) }
     var pendingCookies by remember { mutableStateOf<String?>(null) }
     var accountNameInput by remember { mutableStateOf("") }
     var showClearCacheDialog by remember { mutableStateOf(false) }
     var showClearDataDialog by remember { mutableStateOf(false) }
+    var showClearThirdPartyDialog by remember { mutableStateOf(false) }
     var showAutoPlayDialog by remember { mutableStateOf(false) }
     var showPlayerModeDialog by remember { mutableStateOf(false) }
-    var showGuiModeDialog by remember { mutableStateOf(false) }
-    var showCustomCssDialog by remember { mutableStateOf(false) }
-    var showPaletteDialog by remember { mutableStateOf(false) }
+    // dead code: the gui mode selector was removed, keep the flag for the wide window refactor
+    // var showGuiModeDialog by remember { mutableStateOf(false) }
     var showChangelogDialog by remember { mutableStateOf(false) }
     var loggingOn by remember { mutableStateOf(Logger.isEnabled()) }
     var showDevlogDialog by remember { mutableStateOf(false) }
     var debugUnlocked by remember { mutableStateOf(prefs.getBoolean("DebugUnlocked", false)) }
     var debugTapCount by remember { mutableStateOf(0) }
-    var showLyricsStyleDialog by remember { mutableStateOf(false) }
-    var showFormatDialog by remember { mutableStateOf(false) }
-    var showFolderDialog by remember { mutableStateOf(false) }
-    var dlFormat by remember {
-        mutableStateOf(DownloadPrefs.format(context))
-    }
-    var dlFolderPath by remember {
-        mutableStateOf(DownloadPrefs.folderDisplayPath(context))
-    }
-    var dlFolderLabel by remember {
-        mutableStateOf(DownloadPrefs.folderLabel(context))
-    }
-    fun refreshFolderState() {
-        dlFolderPath = DownloadPrefs.folderDisplayPath(context)
-        dlFolderLabel = DownloadPrefs.folderLabel(context)
-    }
-    val folderPicker = rememberLauncherForActivityResult(
-        ActivityResultContracts.OpenDocumentTree()
-    ) { uri ->
-        if (uri == null) return@rememberLauncherForActivityResult
-        if (DownloadFolder.persist(context, uri)) {
-            DownloadPrefs.setFolder(context, uri)
-            refreshFolderState()
-        } else {
-            Toast.makeText(context, resources.getString(R.string.settings_folder_access_error), Toast.LENGTH_SHORT).show()
+
+    fun applyLanguageRestart() {
+        runCatching { context.stopService(Intent(context, MediaNotificationService::class.java)) }
+        val intent = Intent(context, SplashActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
         }
+        runCatching { context.startActivity(intent) }
     }
-    var dlTags by remember { mutableStateOf(DownloadPrefs.writeTags(context)) }
 
     fun onDebugSecretTap() {
         if (debugUnlocked) return
@@ -335,6 +281,7 @@ fun SettingsContent(
     var settingsTab by remember { mutableStateOf(SettingsTab.Appearance) }
     val tabScrollStates = SettingsTab.entries.map { rememberScrollState() }
     val scrollState = tabScrollStates[settingsTab.ordinal]
+    var batteryExempt by remember(settingsTab) { mutableStateOf(BatterySaver.isExempt(context)) }
 
     val pkg = remember { WebViewCompat.getCurrentWebViewPackage(context) }
     val packageInfo = remember {
@@ -382,53 +329,29 @@ fun SettingsContent(
                     title = stringResource(R.string.settings_section_appearance),
                     icon = TablerIcons.Palette
                 ) {
-                    val guiLabel = when (guiMode) {
-                        "csshack" -> stringResource(R.string.settings_gui_mode_css_js)
-                        "bigwindow" -> stringResource(R.string.settings_gui_mode_wide)
-                        "none" -> stringResource(R.string.settings_gui_mode_none)
-                        else -> stringResource(R.string.settings_gui_mode_css_js)
-                    }
+                    val systemLanguageLabel = stringResource(R.string.settings_language_system)
+                    SettingTile(
+                        title = stringResource(R.string.settings_language),
+                        subtitle = AppLocale.nativeName(appLanguage) ?: systemLanguageLabel,
+                        icon = TablerIcons.Language,
+                        onClick = { showLanguageDialog = true }
+                    )
+
+                    HorizontalDivider(modifier = Modifier.padding(start = 44.dp), color = MaterialTheme.colorScheme.outline.copy(alpha = 0.12f))
+                    // dead code: gui mode selector. only mobile css and js is implemented,
+                    // wide window and none need a refactor across the webview injections,
+                    // so the value is fixed and the label is no longer read from prefs.
+                    // val guiLabel = when (guiMode) {
+                    //     "csshack" -> stringResource(R.string.settings_gui_mode_css_js)
+                    //     "bigwindow" -> stringResource(R.string.settings_gui_mode_wide)
+                    //     "none" -> stringResource(R.string.settings_gui_mode_none)
+                    //     else -> stringResource(R.string.settings_gui_mode_css_js)
+                    // }
                     SettingTile(
                         title = stringResource(R.string.settings_gui_hack_mode),
-                        subtitle = guiLabel,
+                        subtitle = stringResource(R.string.settings_gui_mode_css_js),
                         icon = TablerIcons.Palette,
-                        onClick = { showGuiModeDialog = true }
-                    )
-
-                    HorizontalDivider(modifier = Modifier.padding(start = 44.dp), color = MaterialTheme.colorScheme.outline.copy(alpha = 0.12f))
-
-                    SettingTile(
-                        title = stringResource(R.string.settings_custom_css),
-                        subtitle = if (customCss.isBlank()) stringResource(R.string.settings_custom_css_none) else customCss,
-                        icon = TablerIcons.Code,
-                        onClick = { showCustomCssDialog = true }
-                    )
-
-                    HorizontalDivider(modifier = Modifier.padding(start = 44.dp), color = MaterialTheme.colorScheme.outline.copy(alpha = 0.12f))
-
-                    SettingSwitchTile(
-                        title = stringResource(R.string.settings_material_you),
-                        subtitle = stringResource(R.string.settings_material_you_subtitle),
-                        icon = TablerIcons.ColorSwatch,
-                        checked = materialYou,
-                        onCheckedChange = { enabled ->
-                            onMaterialYouChange(enabled)
-                            prefs.edit().putBoolean("MaterialYou", enabled).apply()
-                        }
-                    )
-
-                    HorizontalDivider(modifier = Modifier.padding(start = 44.dp), color = MaterialTheme.colorScheme.outline.copy(alpha = 0.12f))
-
-                    val accentLabel = when {
-                        materialYou -> stringResource(R.string.settings_accent_dynamic)
-                        paletteSeed.isNullOrBlank() -> stringResource(R.string.settings_accent_default)
-                        else -> stringResource(R.string.settings_accent_custom, paletteSeed)
-                    }
-                    SettingTile(
-                        title = stringResource(R.string.settings_accent_color),
-                        subtitle = accentLabel,
-                        icon = TablerIcons.ColorSwatch,
-                        onClick = { showPaletteDialog = true }
+                        info = stringResource(R.string.settings_gui_hack_mode_info)
                     )
 
                     HorizontalDivider(modifier = Modifier.padding(start = 44.dp), color = MaterialTheme.colorScheme.outline.copy(alpha = 0.12f))
@@ -526,6 +449,7 @@ fun SettingsContent(
                     val playerModeLabel = when (playerMode) {
                         "spotilol" -> stringResource(R.string.settings_player_spotilol)
                         "original" -> stringResource(R.string.settings_player_original)
+                        "fullscreen" -> stringResource(R.string.settings_player_fullscreen)
                         else -> stringResource(R.string.settings_player_spotilol)
                     }
                     SettingTile(
@@ -533,6 +457,32 @@ fun SettingsContent(
                         subtitle = playerModeLabel,
                         icon = TablerIcons.PlayerPlay,
                         onClick = { showPlayerModeDialog = true }
+                    )
+
+                    HorizontalDivider(modifier = Modifier.padding(start = 44.dp), color = MaterialTheme.colorScheme.outline.copy(alpha = 0.12f))
+
+                    SettingSwitchTile(
+                        title = stringResource(R.string.settings_web_canvas),
+                        subtitle = stringResource(R.string.settings_web_canvas_subtitle),
+                        icon = TablerIcons.Movie,
+                        checked = webCanvas,
+                        onCheckedChange = {
+                            webCanvas = it
+                            prefs.edit().putBoolean("WebCanvas", it).apply()
+                        }
+                    )
+
+                    HorizontalDivider(modifier = Modifier.padding(start = 44.dp), color = MaterialTheme.colorScheme.outline.copy(alpha = 0.12f))
+
+                    SettingSwitchTile(
+                        title = stringResource(R.string.settings_web_videos),
+                        subtitle = stringResource(R.string.settings_web_videos_subtitle),
+                        icon = TablerIcons.Video,
+                        checked = webVideos,
+                        onCheckedChange = {
+                            webVideos = it
+                            prefs.edit().putBoolean("WebVideos", it).apply()
+                        }
                     )
 
                     HorizontalDivider(modifier = Modifier.padding(start = 44.dp), color = MaterialTheme.colorScheme.outline.copy(alpha = 0.12f))
@@ -563,19 +513,6 @@ fun SettingsContent(
 
                     HorizontalDivider(modifier = Modifier.padding(start = 44.dp), color = MaterialTheme.colorScheme.outline.copy(alpha = 0.12f))
 
-                    val lyricsStyleLabel = stringResource(
-                        LyricsTheme.STYLE_OPTIONS.firstOrNull { it.first == lyricsStyle }?.second
-                            ?: R.string.settings_lyrics_style_fullscreen
-                    )
-                    SettingTile(
-                        title = stringResource(R.string.settings_lyrics_style),
-                        subtitle = lyricsStyleLabel,
-                        icon = TablerIcons.Playlist,
-                        onClick = { showLyricsStyleDialog = true }
-                    )
-
-                    HorizontalDivider(modifier = Modifier.padding(start = 44.dp), color = MaterialTheme.colorScheme.outline.copy(alpha = 0.12f))
-
                     SettingSwitchTile(
                         title = stringResource(R.string.settings_take_control),
                         subtitle = stringResource(R.string.settings_take_control_subtitle),
@@ -584,19 +521,6 @@ fun SettingsContent(
                         onCheckedChange = {
                             takeControl = it
                             prefs.edit().putBoolean("TakeControl", it).apply()
-                        }
-                    )
-
-                    HorizontalDivider(modifier = Modifier.padding(start = 44.dp), color = MaterialTheme.colorScheme.outline.copy(alpha = 0.12f))
-
-                    SettingSwitchTile(
-                        title = stringResource(R.string.settings_android_auto),
-                        subtitle = stringResource(R.string.settings_android_auto_subtitle),
-                        icon = TablerIcons.Car,
-                        checked = andAuto,
-                        onCheckedChange = {
-                            andAuto = it
-                            prefs.edit().putBoolean("AndAuto", it).apply()
                         }
                     )
 
@@ -664,23 +588,6 @@ fun SettingsContent(
                     icon = TablerIcons.CloudOff
                 ) {
                     SettingSwitchTile(
-                        title = stringResource(R.string.settings_offline_mode),
-                        subtitle = if (offlineMode) {
-                            stringResource(R.string.settings_offline_on_subtitle)
-                        } else {
-                            stringResource(R.string.settings_offline_off_subtitle)
-                        },
-                        icon = TablerIcons.CloudOff,
-                        checked = offlineMode,
-                        onCheckedChange = { enabled ->
-                            offlineMode = enabled
-                            onOfflineModeChange(enabled)
-                        }
-                    )
-
-                    HorizontalDivider(modifier = Modifier.padding(start = 44.dp), color = MaterialTheme.colorScheme.outline.copy(alpha = 0.12f))
-
-                    SettingSwitchTile(
                         title = stringResource(R.string.settings_block_service_worker),
                         subtitle = stringResource(R.string.settings_block_service_worker_subtitle),
                         icon = TablerIcons.Shield,
@@ -688,40 +595,6 @@ fun SettingsContent(
                         onCheckedChange = { enabled ->
                             blockSW = enabled
                             onBlockServiceWorkerChange(enabled)
-                        }
-                    )
-                }
-
-                SettingSectionCard(
-                    title = stringResource(R.string.settings_section_downloads),
-                    icon = TablerIcons.Download
-                ) {
-                    SettingTile(
-                        title = stringResource(R.string.settings_audio_format),
-                        subtitle = if (dlFormat == DownloadFormat.MP3) stringResource(R.string.settings_format_mp3) else stringResource(R.string.settings_format_m4a),
-                        icon = TablerIcons.WaveSine,
-                        onClick = { showFormatDialog = true }
-                    )
-
-                    HorizontalDivider(modifier = Modifier.padding(start = 44.dp), color = MaterialTheme.colorScheme.outline.copy(alpha = 0.12f))
-
-                    SettingTile(
-                        title = stringResource(R.string.settings_download_folder),
-                        subtitle = stringResource(R.string.settings_download_folder_subtitle, dlFolderLabel),
-                        icon = TablerIcons.Folder,
-                        onClick = { showFolderDialog = true }
-                    )
-
-                    HorizontalDivider(modifier = Modifier.padding(start = 44.dp), color = MaterialTheme.colorScheme.outline.copy(alpha = 0.12f))
-
-                    SettingSwitchTile(
-                        title = stringResource(R.string.settings_write_tags),
-                        subtitle = stringResource(R.string.settings_write_tags_subtitle),
-                        icon = TablerIcons.Playlist,
-                        checked = dlTags,
-                        onCheckedChange = { enabled ->
-                            dlTags = enabled
-                            DownloadPrefs.setWriteTags(context, enabled)
                         }
                     )
                 }
@@ -767,23 +640,6 @@ fun SettingsContent(
 
             if (settingsTab == SettingsTab.Advanced) {
                 SettingSectionCard(
-                    title = stringResource(R.string.settings_section_connection_mode),
-                    icon = TablerIcons.Shield
-                ) {
-                    val modeLabel = if (connectionMode == "proxy") {
-                        stringResource(R.string.settings_connection_proxy)
-                    } else {
-                        stringResource(R.string.settings_connection_normal)
-                    }
-                    SettingTile(
-                        title = stringResource(R.string.settings_connection_mode),
-                        subtitle = stringResource(R.string.settings_connection_mode_subtitle, modeLabel),
-                        icon = TablerIcons.Shield,
-                        onClick = { showConnectionModeDialog = true }
-                    )
-                }
-
-                SettingSectionCard(
                     title = stringResource(R.string.settings_section_system),
                     icon = TablerIcons.Power
                 ) {
@@ -800,11 +656,33 @@ fun SettingsContent(
 
                     HorizontalDivider(modifier = Modifier.padding(start = 44.dp), color = MaterialTheme.colorScheme.outline.copy(alpha = 0.12f))
 
+                    SettingSwitchTile(
+                        title = stringResource(R.string.settings_fast_startup),
+                        subtitle = stringResource(R.string.settings_fast_startup_subtitle),
+                        icon = TablerIcons.Rocket,
+                        checked = fastStartup,
+                        onCheckedChange = {
+                            fastStartup = it
+                            prefs.edit().putBoolean("FastStartup", it).apply()
+                        }
+                    )
+
+                    HorizontalDivider(modifier = Modifier.padding(start = 44.dp), color = MaterialTheme.colorScheme.outline.copy(alpha = 0.12f))
+
                     SettingTile(
                         title = stringResource(R.string.settings_empty_cache),
                         subtitle = stringResource(R.string.settings_empty_cache_subtitle),
                         icon = TablerIcons.Brush,
                         onClick = { showClearCacheDialog = true }
+                    )
+
+                    HorizontalDivider(modifier = Modifier.padding(start = 44.dp), color = MaterialTheme.colorScheme.outline.copy(alpha = 0.12f))
+
+                    SettingTile(
+                        title = stringResource(R.string.settings_clear_third_party),
+                        subtitle = stringResource(R.string.settings_clear_third_party_subtitle),
+                        icon = TablerIcons.User,
+                        onClick = { showClearThirdPartyDialog = true }
                     )
 
                     HorizontalDivider(modifier = Modifier.padding(start = 44.dp), color = MaterialTheme.colorScheme.outline.copy(alpha = 0.12f))
@@ -840,23 +718,36 @@ fun SettingsContent(
                             }
                         }
                     )
-                }
 
-                if (connectionMode == "proxy") {
-                    SettingSectionCard(
-                        title = stringResource(R.string.settings_section_security_network),
-                        icon = TablerIcons.Shield
-                    ) {
-                        SettingTile(
-                            title = stringResource(R.string.settings_ca_certificate),
-                            subtitle = stringResource(R.string.settings_ca_certificate_subtitle),
-                            icon = TablerIcons.Shield,
-                            onClick = {
-                                val path = LocalProxyManager.exportCACert(context)
-                                Toast.makeText(context, resources.getString(R.string.settings_cert_exported, path), Toast.LENGTH_LONG).show()
+                    HorizontalDivider(modifier = Modifier.padding(start = 44.dp), color = MaterialTheme.colorScheme.outline.copy(alpha = 0.12f))
+
+                    SettingTile(
+                        title = stringResource(R.string.settings_battery_background),
+                        subtitle = if (batteryExempt) {
+                            stringResource(R.string.settings_battery_background_on)
+                        } else {
+                            stringResource(R.string.settings_battery_background_off)
+                        },
+                        icon = TablerIcons.Battery,
+                        info = stringResource(R.string.settings_battery_info),
+                        onClick = {
+                            if (BatterySaver.isExempt(context)) {
+                                batteryExempt = true
+                                Toast.makeText(
+                                    context,
+                                    resources.getString(R.string.settings_battery_already_allowed),
+                                    Toast.LENGTH_SHORT
+                                ).show()
+                            } else if (!BatterySaver.requestExemption(context)) {
+                                Toast.makeText(
+                                    context,
+                                    resources.getString(R.string.settings_battery_prompt_unavailable),
+                                    Toast.LENGTH_LONG
+                                ).show()
+                                BatterySaver.openAppSettings(context)
                             }
-                        )
-                    }
+                        }
+                    )
                 }
             }
 
@@ -935,13 +826,7 @@ fun SettingsContent(
                         )
 
                         HorizontalDivider(modifier = Modifier.padding(start = 44.dp), color = MaterialTheme.colorScheme.outline.copy(alpha = 0.12f))
-
-                        SettingTile(
-                            title = stringResource(R.string.settings_crash_test),
-                            subtitle = stringResource(R.string.settings_crash_test_subtitle),
-                            icon = TablerIcons.AlertTriangle,
-                            onClick = { throw IllegalStateException(resources.getString(R.string.settings_crash_test_exception)) }
-                        )
+                        DeviceInfoExportTile()
                     }
                 }
             }
@@ -950,14 +835,19 @@ fun SettingsContent(
         }
     }
 
-    if (showPaletteDialog) {
-        PaletteDialog(
-            currentSeed = paletteSeed,
-            onSave = { hex ->
-                onPaletteSeedChange(hex)
-                showPaletteDialog = false
+    if (showLanguageDialog) {
+        LanguageDialog(
+            current = appLanguage,
+            systemLabel = stringResource(R.string.settings_language_system),
+            onSelect = { tag ->
+                showLanguageDialog = false
+                if (tag != appLanguage) {
+                    appLanguage = tag
+                    AppLocale.set(context, tag)
+                    applyLanguageRestart()
+                }
             },
-            onDismiss = { showPaletteDialog = false }
+            onDismiss = { showLanguageDialog = false }
         )
     }
 
@@ -1025,22 +915,6 @@ fun SettingsContent(
         )
     }
 
-    if (showConnectionModeDialog) {
-        SingleChoiceDialog(
-            title = stringResource(R.string.settings_connection_mode),
-            options = listOf(
-                "normal" to stringResource(R.string.settings_connection_normal),
-                "proxy" to stringResource(R.string.settings_connection_proxy)
-            ),
-            selected = connectionMode,
-            onSelect = { value ->
-                connectionMode = value
-                onConnectionModeChange(value)
-            },
-            onDismiss = { showConnectionModeDialog = false }
-        )
-    }
-
     if (showAutoPlayDialog) {
         SingleChoiceDialog(
             title = stringResource(R.string.settings_autoplay_mode),
@@ -1063,6 +937,7 @@ fun SettingsContent(
             title = stringResource(R.string.settings_player_mode),
             options = listOf(
                 "spotilol" to stringResource(R.string.settings_player_spotilol),
+                "fullscreen" to stringResource(R.string.settings_player_fullscreen),
                 "original" to stringResource(R.string.settings_player_original)
             ),
             selected = playerMode,
@@ -1074,81 +949,25 @@ fun SettingsContent(
         )
     }
 
-    if (showLyricsStyleDialog) {
-        SingleChoiceDialog(
-            title = stringResource(R.string.settings_lyrics_style),
-            options = LyricsTheme.STYLE_OPTIONS.map { it.first to stringResource(it.second) },
-            selected = lyricsStyle,
-            onSelect = { value ->
-                lyricsStyle = value
-                prefs.edit().putString("LyricsStyle", value).apply()
-            },
-            onDismiss = { showLyricsStyleDialog = false }
-        )
-    }
 
-    if (showFormatDialog) {
-        SingleChoiceDialog(
-            title = stringResource(R.string.settings_audio_format),
-            options = listOf(
-                DownloadFormat.M4A.name to stringResource(R.string.settings_format_m4a),
-                DownloadFormat.MP3.name to stringResource(R.string.settings_format_mp3)
-            ),
-            selected = dlFormat.name,
-            onSelect = { value ->
-                val f = DownloadFormat.from(value)
-                dlFormat = f
-                DownloadPrefs.setFormat(context, f)
-            },
-            onDismiss = { showFormatDialog = false }
-        )
-    }
-
-    if (showFolderDialog) {
-        DownloadFolderDialog(
-            currentPath = dlFolderPath,
-            onPick = {
-                showFolderDialog = false
-                val tree = DownloadPrefs.folder(context)
-                folderPicker.launch(tree?.let { DownloadFolder.documentUri(it) })
-            },
-            onUseDefault = {
-                DownloadPrefs.setFolder(context, null)
-                refreshFolderState()
-                showFolderDialog = false
-            },
-            onDismiss = { showFolderDialog = false }
-        )
-    }
-
-    if (showGuiModeDialog) {
-        SingleChoiceDialog(
-            title = stringResource(R.string.settings_gui_hack_mode),
-            options = listOf(
-                "csshack" to stringResource(R.string.settings_gui_mode_css_js),
-                "bigwindow" to stringResource(R.string.settings_gui_mode_wide),
-                "none" to stringResource(R.string.settings_gui_mode_none)
-            ),
-            selected = guiMode,
-            onSelect = { value ->
-                guiMode = value
-                prefs.edit().putString("GuiMode", value).apply()
-            },
-            onDismiss = { showGuiModeDialog = false }
-        )
-    }
-
-    if (showCustomCssDialog) {
-        CustomCssDialog(
-            initialCss = customCss,
-            onSave = { css ->
-                customCss = css
-                prefs.edit().putString("CustomCss", css).apply()
-                showCustomCssDialog = false
-            },
-            onDismiss = { showCustomCssDialog = false }
-        )
-    }
+    // dead code: gui mode selector dialog. wide window and none were never implemented,
+    // the webview is always injected with the mobile css and js hack.
+    // if (showGuiModeDialog) {
+    //     SingleChoiceDialog(
+    //         title = stringResource(R.string.settings_gui_hack_mode),
+    //         options = listOf(
+    //             "csshack" to stringResource(R.string.settings_gui_mode_css_js),
+    //             "bigwindow" to stringResource(R.string.settings_gui_mode_wide),
+    //             "none" to stringResource(R.string.settings_gui_mode_none)
+    //         ),
+    //         selected = guiMode,
+    //         onSelect = { value ->
+    //             guiMode = value
+    //             prefs.edit().putString("GuiMode", value).apply()
+    //         },
+    //         onDismiss = { showGuiModeDialog = false }
+    //     )
+    // }
 
     if (showClearCacheDialog) {
         ConfirmationDialog(
@@ -1177,201 +996,58 @@ fun SettingsContent(
         )
     }
 
+    if (showClearThirdPartyDialog) {
+        ConfirmationDialog(
+            title = stringResource(R.string.settings_clear_third_party),
+            message = stringResource(R.string.settings_clear_third_party_message),
+            confirmText = stringResource(R.string.settings_clear_third_party),
+            onConfirm = {
+                showClearThirdPartyDialog = false
+                onClearThirdParty()
+            },
+            onDismiss = { showClearThirdPartyDialog = false }
+        )
+    }
+
     if (showDevlogDialog) {
         LoggerDialog(onDismiss = { showDevlogDialog = false })
     }
 }
 
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
-fun PaletteDialog(
-    currentSeed: String?,
-    onSave: (String?) -> Unit,
-    onDismiss: () -> Unit
-) {
-    val initial = parsePaletteColor(currentSeed) ?: Color(0xFFE0E0E0)
-    var red by remember { mutableFloatStateOf(initial.red * 255f) }
-    var green by remember { mutableFloatStateOf(initial.green * 255f) }
-    var blue by remember { mutableFloatStateOf(initial.blue * 255f) }
-    var useDefault by remember { mutableStateOf(currentSeed.isNullOrBlank()) }
-    val preview = Color(red / 255f, green / 255f, blue / 255f)
+private fun DeviceInfoExportTile() {
+    val context = LocalContext.current
+    val clipboard = LocalClipboard.current
+    val scope = rememberCoroutineScope()
 
-    fun pick(hex: String?) {
-        val c = parsePaletteColor(hex)
-        if (c == null) {
-            useDefault = true
-            red = 224f
-            green = 224f
-            blue = 224f
-        } else {
-            useDefault = false
-            red = c.red * 255f
-            green = c.green * 255f
-            blue = c.blue * 255f
-        }
-    }
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        shape = RoundedCornerShape(28.dp),
-        title = {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(
-                    imageVector = TablerIcons.ColorSwatch,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary
-                )
-                Spacer(Modifier.width(10.dp))
-                Text(
-                    text = stringResource(R.string.settings_accent_color),
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold
-                )
-            }
-        },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Box(
-                        modifier = Modifier
-                            .size(34.dp)
-                            .clip(CircleShape)
-                            .background(preview)
-                            .border(
-                                1.dp,
-                                MaterialTheme.colorScheme.outline.copy(alpha = 0.3f),
-                                CircleShape
-                            )
+    SettingTile(
+        title = stringResource(R.string.settings_device_info),
+        subtitle = stringResource(R.string.settings_device_info_subtitle),
+        icon = TablerIcons.DeviceMobile,
+        onClick = {
+            scope.launch {
+                val report = withContext(Dispatchers.IO) {
+                    runCatching { DeviceInfo.build(context) }.getOrNull()
+                }
+                if (report != null) {
+                    clipboard.setClipEntry(
+                        ClipData.newPlainText("spotilol_device_info", report).toClipEntry()
                     )
-                    Spacer(Modifier.width(12.dp))
-                    Column {
-                        Text(
-                            text = stringResource(R.string.settings_custom_accent_color),
-                            style = MaterialTheme.typography.bodyLarge,
-                            fontWeight = FontWeight.SemiBold
-                        )
-                        Text(
-                            text = if (useDefault) stringResource(R.string.settings_default_scheme) else formatHex(preview),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
+                    Toast.makeText(
+                        context,
+                        context.getString(R.string.settings_device_info_copied),
+                        Toast.LENGTH_SHORT
+                    ).show()
+                } else {
+                    Toast.makeText(
+                        context,
+                        context.getString(R.string.settings_device_info_failed),
+                        Toast.LENGTH_SHORT
+                    ).show()
                 }
-
-                FlowRow(
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    PalettePresets.forEach { (label, hex) ->
-                        val color = parsePaletteColor(hex) ?: Color(0xFFE0E0E0)
-                        val isSelected = if (hex == null) {
-                            currentSeed.isNullOrBlank()
-                        } else {
-                            hex == currentSeed
-                        }
-                        Column(
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            modifier = Modifier.width(52.dp)
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(40.dp)
-                                    .clip(CircleShape)
-                                    .background(color)
-                                    .border(
-                                        width = if (isSelected) 3.dp else 1.dp,
-                                        color = if (isSelected) {
-                                            MaterialTheme.colorScheme.onSurface
-                                        } else {
-                                            MaterialTheme.colorScheme.outline.copy(alpha = 0.35f)
-                                        },
-                                        shape = CircleShape
-                                    )
-                                    .clickable { pick(hex) },
-                                contentAlignment = Alignment.Center
-                            ) {
-                                if (isSelected) {
-                                    Icon(
-                                        imageVector = TablerIcons.Check,
-                                        contentDescription = null,
-                                        tint = if (color.luminance() > 0.5f) {
-                                            Color(0xFF1A1A1A)
-                                        } else {
-                                            Color.White
-                                        },
-                                        modifier = Modifier.size(18.dp)
-                                    )
-                                }
-                            }
-                            Spacer(Modifier.height(4.dp))
-                            Text(
-                                text = stringResource(label),
-                                style = MaterialTheme.typography.labelSmall,
-                                color = if (isSelected) {
-                                    MaterialTheme.colorScheme.onSurface
-                                } else {
-                                    MaterialTheme.colorScheme.onSurfaceVariant
-                                },
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                        }
-                    }
-                }
-
-                HorizontalDivider()
-
-                ColorSlider(stringResource(R.string.settings_color_red), red, { red = it; useDefault = false }, Color(0xFFF44336))
-                ColorSlider(stringResource(R.string.settings_color_green), green, { green = it; useDefault = false }, Color(0xFF4CAF50))
-                ColorSlider(stringResource(R.string.settings_color_blue), blue, { blue = it; useDefault = false }, Color(0xFF2196F3))
-            }
-        },
-        confirmButton = {
-            TextButton(onClick = {
-                onSave(if (useDefault) null else formatHex(preview))
-            }) {
-                Text(stringResource(R.string.settings_apply), fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text(stringResource(R.string.settings_cancel), color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
     )
-}
-
-@Composable
-private fun ColorSlider(
-    label: String,
-    value: Float,
-    onValueChange: (Float) -> Unit,
-    color: Color
-) {
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Text(
-            text = label,
-            style = MaterialTheme.typography.bodySmall,
-            modifier = Modifier.width(52.dp)
-        )
-        Slider(
-            value = value,
-            onValueChange = onValueChange,
-            valueRange = 0f..255f,
-            modifier = Modifier.weight(1f),
-            colors = SliderDefaults.colors(
-                thumbColor = color,
-                activeTrackColor = color,
-                inactiveTrackColor = color.copy(alpha = 0.2f)
-            )
-        )
-        Text(
-            text = value.roundToInt().toString(),
-            style = MaterialTheme.typography.bodySmall,
-            modifier = Modifier.width(30.dp),
-            textAlign = TextAlign.End
-        )
-    }
 }
 
 @Composable
@@ -1470,19 +1146,26 @@ fun SettingTile(
     subtitle: String,
     icon: ImageVector? = null,
     painter: Painter? = null,
-    onClick: () -> Unit,
+    onClick: (() -> Unit)? = null,
     onLongClick: (() -> Unit)? = null,
     isDestructive: Boolean = false,
-    enabled: Boolean = true
+    enabled: Boolean = true,
+    info: String? = null
 ) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .then(if (enabled) Modifier else Modifier.alpha(0.38f))
-            .combinedClickable(
-                enabled = enabled,
-                onClick = onClick,
-                onLongClick = onLongClick
+            .then(
+                if (onClick != null || onLongClick != null) {
+                    Modifier.combinedClickable(
+                        enabled = enabled,
+                        onClick = { onClick?.invoke() },
+                        onLongClick = onLongClick
+                    )
+                } else {
+                    Modifier
+                }
             )
             .padding(horizontal = 14.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically
@@ -1509,14 +1192,21 @@ fun SettingTile(
         }
         if (painter != null || icon != null) Spacer(Modifier.width(12.dp))
         Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = title,
-                style = MaterialTheme.typography.bodyMedium,
-                fontWeight = FontWeight.Medium,
-                color = if (isDestructive) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.Medium,
+                    color = if (isDestructive) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f, fill = false)
+                )
+                if (info != null) {
+                    Spacer(Modifier.width(6.dp))
+                    InfoTooltip(text = info)
+                }
+            }
             Text(
                 text = subtitle,
                 style = MaterialTheme.typography.bodySmall,
@@ -1525,13 +1215,15 @@ fun SettingTile(
                 overflow = TextOverflow.Ellipsis
             )
         }
-        Spacer(Modifier.width(8.dp))
-        Icon(
-            imageVector = TablerIcons.ChevronRight,
-            contentDescription = null,
-            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
-            modifier = Modifier.size(16.dp)
-        )
+        if (onClick != null) {
+            Spacer(Modifier.width(8.dp))
+            Icon(
+                imageVector = TablerIcons.ChevronRight,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                modifier = Modifier.size(16.dp)
+            )
+        }
     }
 }
 
@@ -1656,7 +1348,10 @@ fun SingleChoiceDialog(
             )
         },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Column(
+                modifier = Modifier.verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
                 options.forEach { (value, label) ->
                     val isSelected = selected == value
                     Surface(
@@ -1710,138 +1405,69 @@ fun SingleChoiceDialog(
 }
 
 @Composable
-fun CustomCssDialog(
-    initialCss: String,
-    onSave: (String) -> Unit,
+fun LanguageDialog(
+    current: String,
+    systemLabel: String,
+    onSelect: (String) -> Unit,
     onDismiss: () -> Unit
 ) {
-    var tempCss by remember { mutableStateOf(initialCss) }
     AlertDialog(
         onDismissRequest = onDismiss,
         shape = RoundedCornerShape(28.dp),
         title = {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(
-                    imageVector = TablerIcons.Code,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary
-                )
-                Spacer(Modifier.width(10.dp))
-                Text(
-                    text = stringResource(R.string.settings_custom_css),
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold
-                )
-            }
+            Text(
+                text = stringResource(R.string.settings_language),
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold
+            )
         },
         text = {
-            Column {
-                Text(
-                    text = stringResource(R.string.settings_custom_css_hint),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(bottom = 12.dp)
-                )
-                OutlinedTextField(
-                    value = tempCss,
-                    onValueChange = { tempCss = it },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(180.dp),
-                    placeholder = {
-                        Text(
-                            stringResource(R.string.settings_custom_css_placeholder),
-                            style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace)
-                        )
-                    },
-                    textStyle = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace),
-                    shape = RoundedCornerShape(16.dp),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = MaterialTheme.colorScheme.primary,
-                        unfocusedBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f),
-                        focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
-                        unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.2f)
-                    ),
-                    singleLine = false
-                )
-            }
-        },
-        confirmButton = {
-            TextButton(
-                onClick = { onSave(tempCss) }
+            Column(
+                modifier = Modifier.verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
-                Text(stringResource(R.string.settings_save), fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text(stringResource(R.string.settings_cancel), color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-        }
-    )
-}
-
-@Composable
-fun DownloadFolderDialog(
-    currentPath: String,
-    onPick: () -> Unit,
-    onUseDefault: () -> Unit,
-    onDismiss: () -> Unit
-) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        shape = RoundedCornerShape(28.dp),
-        title = {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(
-                    imageVector = TablerIcons.Folder,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary
-                )
-                Spacer(Modifier.width(10.dp))
-                Text(
-                    text = stringResource(R.string.settings_download_folder),
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold
-                )
-            }
-        },
-        text = {
-            Column {
-                Text(
-                    text = currentPath,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-                Text(
-                    text = stringResource(R.string.settings_download_folder_hint),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(top = 6.dp)
-                )
-                Text(
-                    text = stringResource(R.string.settings_download_folder_default, DownloadPrefs.DEFAULT_SUBFOLDER),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable { onUseDefault() }
-                        .padding(top = 14.dp)
-                )
+                AppLocale.AVAILABLE.forEach { tag ->
+                    val label = AppLocale.nativeName(tag) ?: systemLabel
+                    val isSelected = current == tag
+                    Surface(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(14.dp))
+                            .clickable { onSelect(tag) },
+                        color = if (isSelected) {
+                            MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.2f)
+                        } else {
+                            Color.Transparent
+                        }
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            RadioButton(
+                                selected = isSelected,
+                                onClick = { onSelect(tag) },
+                                colors = RadioButtonDefaults.colors(
+                                    selectedColor = MaterialTheme.colorScheme.primary,
+                                    unselectedColor = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            )
+                            Spacer(Modifier.width(10.dp))
+                            Text(
+                                text = label,
+                                style = MaterialTheme.typography.bodyLarge.copy(
+                                    fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal
+                                ),
+                                color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+                            )
+                        }
+                    }
+                }
             }
         },
         confirmButton = {
-            TextButton(onClick = onPick) {
-                Text(
-                    stringResource(R.string.settings_choose_folder),
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.primary
-                )
-            }
-        },
-        dismissButton = {
             TextButton(onClick = onDismiss) {
-                Text(stringResource(R.string.settings_cancel), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(stringResource(R.string.settings_cancel), color = MaterialTheme.colorScheme.primary)
             }
         }
     )
@@ -1900,8 +1526,6 @@ fun SettingsContentPreview() {
         SettingsContent(
             modifier = Modifier.fillMaxSize(),
             prefs = prefs,
-            materialYou = false,
-            onMaterialYouChange = {},
             amoledThemeState = false,
             onAmoledThemeChange = {},
             hideTopBar = false,
@@ -1910,31 +1534,31 @@ fun SettingsContentPreview() {
             onLandscapeModeChange = {},
             keepScreenOn = false,
             onKeepScreenOnChange = {},
-            paletteSeed = null,
-            onPaletteSeedChange = {},
-            onConnectionModeChange = {},
-            onOfflineModeChange = {},
             onSaveProfile = { _, _ -> },
             onLoadProfile = {},
             onDeleteProfile = {},
             onClearCache = {},
             onClearData = {},
+            onClearThirdParty = {},
             blockServiceWorker = true,
             onBlockServiceWorkerChange = {}
         )
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun LoggerDialog(onDismiss: () -> Unit) {
+    val context = LocalContext.current
     var query by remember { mutableStateOf("") }
     var levelFilter by remember { mutableStateOf<LogLevel?>(null) }
     var entries by remember { mutableStateOf(Logger.entries()) }
     var expanded by remember { mutableStateOf(emptySet<Long>()) }
-    val clipboard = LocalClipboard.current
+    var autoScroll by remember { mutableStateOf(isAutoScroll(context)) }
     val scope = rememberCoroutineScope()
     val listState = rememberLazyListState()
+    val exportName = remember { LogExport.fileName() }
+    val wide = LocalConfiguration.current.screenWidthDp >= LOGGER_WIDE_BREAKPOINT
     val filtered = remember(entries, query, levelFilter) {
         LogFilter.apply(entries, query, levelFilter ?: LogLevel.VERBOSE)
     }
@@ -1942,174 +1566,469 @@ fun LoggerDialog(onDismiss: () -> Unit) {
     LaunchedEffect(Unit) {
         while (true) {
             delay(350)
+            if (Logger.count() == entries.size) continue
             val next = Logger.entries()
             val changed = next.size != entries.size || next.lastOrNull()?.id != entries.lastOrNull()?.id
             if (changed) entries = next
         }
     }
 
-    LaunchedEffect(filtered.size, filtered.lastOrNull()?.id) {
-        if (filtered.isNotEmpty()) listState.scrollToItem(filtered.size - 1)
+    LaunchedEffect(filtered.size, filtered.lastOrNull()?.id, autoScroll) {
+        if (autoScroll && filtered.isNotEmpty()) listState.scrollToItem(filtered.size - 1)
     }
 
-    AlertDialog(
+    val exportLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument(LogExport.MIME_TYPE)
+    ) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        val snapshot = filtered
+        val total = entries.size
+        scope.launch {
+            val done = runCatching {
+                val payload = LogExport.payload(snapshot, total, query, levelFilter)
+                withContext(Dispatchers.IO) { LogExport.write(context, uri, payload) }
+            }.isSuccess
+            Toast.makeText(
+                context,
+                if (done) R.string.logger_export_done else R.string.logger_export_failed,
+                Toast.LENGTH_SHORT
+            ).show()
+        }
+    }
+
+    fun clearAll() {
+        Logger.clear()
+        entries = emptyList()
+        expanded = emptySet()
+    }
+
+    fun toggleEntry(id: Long) {
+        expanded = if (expanded.contains(id)) expanded - id else expanded + id
+    }
+
+    fun setAutoScroll(enabled: Boolean) {
+        autoScroll = enabled
+        Logger.setAutoScroll(context, enabled)
+    }
+
+    fun jumpToLatest() {
+        if (filtered.isNotEmpty()) scope.launch { listState.scrollToItem(filtered.size - 1) }
+    }
+
+    Dialog(
         onDismissRequest = onDismiss,
-        shape = RoundedCornerShape(28.dp),
-        title = {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(stringResource(R.string.logger_title), fontWeight = FontWeight.Bold)
-                Spacer(Modifier.width(8.dp))
-                Text(
-                    text = stringResource(R.string.logger_line_count, filtered.size, entries.size),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+        properties = DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth(if (wide) 0.92f else 0.95f)
+                .fillMaxHeight(if (wide) 0.92f else 0.88f),
+            shape = RoundedCornerShape(28.dp),
+            color = MaterialTheme.colorScheme.surfaceContainerHigh,
+            tonalElevation = 6.dp
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(14.dp)
+            ) {
+                LoggerHeader(
+                    shown = filtered.size,
+                    total = entries.size,
+                    onDismiss = onDismiss
                 )
-            }
-        },
-        text = {
-            Column {
-                OutlinedTextField(
-                    value = query,
-                    onValueChange = { query = it },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true,
-                    textStyle = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
-                    placeholder = {
-                        Text(
-                            text = stringResource(R.string.logger_search_placeholder),
-                            style = MaterialTheme.typography.bodySmall,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    },
-                    trailingIcon = {
-                        if (query.isNotEmpty()) {
-                            IconButton(onClick = { query = "" }) {
-                                Icon(
-                                    imageVector = TablerIcons.X,
-                                    contentDescription = stringResource(R.string.logger_clear_filter),
-                                    modifier = Modifier.size(18.dp)
-                                )
-                            }
+                Spacer(Modifier.height(if (wide) 12.dp else 8.dp))
+                if (wide) {
+                    Row(modifier = Modifier.weight(1f)) {
+                        Column(
+                            modifier = Modifier
+                                .weight(0.42f)
+                                .fillMaxHeight()
+                                .verticalScroll(rememberScrollState())
+                        ) {
+                            LoggerSectionLabel(stringResource(R.string.logger_filters))
+                            Spacer(Modifier.height(6.dp))
+                            LoggerSearchField(query = query, onQueryChange = { query = it })
+                            Spacer(Modifier.height(8.dp))
+                            LoggerLevelChips(selected = levelFilter, onSelect = { levelFilter = it })
+                            Spacer(Modifier.height(10.dp))
+                            LoggerAutoScrollRow(autoScroll = autoScroll, onAutoScrollChange = { setAutoScroll(it) })
+                            Spacer(Modifier.height(12.dp))
+                            HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.14f))
+                            Spacer(Modifier.height(12.dp))
+                            LoggerSectionLabel(stringResource(R.string.logger_actions))
+                            Spacer(Modifier.height(8.dp))
+                            LoggerClearButton(modifier = Modifier.fillMaxWidth(), onClear = { clearAll() })
+                            Spacer(Modifier.height(8.dp))
+                            LoggerExportButton(modifier = Modifier.fillMaxWidth()) { exportLauncher.launch(exportName) }
+                            Spacer(Modifier.height(6.dp))
+                            LoggerExportName(exportName)
                         }
-                    }
-                )
-                Spacer(Modifier.height(8.dp))
-                Row(
-                    modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    FilterChip(
-                        selected = levelFilter == null,
-                        onClick = { levelFilter = null },
-                        label = { Text(stringResource(R.string.logger_level_all), fontSize = 11.sp) }
-                    )
-                    LogLevel.entries.forEach { level ->
-                        val color = logLevelColor(level)
-                        FilterChip(
-                            selected = levelFilter == level,
-                            onClick = { levelFilter = level },
-                            label = {
-                                Text(
-                                    text = level.letter.toString(),
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.Bold
-                                )
-                            },
-                            colors = FilterChipDefaults.filterChipColors(
-                                labelColor = color,
-                                selectedContainerColor = color.copy(alpha = 0.22f),
-                                selectedLabelColor = color
-                            )
+                        Box(
+                            modifier = Modifier
+                                .padding(horizontal = 10.dp)
+                                .width(1.dp)
+                                .fillMaxHeight()
+                                .background(MaterialTheme.colorScheme.outline.copy(alpha = 0.14f))
                         )
-                    }
-                }
-                Spacer(Modifier.height(8.dp))
-                Surface(
-                    modifier = Modifier.fillMaxWidth().heightIn(min = 160.dp, max = 360.dp),
-                    shape = RoundedCornerShape(12.dp),
-                    color = MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.35f)
-                ) {
-                    LazyColumn(state = listState, modifier = Modifier.fillMaxSize()) {
-                        if (filtered.isEmpty()) {
-                            item {
-                                Text(
-                                    text = if (entries.isEmpty()) stringResource(R.string.logger_empty_waiting)
-                                    else stringResource(R.string.logger_empty_no_match),
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    modifier = Modifier.padding(12.dp)
-                                )
-                            }
-                        }
-                        items(filtered, key = { it.id }) { entry ->
-                            LogRow(
-                                entry = entry,
-                                expanded = expanded.contains(entry.id),
-                                onToggle = {
-                                    expanded = if (expanded.contains(entry.id)) expanded - entry.id
-                                    else expanded + entry.id
-                                }
+                        Column(
+                            modifier = Modifier
+                                .weight(0.58f)
+                                .fillMaxHeight()
+                        ) {
+                            LoggerListHeader(onJumpLatest = { jumpToLatest() }, jumpEnabled = filtered.isNotEmpty())
+                            Spacer(Modifier.height(4.dp))
+                            LoggerList(
+                                entries = filtered,
+                                allEmpty = entries.isEmpty(),
+                                expanded = expanded,
+                                onToggle = { toggleEntry(it) },
+                                listState = listState,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .weight(1f)
                             )
                         }
                     }
-                }
-            }
-        },
-        confirmButton = {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                TextButton(onClick = {
-                    Logger.clear()
-                    entries = emptyList()
-                }) { Text(stringResource(R.string.logger_clear)) }
-
-                TextButton(onClick = {
-                    val text = LogFilter.text(filtered)
-                    scope.launch {
-                        clipboard.setClipEntry(
-                            ClipData.newPlainText("spotilol_logger", text).toClipEntry()
+                } else {
+                    Column(modifier = Modifier.weight(1f)) {
+                        LoggerSearchField(query = query, onQueryChange = { query = it })
+                        Spacer(Modifier.height(8.dp))
+                        LoggerLevelChips(selected = levelFilter, onSelect = { levelFilter = it })
+                        Spacer(Modifier.height(6.dp))
+                        LoggerAutoScrollRow(autoScroll = autoScroll, onAutoScrollChange = { setAutoScroll(it) })
+                        Spacer(Modifier.height(8.dp))
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            LoggerClearButton(modifier = Modifier.weight(1f), onClear = { clearAll() })
+                            LoggerExportButton(modifier = Modifier.weight(1f)) { exportLauncher.launch(exportName) }
+                        }
+                        Spacer(Modifier.height(4.dp))
+                        LoggerExportName(exportName)
+                        Spacer(Modifier.height(8.dp))
+                        LoggerListHeader(onJumpLatest = { jumpToLatest() }, jumpEnabled = filtered.isNotEmpty())
+                        Spacer(Modifier.height(4.dp))
+                        LoggerList(
+                            entries = filtered,
+                            allEmpty = entries.isEmpty(),
+                            expanded = expanded,
+                            onToggle = { toggleEntry(it) },
+                            listState = listState,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .weight(1f)
                         )
                     }
-                }) { Text(stringResource(R.string.logger_copy)) }
-
-                TextButton(onClick = onDismiss) {
-                    Text(stringResource(R.string.logger_close), fontWeight = FontWeight.Bold)
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun LoggerHeader(shown: Int, total: Int, onDismiss: () -> Unit) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Surface(
+            modifier = Modifier.size(32.dp),
+            shape = CircleShape,
+            color = MaterialTheme.colorScheme.primaryContainer
+        ) {
+            Box(contentAlignment = Alignment.Center) {
+                Icon(
+                    imageVector = TablerIcons.Terminal2,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                    modifier = Modifier.size(17.dp)
+                )
+            }
+        }
+        Spacer(Modifier.width(10.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = stringResource(R.string.logger_title),
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Bold
+            )
+            Text(
+                text = stringResource(R.string.logger_line_count, shown, total),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        IconButton(onClick = onDismiss, modifier = Modifier.size(32.dp)) {
+            Icon(
+                imageVector = TablerIcons.X,
+                contentDescription = stringResource(R.string.logger_close),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(18.dp)
+            )
+        }
+    }
+}
+
+@Composable
+private fun LoggerSectionLabel(text: String) {
+    Text(
+        text = text,
+        style = MaterialTheme.typography.labelLarge,
+        color = MaterialTheme.colorScheme.onSurfaceVariant
     )
 }
 
 @Composable
+private fun LoggerSearchField(
+    query: String,
+    onQueryChange: (String) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    OutlinedTextField(
+        value = query,
+        onValueChange = onQueryChange,
+        modifier = modifier.fillMaxWidth(),
+        singleLine = true,
+        textStyle = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
+        placeholder = {
+            Text(
+                text = stringResource(R.string.logger_search_placeholder),
+                style = MaterialTheme.typography.labelSmall,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        },
+        trailingIcon = {
+            if (query.isNotEmpty()) {
+                IconButton(onClick = { onQueryChange("") }, modifier = Modifier.size(30.dp)) {
+                    Icon(
+                        imageVector = TablerIcons.X,
+                        contentDescription = stringResource(R.string.logger_clear_filter),
+                        modifier = Modifier.size(15.dp)
+                    )
+                }
+            }
+        },
+        shape = RoundedCornerShape(14.dp),
+        colors = OutlinedTextFieldDefaults.colors(
+            focusedBorderColor = MaterialTheme.colorScheme.primary,
+            unfocusedBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.4f),
+            focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.25f),
+            unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.15f)
+        )
+    )
+}
+
+@Composable
+private fun LoggerLevelChips(selected: LogLevel?, onSelect: (LogLevel?) -> Unit) {
+    FlowRow(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        FilterChip(
+            selected = selected == null,
+            onClick = { onSelect(null) },
+            label = {
+                Text(
+                    text = stringResource(R.string.logger_level_all),
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+        )
+        LogLevel.entries.forEach { level ->
+            val color = logLevelColor(level)
+            FilterChip(
+                selected = selected == level,
+                onClick = { onSelect(level) },
+                label = {
+                    Text(
+                        text = level.letter.toString(),
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                },
+                colors = FilterChipDefaults.filterChipColors(
+                    labelColor = color,
+                    selectedContainerColor = color.copy(alpha = 0.22f),
+                    selectedLabelColor = color
+                )
+            )
+        }
+    }
+}
+
+@Composable
+private fun LoggerAutoScrollRow(autoScroll: Boolean, onAutoScrollChange: (Boolean) -> Unit) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text(
+            text = stringResource(R.string.logger_autoscroll),
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.weight(1f)
+        )
+        Switch(
+            checked = autoScroll,
+            onCheckedChange = onAutoScrollChange,
+            colors = SwitchDefaults.colors(
+                checkedThumbColor = MaterialTheme.colorScheme.onPrimary,
+                checkedTrackColor = MaterialTheme.colorScheme.primary,
+                uncheckedThumbColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                uncheckedTrackColor = MaterialTheme.colorScheme.surfaceVariant
+            )
+        )
+    }
+}
+
+@Composable
+private fun LoggerClearButton(modifier: Modifier = Modifier, onClear: () -> Unit) {
+    OutlinedButton(
+        onClick = onClear,
+        modifier = modifier,
+        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp)
+    ) {
+        Icon(TablerIcons.Trash, contentDescription = null, modifier = Modifier.size(15.dp))
+        Spacer(Modifier.width(6.dp))
+        Text(
+            text = stringResource(R.string.logger_clear),
+            style = MaterialTheme.typography.labelSmall,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+    }
+}
+
+@Composable
+private fun LoggerExportButton(modifier: Modifier = Modifier, onExport: () -> Unit) {
+    Button(
+        onClick = onExport,
+        modifier = modifier,
+        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp)
+    ) {
+        Icon(TablerIcons.FileDownload, contentDescription = null, modifier = Modifier.size(15.dp))
+        Spacer(Modifier.width(6.dp))
+        Text(
+            text = stringResource(R.string.logger_export),
+            style = MaterialTheme.typography.labelSmall,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+    }
+}
+
+@Composable
+private fun LoggerExportName(name: String) {
+    Text(
+        text = name,
+        style = MaterialTheme.typography.labelSmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        fontFamily = FontFamily.Monospace,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis
+    )
+}
+
+@Composable
+private fun LoggerListHeader(onJumpLatest: () -> Unit, jumpEnabled: Boolean) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        LoggerSectionLabel(stringResource(R.string.logger_entries))
+        Spacer(Modifier.weight(1f))
+        IconButton(onClick = onJumpLatest, enabled = jumpEnabled, modifier = Modifier.size(28.dp)) {
+            Icon(
+                imageVector = TablerIcons.ArrowDown,
+                contentDescription = stringResource(R.string.logger_scroll_latest),
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(15.dp)
+            )
+        }
+    }
+}
+
+@Composable
+private fun LoggerList(
+    entries: List<LogEntry>,
+    allEmpty: Boolean,
+    expanded: Set<Long>,
+    onToggle: (Long) -> Unit,
+    listState: LazyListState,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        modifier = modifier,
+        shape = RoundedCornerShape(14.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.35f)
+    ) {
+        LazyColumn(state = listState, modifier = Modifier.fillMaxSize()) {
+            if (entries.isEmpty()) {
+                item {
+                    Text(
+                        text = if (allEmpty) stringResource(R.string.logger_empty_waiting)
+                        else stringResource(R.string.logger_empty_no_match),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(12.dp)
+                    )
+                }
+            }
+            items(entries, key = { it.id }) { entry ->
+                LogRow(
+                    entry = entry,
+                    expanded = expanded.contains(entry.id),
+                    onToggle = { onToggle(entry.id) }
+                )
+            }
+        }
+    }
+}
+
+@Composable
 private fun LogRow(entry: LogEntry, expanded: Boolean, onToggle: () -> Unit) {
+    val clipboard = LocalClipboard.current
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     val color = logLevelColor(entry.level)
     val dim = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.65f)
+
+    fun copyEntry() {
+        scope.launch {
+            clipboard.setClipEntry(ClipData.newPlainText("spotilol_log", entry.line()).toClipEntry())
+            Toast.makeText(context, context.getString(R.string.logger_entry_copied), Toast.LENGTH_SHORT).show()
+        }
+    }
+
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable { onToggle() }
-            .padding(horizontal = 10.dp, vertical = 4.dp)
+            .combinedClickable(onClick = onToggle, onLongClick = { copyEntry() })
+            .padding(start = 8.dp, end = 2.dp, top = 2.dp, bottom = 2.dp)
     ) {
-        Text(
-            text = buildAnnotatedString {
-                withStyle(SpanStyle(color = dim)) {
-                    append(entry.time)
-                    append(' ')
-                }
-                withStyle(SpanStyle(color = color, fontWeight = FontWeight.Bold)) {
-                    append(entry.level.letter)
-                    append('/')
-                    append(entry.tag)
-                }
-                withStyle(SpanStyle(color = color)) {
-                    append(": ")
-                    append(entry.message)
-                }
-            },
-            fontFamily = FontFamily.Monospace,
-            fontSize = 10.sp,
-            lineHeight = 14.sp
-        )
+        Row(verticalAlignment = Alignment.Top) {
+            Text(
+                text = buildAnnotatedString {
+                    withStyle(SpanStyle(color = dim)) {
+                        append(entry.time)
+                        append(' ')
+                    }
+                    withStyle(SpanStyle(color = color, fontWeight = FontWeight.Bold)) {
+                        append(entry.level.letter)
+                        append('/')
+                        append(entry.tag)
+                    }
+                    withStyle(SpanStyle(color = color)) {
+                        append(": ")
+                        append(entry.message)
+                    }
+                },
+                fontFamily = FontFamily.Monospace,
+                fontSize = 10.sp,
+                lineHeight = 14.sp,
+                modifier = Modifier.weight(1f)
+            )
+            IconButton(onClick = { copyEntry() }, modifier = Modifier.size(20.dp)) {
+                Icon(
+                    imageVector = TablerIcons.Copy,
+                    contentDescription = stringResource(R.string.logger_copy_entry),
+                    tint = dim,
+                    modifier = Modifier.size(12.dp)
+                )
+            }
+        }
         if (expanded && entry.stack != null) {
             Spacer(Modifier.height(3.dp))
             Text(

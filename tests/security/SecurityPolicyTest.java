@@ -1,8 +1,6 @@
 import com.project.lol.security.WebSecurityPolicy;
 import com.project.lol.security.BoundedInput;
-import com.project.lol.security.HttpFraming;
 import com.project.lol.security.LogRedactor;
-import java.util.List;
 import java.io.ByteArrayInputStream;
 import java.nio.charset.StandardCharsets;
 
@@ -31,33 +29,11 @@ public class SecurityPolicyTest {
         check(WebSecurityPolicy.isBridgeOrigin("https://open.spotify.com"), "player origin");
         check(WebSecurityPolicy.isBridgeOrigin("https://accounts.spotify.com"), "login origin");
         check(!WebSecurityPolicy.isBridgeOrigin("https://open.spotify.com/path"), "origin only");
-        check(WebSecurityPolicy.isTrackId("4uLU6hMCjMI75M1A2tKUQC"), "Spotify ID");
-        for (String id : new String[]{"../x", "/tmp/x", "..", "abc", "aaaaaaaaaaaaaaaaaaaaa/", "aaaaaaaaaaaaaaaaaaaaa\\"})
-            check(!WebSecurityPolicy.isTrackId(id), "blocked track ID: " + id);
         check("héllo".equals(BoundedInput.readUtf8(new ByteArrayInputStream("héllo".getBytes(StandardCharsets.UTF_8)), 6)), "UTF-8 exact byte limit");
         boolean exceeded = false;
         try { BoundedInput.readUtf8(new ByteArrayInputStream(new byte[7]), 6); }
         catch (java.io.IOException e) { exceeded = true; }
         check(exceeded, "response byte cap");
-        check("line".equals(HttpFraming.readLine(new ByteArrayInputStream("line\r\n".getBytes(StandardCharsets.US_ASCII)), 4)), "bounded CRLF line");
-        for (String line : new String[]{"xxxxx\r\n", "abc\n", "abc", "abc\rX"}) {
-            boolean rejected = false;
-            try { HttpFraming.readLine(new ByteArrayInputStream(line.getBytes(StandardCharsets.US_ASCII)), 4); }
-            catch (java.io.IOException e) { rejected = true; }
-            check(rejected, "malformed or oversized line");
-        }
-        check(HttpFraming.contentLength(List.of("Content-Length"), List.of("123")) == 123, "valid content length");
-        check(HttpFraming.contentLength(List.of("Transfer-Encoding"), List.of("chunked")) == -1, "valid chunks");
-        for (List<String> values : List.of(List.of("-1"), List.of("garbage"), List.of("999999999999999999999999"))) {
-            boolean rejected = false;
-            try { HttpFraming.contentLength(List.of("Content-Length"), values); }
-            catch (java.io.IOException e) { rejected = true; }
-            check(rejected, "invalid length rejected");
-        }
-        boolean ambiguous = false;
-        try { HttpFraming.contentLength(List.of("Content-Length", "Transfer-Encoding"), List.of("1", "chunked")); }
-        catch (java.io.IOException e) { ambiguous = true; }
-        check(ambiguous, "TE/CL ambiguity rejected");
         check(!LogRedactor.redact("https://accounts.spotify.com/login?code=SECRET#TOKEN").contains("SECRET"), "OAuth query redacted");
         check(!LogRedactor.redact("Authorization: Bearer SECRET").contains("SECRET"), "bearer redacted");
         check(!LogRedactor.redact("{\"Authorization\":\"Bearer SECRET\"}").contains("SECRET"), "JSON authorization redacted");
@@ -71,6 +47,20 @@ public class SecurityPolicyTest {
         check(WebSecurityPolicy.restoreCookie("sp_dc=secret").contains("HttpOnly"), "restored session preserves HttpOnly");
         check(WebSecurityPolicy.restoreCookie("sp_t=preference").contains("Secure"), "restored cookies require TLS");
         check(WebSecurityPolicy.restoreCookie("Domain=evil.test") == null, "cookie attribute injection rejected");
+        for (String secret : new String[]{
+            "Cookie: sp_dc=verysecret; sp_key=othersecret",
+            "{\"Cookie\":\"sp_dc=verysecret; sp_key=othersecret\"}",
+            "{\"accessToken\":\"verysecret\"}", "refresh_token=verysecret", "password=verysecret",
+            "client_secret=verysecret", "https://api.spotify.com/?session=verysecret"}) {
+            check(!LogRedactor.redact(secret).contains("verysecret"), "diagnostic secret redacted: " + secret.split("[=:]")[0]);
+        }
+        check(!LogRedactor.redact("eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJzZWNyZXQifQ.signatureSecret").contains("signatureSecret"), "JWT redacted");
+        for (String method : new String[]{"openVolumeDialog", "playerExpanded", "wideVideo", "ctxMenuState", "enterVideoFullscreen", "exitVideoFullscreen"}) {
+            check(WebSecurityPolicy.isBridgeCall("https://open.spotify.com", true, method), "Lite player callback allowed: " + method);
+            check(!WebSecurityPolicy.isBridgeCall("https://accounts.spotify.com", true, method), "login cannot control player: " + method);
+        }
+        for (String method : new String[]{"downloadTrack", "downloadCollection", "enterPip", "enterPipVideo", "onMediaItemsLoaded", "onSearchCompleted"})
+            check(!WebSecurityPolicy.isBridgeCall("https://open.spotify.com", true, method), "removed feature has no native authority: " + method);
         System.out.println("PASS: " + checks + " security policy checks");
     }
 }

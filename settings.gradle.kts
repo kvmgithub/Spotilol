@@ -17,14 +17,7 @@ plugins {
 dependencyResolutionManagement {
     repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
     repositories {
-        google {
-            content {
-                includeGroupByRegex("com\\.android.*")
-                includeGroupByRegex("androidx.*")
-                includeGroupByRegex("com\\.google\\.android.*")
-                includeGroupByRegex("com\\.google\\.testing.*")
-            }
-        }
+        google()
         mavenCentral()
         maven("https://jitpack.io") {
             content { includeGroupByRegex("com\\.github\\..*") }
@@ -34,5 +27,3 @@ dependencyResolutionManagement {
 
 rootProject.name = "Spotilol"
 include(":app")
-include(":lame")
-include(":opus")

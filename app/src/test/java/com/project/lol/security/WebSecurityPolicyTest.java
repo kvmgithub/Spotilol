@@ -21,15 +21,8 @@ public class WebSecurityPolicyTest {
         assertTrue(WebSecurityPolicy.isNativeFetch("https://gue1-spclient.spotify.com/x"));
         assertFalse(WebSecurityPolicy.isCookieHost("https://api.spotify.com/"));
     }
-    @Test public void blocksTraversalIds() {
-        assertFalse(WebSecurityPolicy.isTrackId("../profile"));
-        assertTrue(WebSecurityPolicy.isTrackId("4uLU6hMCjMI75M1A2tKUQC"));
-    }
     @Test(expected = IOException.class) public void capsNativeResponseBytes() throws Exception {
         BoundedInput.readUtf8(new ByteArrayInputStream(new byte[1025]), 1024);
-    }
-    @Test(expected = IOException.class) public void rejectsAmbiguousProxyFraming() throws Exception {
-        HttpFraming.contentLength(List.of("Content-Length", "Transfer-Encoding"), List.of("1", "chunked"));
     }
     @Test public void redactsSessionData() {
         assertFalse(LogRedactor.redact("https://accounts.spotify.com/?code=SECRET").contains("SECRET"));

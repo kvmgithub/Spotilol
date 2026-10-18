@@ -10,6 +10,9 @@
 .cxx
 local.properties
 
+# Local (machine-specific) agent notes
+AGENTS.local.md
+
 # App build
 app/build
 
@@ -39,3 +42,5 @@ Desktop.ini
 *.log
 
 scripts/
+# module build dirs (lame/opus etc. from upstream)
+*/build/

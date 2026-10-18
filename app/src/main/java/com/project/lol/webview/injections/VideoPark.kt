@@ -30,6 +30,7 @@ object VideoPark {
 
                 function isCanvasVid(v){
                     try{
+                        if(v.id === 'spl-canvas') return false;
                         if(v.muted) return true;
                         if(v.hasAttribute && v.hasAttribute('loop')) return true;
                         if(v.style && v.style.objectFit === 'cover') return true;

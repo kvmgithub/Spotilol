@@ -9,6 +9,28 @@ object PlayerCore {
             var featVer='web-player_'+new Date().toISOString().split('T')[0]+'_'+Date.now()+'_'+Math.floor(Math.random()*0xFFFFFFF).toString(16).padStart(7,'0');
             var lastState=null,lastPos=null,playing=false;
             var pfint=null,afint=null,cssint=null,aaint=null;
+            window.__splBusy=false;
+            (function(){
+                var bt=null;
+                function busy(){
+                    window.__splBusy=true;
+                    if(bt) clearTimeout(bt);
+                    bt=setTimeout(function(){ window.__splBusy=false; },180);
+                }
+                var o={passive:true,capture:true};
+                window.addEventListener('scroll',busy,o);
+                window.addEventListener('wheel',busy,o);
+                window.addEventListener('touchmove',busy,o);
+                document.addEventListener('scroll',busy,o);
+            })();
+            try{
+                if(typeof window.__splDbgOn==='undefined') window.__splDbgOn=false;
+                var __splDbgFn=AndBridge.dbg.bind(AndBridge);
+                AndBridge.dbg=function(l,m){
+                    if(!window.__splDbgOn) return;
+                    try{ __splDbgFn(l,m); }catch(e){}
+                };
+            }catch(e){}
             window.opHash=function(name,fb){var m=window.splOpHashes||{};return m[name]||fb;};
             window.splViewH=function(){
                 try{if(window.visualViewport&&window.visualViewport.height)return window.visualViewport.height;}catch(e){}
@@ -23,7 +45,7 @@ object PlayerCore {
             };
             window.__splFloaters=[];
             setInterval(function(){
-                if(window.__splBg) return;
+                if(window.__splBg||window.__splBusy) return;
                 for(var i=0;i<window.__splFloaters.length;i++){
                     try{window.__splFloaters[i]();}catch(e){}
                 }
@@ -86,7 +108,10 @@ object PlayerCore {
                 if(s!==null) window.__splLastPlaying=s;
                 return window.__splLastPlaying===true;
             };
-
-        
+            window.splQ=function(sel){
+                var c=(window.__splQc||(window.__splQc={}))[sel];
+                if(!c||!c.isConnected){ c=document.querySelector(sel); window.__splQc[sel]=c; }
+                return c;
+            };
     """
 }

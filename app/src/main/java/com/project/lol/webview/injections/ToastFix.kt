@@ -346,13 +346,33 @@ object ToastFix {
 
             splScan(document.body);
 
+            var splPending = [], splScheduled = false;
+            function splSchedule(){
+                if (splScheduled) return;
+                splScheduled = true;
+                if (window.requestIdleCallback) window.requestIdleCallback(function(){ splFlush(); }, { timeout: 400 });
+                else setTimeout(splFlush, 120);
+            }
+            function splFlush(){
+                splScheduled = false;
+                if (window.__splBusy) { if (splPending.length) splSchedule(); return; }
+                var batch = splPending; splPending = [];
+                for (var i = 0; i < batch.length; i++) splScan(batch[i]);
+            }
+            function splQueue(node){
+                if (!node || node.nodeType !== 1) return;
+                splPending.push(node);
+                if (splPending.length > 120) splPending.shift();
+                splSchedule();
+            }
+
             var splToastObs = new MutationObserver(function(muts){
                 for (var i = 0; i < muts.length; i++) {
                     var added = muts[i].addedNodes;
-                    for (var j = 0; j < added.length; j++) splScan(added[j]);
+                    for (var j = 0; j < added.length; j++) splQueue(added[j]);
                     var rem = muts[i].removedNodes;
                     for (var k = 0; k < rem.length; k++) {
-                        if (rem[k].nodeType === 1) extractGhost(rem[k]);
+                        if (rem[k].nodeType === 1 && rem[k].__splDressed) extractGhost(rem[k]);
                     }
                 }
             });
@@ -398,7 +418,7 @@ object ToastFix {
             }
 
             function splTick(){
-                if (window.__splBg) return;
+                if (window.__splBg || window.__splBusy) return;
                 if (tracked.length === 0) return;
                 splRestack();
                 checkDeaths();

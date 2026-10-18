@@ -8,6 +8,9 @@ import java.nio.charset.StandardCharsets;
 public final class BoundedInput {
     private BoundedInput() {}
     public static String readUtf8(InputStream input, int maxBytes) throws IOException {
+        return new String(readBytes(input, maxBytes), StandardCharsets.UTF_8);
+    }
+    public static byte[] readBytes(InputStream input, int maxBytes) throws IOException {
         if (maxBytes < 0) throw new IllegalArgumentException("negative byte limit");
         ByteArrayOutputStream out = new ByteArrayOutputStream();
         byte[] buf = new byte[8192];
@@ -16,6 +19,6 @@ public final class BoundedInput {
             if (count > maxBytes - out.size()) throw new IOException("Response exceeds byte limit");
             out.write(buf, 0, count);
         }
-        return out.toString(StandardCharsets.UTF_8.name());
+        return out.toByteArray();
     }
 }

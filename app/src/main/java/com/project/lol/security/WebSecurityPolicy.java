@@ -11,7 +11,11 @@ public final class WebSecurityPolicy {
     private static final Set<String> LOGIN = Set.of("accounts.spotify.com", "accounts.google.com", "consent.google.com", "www.facebook.com", "m.facebook.com", "appleid.apple.com");
     private static final Set<String> API = Set.of("open.spotify.com", "api.spotify.com", "api-partner.spotify.com", "clienttoken.spotify.com", "spclient.wg.spotify.com");
 
-    private static final Set<String> PLAYER_METHODS = Set.of("nFetch", "loginDetected", "deferMessage", "wakeUp", "wakeOff", "cssInjected", "dbg", "clearDebugLog", "recAdContentIds", "playLoaded", "recMediaPosition", "recMediaStatus", "onMediaItemsLoaded", "onSearchCompleted", "manageTShut", "manageTSleep", "recAccountName", "openTimerDialog", "enterPip", "enterPipVideo", "downloadTrack", "downloadCollection", "skipDownload", "cancelDownload");
+    private static final Set<String> PLAYER_METHODS = Set.of(
+        "nFetch", "loginDetected", "deferMessage", "wakeUp", "wakeOff", "cssInjected", "dbg", "clearDebugLog",
+        "recAdContentIds", "playLoaded", "recMediaPosition", "recMediaStatus", "manageTShut", "manageTSleep",
+        "recAccountName", "openTimerDialog", "openVolumeDialog", "playerExpanded", "wideVideo", "ctxMenuState",
+        "enterVideoFullscreen", "exitVideoFullscreen");
     public static boolean isBridgeCall(String origin, boolean mainFrame, String method) {
         if (!mainFrame || !isBridgeOrigin(origin)) return false;
         return isPlayer(origin) ? PLAYER_METHODS.contains(method) : "loginDetected".equals(method);
@@ -64,12 +68,5 @@ public final class WebSecurityPolicy {
         return API.contains(host) || host.matches("[a-z0-9-]+-spclient\\.spotify\\.com");
     }
     public static boolean isCookieHost(String url) { return isPlayer(url); }
-    public static boolean isTrackId(String id) { return id != null && id.matches("[A-Za-z0-9]{22}"); }
-    public static boolean isProxyHost(String host) {
-        return host != null && (host.equals("www.google.com") || host.equals("spotify.com") || host.endsWith(".spotify.com") || isNavigation("https://" + host) || isNativeFetch("https://" + host) ||
-            host.equals("scdn.co") || host.endsWith(".scdn.co") || host.equals("spotifycdn.com") ||
-            host.endsWith(".spotifycdn.com") || host.equals("spotifycdn.net") || host.endsWith(".spotifycdn.net") ||
-            host.equals("gstatic.com") || host.endsWith(".gstatic.com") || host.equals("googleusercontent.com") || host.endsWith(".googleusercontent.com"));
-    }
     private static String orEmpty(String s) { return s == null ? "" : s; }
 }

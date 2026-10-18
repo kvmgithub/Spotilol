@@ -15,7 +15,9 @@ The existing Lite player, video features, UI and background lifecycle are the fu
 - [x] Retain applicable Java/JavaScript/JVM tests, removing proxy/download/Android Auto tests. Add coverage for the new bridge methods, native transport and redaction.
 - [x] Point updates to kvmgithub/Spotilol and retain notification-only update behavior.
 - [x] Adapt ARM64 signed-release automation to the Java/Kotlin-only application, preserving its key and monotonically increasing version code.
-- [ ] Run standalone tests, JVM tests, release lint and signed release assembly; inspect the resulting APK and final diff.
+- [x] Run standalone tests, JVM tests, release lint and signed release assembly; inspect the resulting APK and final diff.
+
+The full Android build, 14 JVM tests, release lint and APK metadata/signature verification passed in run 39135407229. Its final certificate comparison exposed a parser mismatch with build-tools 37 output. Run 39136031349 confirmed that the stored signing certificate matches the pinned v1.1.1002 APK. The corrected parser has six regression tests; main release publication remains gated by all checks. Real-device validation of the new Lite-based build is separate.
 
 ## Review focus
 

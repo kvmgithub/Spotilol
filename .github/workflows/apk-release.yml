@@ -1,7 +1,7 @@
 name: APK release
 on:
   push:
-    branches: [main, lite-hardened-1.2.4]
+    branches: [main]
   workflow_dispatch:
 permissions:
   contents: read
@@ -99,17 +99,7 @@ jobs:
           printf '%s  %s\n' '4b775569b10353142f571d6e3f62587785b688ac6b943fa427a76148c5e71ddc' "$previous" | sha256sum --check
           "$ANDROID_HOME/build-tools/37.0.0/apksigner" verify --print-certs "$previous" > "$RUNNER_TEMP/previous-signature.txt"
           "$ANDROID_HOME/build-tools/37.0.0/apksigner" verify --print-certs release-assets/*.apk > "$RUNNER_TEMP/new-signature.txt"
-          python3 - <<'PY'
-          import os, re
-          from pathlib import Path
-          root = Path(os.environ['RUNNER_TEMP'])
-          def certificate(name):
-              data = (root / name).read_text()
-              return re.findall(r'^Signer #\d+ certificate SHA-256 digest: (\S+)$', data, re.M)
-          old, new = certificate('previous-signature.txt'), certificate('new-signature.txt')
-          assert old and old == new, 'Signing certificate changed'
-          print('Update signing identity matches v1.1.1002')
-          PY
+          python3 .github/scripts/apk_identity.py "$RUNNER_TEMP/previous-signature.txt" "$RUNNER_TEMP/new-signature.txt"
       - name: Publish release
         if: github.ref == 'refs/heads/main'
         env:

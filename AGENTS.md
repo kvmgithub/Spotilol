@@ -25,7 +25,7 @@ The delta from Lite is necessary security hardening, tests, update routing and s
 - CI uses JDK 21, Android platform 37 and build tools 37.0.0. No NDK, Firebase configuration or Google services project is needed.
 - Published package: com.project.lol.fork, ARM64-compatible, versionCode 1000 + GitHub workflow run number. Fork versionName uses 1.2.<versionCode>; the application baseline remains 1.2.4.
 - Preserve the existing APK_SIGNING_BUNDLE secret. Do not print or commit signing material. Release signing must match published v1.1.1002.
-- .github/workflows/apk-release.yml tests feature-branch builds, but only main publishes a release after every check succeeds.
+- .github/workflows/apk-release.yml runs on main pushes and manual branch dispatches. Only main publishes a release, after every check succeeds. Public signer fingerprints are parsed by .github/scripts/apk_identity.py with regression coverage for legacy and current apksigner output.
 - UpdateChecker, changelog and source links point to kvmgithub/Spotilol. Automatic checks only notify; never open the browser automatically.
 - Publish claims distinguish automated verification from real-device tests. Earlier 1.1.8 testing is not validation of this Lite-based build.
 

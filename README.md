@@ -88,6 +88,8 @@ The native HTTP transport uses OkHttp for strict request lifetime and redirect h
 
 Run `bash tests/security/run.sh` and `./gradlew :app:testDebugUnitTest :app:lintRelease :app:assembleRelease`. CI produces signed releases under [Releases](https://github.com/kvmgithub/Spotilol/releases). The published package remains `com.project.lol.fork`; signing identity is checked against v1.1.1002, allowing existing fork installations to update. Fork version numbers use `1.2.<versionCode>`; the functional baseline is Spotilol 1.2.4.
 
+The standalone regression suite requires a JDK, Node.js and Python 3. It also checks certificate matching against legacy and current Android signing-tool output.
+
 Automatic update checks query this fork and only show a notification. The original upstream repository is unavailable. Future source updates require review of the actual source tree and the security invariants documented in [AGENTS.md](AGENTS.md).
 
 ---

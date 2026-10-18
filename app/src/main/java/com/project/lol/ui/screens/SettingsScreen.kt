@@ -417,7 +417,9 @@ fun SettingsContent(
                         onCheckedChange = { enabled ->
                             showScrollbar = enabled
                             prefs.edit().putBoolean("ShowScrollbar", enabled).apply()
-                            MediaNotificationService.webView?.evaluateJavascript(
+                            MediaNotificationService.webView?.takeIf {
+                                com.project.lol.security.WebSecurityPolicy.isPlayer(it.url)
+                            }?.evaluateJavascript(
                                 "if(window.splScrollbar){window.splScrollbar($enabled)}else{window.__splShowScrollbar=$enabled}",
                                 null
                             )

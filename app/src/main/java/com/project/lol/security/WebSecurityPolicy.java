@@ -8,7 +8,7 @@ import java.util.Set;
 public final class WebSecurityPolicy {
     private WebSecurityPolicy() {}
     private static final Set<String> LINKS = Set.of("open.spotify.com", "spotify.com", "www.spotify.com", "play.spotify.com", "spotify.link");
-    private static final Set<String> LOGIN = Set.of("accounts.spotify.com", "accounts.google.com", "consent.google.com", "www.facebook.com", "m.facebook.com", "appleid.apple.com");
+    private static final Set<String> LOGIN = Set.of("accounts.spotify.com", "challenge.spotify.com", "accounts.google.com", "consent.google.com", "www.facebook.com", "m.facebook.com", "appleid.apple.com");
     private static final Set<String> API = Set.of("open.spotify.com", "api.spotify.com", "api-partner.spotify.com", "clienttoken.spotify.com", "spclient.wg.spotify.com");
     private static final Set<String> AD_AUDIO_HOSTS = Set.of("akamaized.net", "scdn.co", "spotifycdn.com", "amillionads.com", "2mdn.net", "adxcel.com");
 
@@ -64,6 +64,8 @@ public final class WebSecurityPolicy {
     }
     public static boolean isPlayer(String url) { return "open.spotify.com".equals(httpsHost(url)); }
     public static boolean isAccounts(String url) { return "accounts.spotify.com".equals(httpsHost(url)); }
+    /** Navigation only: challenge pages must not receive player injections or native authority. */
+    public static boolean isChallenge(String url) { return "challenge.spotify.com".equals(httpsHost(url)); }
     public static boolean isBridgeOrigin(String origin) {
         if (!isPlayer(origin) && !isAccounts(origin)) return false;
         try {

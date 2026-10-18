@@ -302,7 +302,7 @@ class MainActivity : ComponentActivity(), WebViewHost.UiHost {
                     onClearData = { clearAllData() },
                     onClearThirdParty = { clearThirdPartyLogins() },
                     onDebugToggle = { enabled ->
-                        webView?.evaluateJavascript(
+                        webView?.takeIf { com.project.lol.security.WebSecurityPolicy.isPlayer(it.url) }?.evaluateJavascript(
                             if (enabled) DevLogPrelude.js()
                             else "window.dbg=null;window.dbgv=null;window.dbgi=null;window.dbgw=null;window.dbge=null;window.DevLog=null;",
                             null
@@ -709,7 +709,7 @@ class MainActivity : ComponentActivity(), WebViewHost.UiHost {
     }
 
     private fun publishTimerHighlight(active: Boolean) {
-        webView?.evaluateJavascript(
+        webView?.takeIf { com.project.lol.security.WebSecurityPolicy.isPlayer(it.url) }?.evaluateJavascript(
             """
             (function(a){
                 window.sleepTimerActive={value:a};
@@ -743,7 +743,7 @@ class MainActivity : ComponentActivity(), WebViewHost.UiHost {
     }
 
     private fun publishVolumeIcon(muted: Boolean) {
-        webView?.evaluateJavascript(
+        webView?.takeIf { com.project.lol.security.WebSecurityPolicy.isPlayer(it.url) }?.evaluateJavascript(
             """
         (function(m){
             window.__splSysMuted=!!m;
@@ -942,7 +942,7 @@ class MainActivity : ComponentActivity(), WebViewHost.UiHost {
         super.onStop()
         Logger.i(TAG, "activity stopped: suspending webview loops")
         WebViewHost.detach(this)
-        webView?.evaluateJavascript("""
+        webView?.takeIf { com.project.lol.security.WebSecurityPolicy.isPlayer(it.url) }?.evaluateJavascript("""
             try {
                 window.__splBg = true;
                 if(typeof pfint !== 'undefined' && pfint) { clearInterval(pfint); pfint = null; window.__splWasPfint = true; }
@@ -983,6 +983,7 @@ class MainActivity : ComponentActivity(), WebViewHost.UiHost {
         val amoledEnabled = prefs.getBoolean("AmoledTheme", false)
 
         webView?.let { view ->
+            if (!com.project.lol.security.WebSecurityPolicy.isPlayer(view.url)) return@let
             view.evaluateJavascript("""
                 try {
                     window.__splBg = false;
@@ -1015,7 +1016,8 @@ class MainActivity : ComponentActivity(), WebViewHost.UiHost {
         Logger.i(TAG, "new intent received: link=${link ?: "none"}")
         if (link == null) {
             val loggedIn = prefs.getBoolean("LoggedIn", false)
-            if (!loggedIn) {
+            // Returning from email/MFA must not replace an in-progress Spotify challenge.
+            if (!loggedIn && !com.project.lol.security.WebSecurityPolicy.isChallenge(webView?.url)) {
                 webView?.loadUrl("https://accounts.spotify.com/login")
             }
             return

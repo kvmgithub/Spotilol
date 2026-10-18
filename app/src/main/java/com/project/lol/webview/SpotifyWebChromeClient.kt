@@ -62,8 +62,13 @@ class SpotifyWebChromeClient(
     }
 
     private fun isSpotifyUrl(url: String): Boolean = WebSecurityPolicy.isPlayer(url) || WebSecurityPolicy.isAccounts(url)
-    private fun isOAuthUrl(url: String): Boolean = WebSecurityPolicy.isNavigation(url)
     private fun isGoogleUrl(url: String): Boolean = WebSecurityPolicy.isGoogleAuth(url)
+
+    private fun rejectChildNavigation(url: String?): Boolean {
+        if (url == null || WebSecurityPolicy.isNavigation(url)) return false
+        Logger.w(TAG, "child navigation blocked: host=${WebSecurityPolicy.httpsHost(url) ?: "invalid URL"}")
+        return true
+    }
 
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreateWindow(
@@ -88,11 +93,11 @@ class SpotifyWebChromeClient(
             webViewClient = object : WebViewClient() {
                 override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
                     super.onPageStarted(view, url, favicon)
-                    if (url != null && !WebSecurityPolicy.isNavigation(url)) {
+                    if (rejectChildNavigation(url)) {
                         view?.stopLoading()
                         return
                     }
-                    if (url != null) {
+                    if (url != null && !WebSecurityPolicy.isChallenge(url)) {
                         if (isGoogleUrl(url)) {
                             view?.evaluateJavascript(GoogleSpoof.CONTENT, null)
                         } else if (!isSpotifyUrl(url)) {
@@ -110,16 +115,13 @@ class SpotifyWebChromeClient(
                 }
 
                 override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
-                    return request.isForMainFrame && !WebSecurityPolicy.isNavigation(request.url.toString())
+                    return request.isForMainFrame && rejectChildNavigation(request.url.toString())
                 }
 
                 @Deprecated("Deprecated in Java")
                 @Suppress("DEPRECATION")
                 override fun shouldOverrideUrlLoading(view: WebView?, url: String?): Boolean {
-                    val targetUrl = url ?: return false
-                    val allowed = isSpotifyUrl(targetUrl) || isOAuthUrl(targetUrl)
-                    if (!allowed) {
-                        Logger.w(TAG, "child window blocked: $targetUrl")
+                    if (rejectChildNavigation(url)) {
                         try { view?.destroy() } catch (_: Exception) {}
                         return true
                     }

@@ -20,6 +20,20 @@ public class SecurityPolicyTest {
             check(WebSecurityPolicy.isNavigation("https://" + host + "/login"), "valid login: " + host);
         for (String host : new String[]{"login.google.evil.test", "evil.google.com", "apple.evil.test", "accounts.spotify.com.evil.test"})
             check(!WebSecurityPolicy.isNavigation("https://" + host + "/"), "blocked login: " + host);
+        for (String url : new String[]{"https://challenge.spotify.com/c/session/challenge/recaptcha", "https://CHALLENGE.SPOTIFY.COM:443/c/session/challenge/email"})
+            check(WebSecurityPolicy.isNavigation(url), "Spotify login challenge allowed: " + url);
+        for (String url : new String[]{"http://challenge.spotify.com/c/session", "https://challenge.spotify.com:8443/", "https://challenge.spotify.com.evil.test/", "https://evilchallenge.spotify.com/", "https://challenge.spotify.com@evil.test/", "https://user@challenge.spotify.com/"})
+            check(!WebSecurityPolicy.isNavigation(url), "untrusted challenge destination rejected: " + url);
+        String challengeOrigin = "https://challenge.spotify.com";
+        check(!WebSecurityPolicy.isPlayer(challengeOrigin + "/c/session/challenge/email"), "challenge is not a player mutation target");
+        check(WebSecurityPolicy.isChallenge(challengeOrigin + "/c/session/challenge/email"), "challenge survives launcher return during login");
+        check(!WebSecurityPolicy.isChallenge("https://challenge.spotify.com.evil.test/c/session"), "challenge classification is exact");
+        check(!WebSecurityPolicy.isBridgeOrigin(challengeOrigin), "challenge has no bridge");
+        check(!WebSecurityPolicy.isNativeFetch(challengeOrigin + "/c/session"), "challenge has no native fetch");
+        check(!WebSecurityPolicy.isCookieHost(challengeOrigin), "challenge has no native cookies");
+        check(!WebSecurityPolicy.isNativeSniff(challengeOrigin + "/c/session", "GET", true), "challenge has no native sniff");
+        for (String method : new String[]{"loginDetected", "nFetch", "wakeUp", "dbg"})
+            check(!WebSecurityPolicy.isBridgeCall(challengeOrigin, true, method), "challenge method rejected: " + method);
         for (String host : new String[]{"open.spotify.com", "api.spotify.com", "api-partner.spotify.com", "clienttoken.spotify.com", "gue1-spclient.spotify.com", "spclient.wg.spotify.com"})
             check(WebSecurityPolicy.isNativeFetch("https://" + host + "/x"), "valid native host: " + host);
         for (String url : new String[]{"https://accounts.spotify.com/", "https://127.0.0.1/", "https://evilspotify.com/", "https://api.spotify.com:8443/", "file:///etc/passwd", "https://api.spotify.com@evil.test/", "https://evil.test/?spotify.com", "https://api.spotify.com/%0d%0aInjected", "https://i.scdn.co/"})
@@ -48,6 +62,11 @@ public class SecurityPolicyTest {
         catch (java.io.IOException e) { exceeded = true; }
         check(exceeded, "response byte cap");
         check(!LogRedactor.redact("https://accounts.spotify.com/login?code=SECRET#TOKEN").contains("SECRET"), "OAuth query redacted");
+        for (String url : new String[]{"https://challenge.spotify.com/c/SESSION_SECRET/CHALLENGE_SECRET/recaptcha?token=QUERY_SECRET#FRAGMENT_SECRET", "https://CHALLENGE.SPOTIFY.COM:443/c/SESSION_SECRET/CHALLENGE_SECRET/email"}) {
+            String redacted = LogRedactor.redact("page started: " + url);
+            check(!redacted.contains("SECRET"), "challenge path/query/fragment redacted");
+            check(redacted.toLowerCase().contains("challenge.spotify.com"), "challenge host retained for diagnostics");
+        }
         check(!LogRedactor.redact("Authorization: Bearer SECRET").contains("SECRET"), "bearer redacted");
         check(!LogRedactor.redact("{\"Authorization\":\"Bearer SECRET\"}").contains("SECRET"), "JSON authorization redacted");
         check(!LogRedactor.redact("{\"accessToken\":\"SECRET\"}").contains("SECRET"), "JSON token redacted");

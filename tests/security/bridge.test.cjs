@@ -32,6 +32,11 @@ test('accounts origin has only login authority', () => {
   assert.equal(w.AndBridge.nFetch,undefined); assert.equal(w.AndBridge.downloadTrack,undefined);
   w.AndBridge.loginDetected(); assert.equal(sent[0].method,'loginDetected');
 });
+test('login challenge documents receive no native compatibility bridge', () => {
+  const {w,sent}=page('https://challenge.spotify.com');
+  assert.equal(w.AndBridge,undefined);
+  assert.deepEqual(sent,[]);
+});
 test('legacy fire-and-forget methods and synchronous visibility remain usable', () => {
   const {w,sent}=page(); w.AndBridge.recMediaPosition(1234); assert.equal(sent[0].args[0],1234);
   assert.equal(w.AndBridge.isWoke(),true); w.document.visibilityState='hidden'; assert.equal(w.AndBridge.isWoke(),false);

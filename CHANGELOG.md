@@ -2,6 +2,12 @@
 
 Fork-side release notes for Spotilol Lite: the preserved upstream features, Lite's removals and this fork's security adaptations. The original upstream repository is unavailable; the current functional baseline is [AdNenio/Spotilol-Lite](https://github.com/AdNenio/Spotilol-Lite).
 
+## Login challenge compatibility — 2026-10-18
+
+Allow exact HTTPS navigation to `challenge.spotify.com`, used by Spotify's reCAPTCHA, email and MFA challenge pages. Skip player patches there in the main WebView, OAuth popup, settings callbacks and activity lifecycle. Preserve an in-progress challenge when returning through the launcher to enter an email/MFA code. Challenge pages receive no native bridge, native HTTP or cookie-restoration authority. Hostname impersonation, cleartext URLs and nonstandard ports remain blocked.
+
+Log blocked main-frame destinations by hostname only and redact session/challenge identifiers embedded in challenge URL paths. Add navigation, authority and redaction regressions. This corrects a verified allowlist omission in 1.2.1008; the supplied device logs do not establish that it caused the reported login failure, and successful login on the affected device requires confirmation.
+
 ## Hardened fork integration — 2026-10-18
 
 Adopt Lite at `8b986aa` while preserving the existing fork history and install identity. Restore the scoped main-frame bridge, strict native HTTPS transport, fail-closed encrypted profiles, validated navigation/popups/DRM and diagnostic redaction. Adapt the bridge to all retained Lite player/video/volume callbacks and preserve binary Canvas requests. Retain applicable regression tests and signed-release automation; remove obsolete proxy/Android Auto tests. Update checks and source/changelog links now target this fork. Removed Lite features remain absent.

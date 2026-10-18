@@ -83,6 +83,9 @@ class SpotifyWebViewClient(
         registerPrefsListener(view)
         Logger.i(TAG, "page finished in ${elapsed}ms: $url")
 
+        // Spotify owns the CAPTCHA/email/MFA flow; do not modify its challenge page.
+        if (WebSecurityPolicy.isChallenge(url)) return
+
         if (url.startsWith("https://www.facebook.com/privacy/consent/gdp/")) {
             Logger.s(TAG, "route: facebook gdpr bypass")
             view.evaluateJavascript(FbGdprBypass.CONTENT, null)
@@ -150,7 +153,7 @@ class SpotifyWebViewClient(
 
     override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
         super.onPageStarted(view, url, favicon)
-        if (url != null && !WebSecurityPolicy.isNavigation(url)) {
+        if (rejectNavigation(url)) {
             view?.stopLoading()
             return
         }
@@ -173,6 +176,7 @@ class SpotifyWebViewClient(
 
         AdIdStore.clear()
         if (view == null || prefs == null) return
+        if (WebSecurityPolicy.isChallenge(url)) return
 
         // open.spotify.com: the payload is a document-start script (registered in
         // MainActivity before the first load), so it runs before Spotify's own scripts.
@@ -245,12 +249,19 @@ class SpotifyWebViewClient(
     private fun isWebPlayerUrl(url: String?): Boolean =
         WebSecurityPolicy.isPlayer(url)
 
+    private fun rejectNavigation(url: String?): Boolean {
+        if (url == null || WebSecurityPolicy.isNavigation(url)) return false
+        // Never log paths or queries: authentication redirects may contain credentials.
+        Logger.w(TAG, "navigation blocked: host=${WebSecurityPolicy.httpsHost(url) ?: "invalid URL"}")
+        return true
+    }
+
     override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean =
-        request.isForMainFrame && !WebSecurityPolicy.isNavigation(request.url.toString())
+        request.isForMainFrame && rejectNavigation(request.url.toString())
 
     @Deprecated("Deprecated in Java")
     override fun shouldOverrideUrlLoading(view: WebView?, url: String?): Boolean =
-        url != null && !WebSecurityPolicy.isNavigation(url)
+        rejectNavigation(url)
 
     override fun onRenderProcessGone(view: WebView?, detail: RenderProcessGoneDetail?): Boolean {
         Logger.e(TAG, "renderer process gone: crashed=${detail?.didCrash()}")
@@ -317,7 +328,7 @@ class SpotifyWebViewClient(
 
     private fun postToLiveView(view: WebView, block: () -> Unit) {
         val token = NavToken.current()
-        view.post { if (token == NavToken.current()) block() }
+        view.post { if (token == NavToken.current() && isWebPlayerUrl(view.url)) block() }
     }
 
     override fun shouldInterceptRequest(
@@ -517,6 +528,8 @@ class SpotifyWebViewClient(
         prefsListener = android.content.SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
             val wv = currentWebView ?: return@OnSharedPreferenceChangeListener
             Logger.d(TAG, "pref changed: $key")
+            // Settings persist during login; apply player patches only after returning to it.
+            if (!isWebPlayerUrl(wv.url)) return@OnSharedPreferenceChangeListener
             when (key) {
                 "PlayerMode" ->
                     switchPlayerMode(wv, prefs.getString("PlayerMode", "spotilol") ?: "spotilol")

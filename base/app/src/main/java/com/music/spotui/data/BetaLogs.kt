@@ -14,10 +14,10 @@ import java.util.Locale
  * copies or shares the text. Tokens, e-mails and account ids are masked.
  */
 object BetaLogs {
-    const val MINUTES = 3
+    const val MINUTES = 10
     private const val PREF = "diagnostics"
 
-    /** Spotilol's switchable diagnostics: shows the log button when on (Settings). */
+    /** Spotilol's switchable diagnostics: shows the log entry in Settings when on. */
     val enabled by lazy {
         androidx.compose.runtime.mutableStateOf(
             com.music.spotui.di.Graph.app.getSharedPreferences(PREF, android.content.Context.MODE_PRIVATE).getBoolean("enabled", false))

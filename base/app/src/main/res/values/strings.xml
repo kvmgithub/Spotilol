@@ -14,7 +14,7 @@
     <string name="main_update_available">A new update is available</string>
 
     <string name="notif_channel_media_name">Media Playback</string>
-    <string name="notif_channel_media_description">Myspoti media playback controls</string>
+    <string name="notif_channel_media_description">Spotilol UI media playback controls</string>
     <string name="notif_action_previous">Previous</string>
     <string name="notif_action_next">Next</string>
     <string name="notif_action_play">Play</string>
@@ -35,7 +35,7 @@
 
     <string name="service_disabled_message">Service is not enabled</string>
     <string name="energy_saver_title" tools:ignore="MissingTranslation">Battery saver</string>
-    <string name="energy_saver_summary" tools:ignore="MissingTranslation">Canvas off, lighter videos and animations</string>
+    <string name="energy_saver_summary" tools:ignore="MissingTranslation">Canvas off, lighter animations</string>
     <string name="video_fullscreen_enter" tools:ignore="MissingTranslation">Enter fullscreen</string>
     <string name="video_fullscreen_exit" tools:ignore="MissingTranslation">Exit fullscreen</string>
     <string name="playback_seek_description" tools:ignore="MissingTranslation">Playback position</string>

@@ -7,7 +7,8 @@ First variant build on Myspoti 2.0.0-beta.8 (`5b247b3`): package `com.project.lo
 - Spotilol security rules: listener-only bridge without fallback, bounded relay without redirects or cookies, exact-host navigation, player-only Widevine, bounded direct requests, shared log redaction.
 - Spotilol blocking scope: Spotify ad hosts, ad media, `gabo-receiver-service` events, pixels and trackers.
 - Removed: SpotiFLAC downloads, Android Auto, YouTube music videos, third-party lyrics and translation, in-app updater, donation prompts, widget, Play services QR scanner (ML Kit logging); Jam joins by invite link.
-- Added: encrypted account profiles, switchable diagnostics.
+- Added: encrypted account profiles, switchable diagnostics (the redacted log of the last 10 minutes opens from Settings → App, no floating log button).
+- Settings scroll their last rows above the mini player and tabs; texts no longer mention downloads or Myspoti.
 
 Automated checks (JVM tests, signed release build) pass in CI; real-device testing is separate.
 

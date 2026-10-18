@@ -16,10 +16,12 @@
     <string name="spotilol_profile_delete_title">Delete profile %1$s?</string>
     <string name="spotilol_profile_save_button">Save</string>
     <string name="spotilol_diagnostics_title">Diagnostic logs</string>
-    <string name="spotilol_diagnostics_detail">Shows the log dot at the bottom right. Logs are redacted and leave the phone only when you copy them.</string>
+    <string name="spotilol_diagnostics_detail">Shows the log entry below. Logs are redacted and leave the phone only when you copy or share them.</string>
     <string name="spotilol_about_body">Myspoti\'s native interface with Spotilol Lite\'s privacy and security scope. Free software under the GPL-3.0.</string>
     <string name="spotilol_about_source">Source code</string>
     <string name="spotilol_about_source_detail">kvmgithub/Spotilol, branch myspoti-ui</string>
     <string name="spotilol_about_upstream">Based on Myspoti</string>
     <string name="spotilol_about_upstream_detail">kota-zo/myspoti (GPL-3.0), with UI from Spotui and Metrolist</string>
+    <string name="spotilol_diagnostics_open">Show and copy log</string>
+    <string name="spotilol_diagnostics_open_detail">Last %1$d minutes of this app, redacted</string>
 </resources>

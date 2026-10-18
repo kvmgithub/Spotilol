@@ -16,10 +16,12 @@
     <string name="spotilol_profile_delete_title">Profil %1$s löschen?</string>
     <string name="spotilol_profile_save_button">Speichern</string>
     <string name="spotilol_diagnostics_title">Diagnoseprotokoll</string>
-    <string name="spotilol_diagnostics_detail">Zeigt den Log-Punkt unten rechts. Protokolle sind geschwärzt und verlassen das Gerät nur, wenn du sie kopierst.</string>
+    <string name="spotilol_diagnostics_detail">Blendet darunter den Protokolleintrag ein. Protokolle sind geschwärzt und verlassen das Gerät nur, wenn du sie kopierst oder teilst.</string>
     <string name="spotilol_about_body">Die native Oberfläche von Myspoti mit dem Datenschutz- und Sicherheitsumfang von Spotilol Lite. Freie Software unter der GPL-3.0.</string>
     <string name="spotilol_about_source">Quellcode</string>
     <string name="spotilol_about_source_detail">kvmgithub/Spotilol, Branch myspoti-ui</string>
     <string name="spotilol_about_upstream">Basiert auf Myspoti</string>
     <string name="spotilol_about_upstream_detail">kota-zo/myspoti (GPL-3.0), Oberfläche aus Spotui und Metrolist</string>
+    <string name="spotilol_diagnostics_open">Protokoll anzeigen und kopieren</string>
+    <string name="spotilol_diagnostics_open_detail">Letzte %1$d Minuten dieser App, geschwärzt</string>
 </resources>

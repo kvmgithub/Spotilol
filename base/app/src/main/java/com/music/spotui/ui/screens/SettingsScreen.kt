@@ -63,7 +63,7 @@ fun SettingsScreen(navController: NavController) {
             }
             Text(stringResource(R.string.settings_title), color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold)
         }
-        Column(Modifier.fillMaxWidth().weight(1f).verticalScroll(rememberScrollState()).navigationBarsPadding()) {
+        Column(Modifier.fillMaxWidth().weight(1f).verticalScroll(rememberScrollState())) {
             Section(R.string.settings_section_playback)
             StreamingQualityPicker()
             OptionRow(
@@ -139,6 +139,17 @@ fun SettingsScreen(navController: NavController) {
                 checked = com.music.spotui.data.BetaLogs.enabled.value,
                 onChecked = { com.music.spotui.data.BetaLogs.setEnabled(ctx, it) },
             )
+            if (com.music.spotui.data.BetaLogs.enabled.value) {
+                var showLogs by remember { androidx.compose.runtime.mutableStateOf(false) }
+                Column(
+                    Modifier.fillMaxWidth().clickable { showLogs = true }
+                        .padding(start = 36.dp, end = 20.dp, top = 6.dp, bottom = 10.dp),
+                ) {
+                    Text(stringResource(R.string.spotilol_diagnostics_open), color = com.music.spotui.ui.theme.AppAccent, fontSize = 16.sp)
+                    Text(stringResource(R.string.spotilol_diagnostics_open_detail, com.music.spotui.data.BetaLogs.MINUTES), color = Color(0xFFB3B3B3), fontSize = 12.sp)
+                }
+                if (showLogs) com.music.spotui.ui.components.DiagnosticLogsDialog(onDismiss = { showLogs = false })
+            }
             // The hidden Web Player stuck or crashed: rebuild it without leaving the app.
             Column(
                 Modifier.fillMaxWidth().clickable { app.myspoti.host.android.MyspotiRuntime.host.reload() }
@@ -147,7 +158,8 @@ fun SettingsScreen(navController: NavController) {
                 Text(stringResource(R.string.restart_player_title), color = Color.White, fontSize = 16.sp)
                 Text(stringResource(R.string.restart_player_detail), color = Color(0xFFB3B3B3), fontSize = 12.sp)
             }
-            Spacer(Modifier.height(96.dp))
+            // The last rows scroll above the mini player, the tabs and the system bar.
+            Spacer(Modifier.height(com.music.spotui.ui.components.bottomBarsSpace()))
         }
     }
 }

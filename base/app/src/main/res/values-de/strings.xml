@@ -14,7 +14,7 @@
     <string name="settings_lyrics_style_bold">Groß und fett</string>
     <string name="main_update_available">Ein neues Update ist verfügbar</string>
     <string name="notif_channel_media_name">Medienwiedergabe</string>
-    <string name="notif_channel_media_description">Steuerung der Medienwiedergabe von Myspoti</string>
+    <string name="notif_channel_media_description">Steuerung der Medienwiedergabe von Spotilol UI</string>
     <string name="notif_action_previous">Vorheriger</string>
     <string name="notif_action_next">Nächster</string>
     <string name="notif_action_play">Abspielen</string>
@@ -33,7 +33,7 @@
     <string name="bridge_reloading">Wird neu geladen…</string>
     <string name="service_disabled_message">Der Dienst ist nicht aktiviert</string>
     <string name="energy_saver_title">Energiesparmodus</string>
-    <string name="energy_saver_summary">Canvas aus, leichtere Videos und Animationen</string>
+    <string name="energy_saver_summary">Canvas aus, leichtere Animationen</string>
     <string name="video_fullscreen_enter">Vollbild öffnen</string>
     <string name="video_fullscreen_exit">Vollbild beenden</string>
     <string name="playback_seek_description">Wiedergabeposition</string>

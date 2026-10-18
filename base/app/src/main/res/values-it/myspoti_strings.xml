@@ -3,10 +3,10 @@
 <resources>
     <string name="welcome_tagline">La tua musica, con testi sincronizzati e video musicali ufficiali.</string>
     <string name="welcome_login">Accedi con Spotify</string>
-    <string name="welcome_privacy">Accedi dalla pagina di Spotify. Myspoti non vede mai la tua password.</string>
-    <string name="crash_heading">Myspoti ha smesso di funzionare</string>
+    <string name="welcome_privacy">Accedi dalla pagina di Spotify. Spotilol UI non vede mai la tua password.</string>
+    <string name="crash_heading">Spotilol UI ha smesso di funzionare</string>
     <string name="crash_explanation">Qualcosa è andato storto. Riavvia l\'app; se succede di nuovo, copia il rapporto e condividilo in una issue su GitHub.</string>
-    <string name="crash_restart_app">Riavvia Myspoti</string>
+    <string name="crash_restart_app">Riavvia Spotilol UI</string>
     <string name="crash_copy_report">Copia il rapporto</string>
     <string name="crash_report_copied">Rapporto copiato</string>
     <string name="remove_from_liked">Rimuovi dai Brani che ti piacciono</string>
@@ -56,7 +56,7 @@
     <string name="local_files_none_subtitle">Non abbiamo trovato file audio riproducibili su questo dispositivo. Quando ce ne saranno, compariranno qui.</string>
     <string name="downloads_empty_title">Scarica per ascoltare offline</string>
     <string name="downloads_empty_subtitle">Tocca Scarica nel menu di un brano, o il pulsante di download di un album o di una playlist.</string>
-    <string name="downloads_source">FLAC senza perdita, verificato con la registrazione originale. Conservato solo dentro Myspoti.</string>
+    <string name="downloads_source">FLAC senza perdita, verificato con la registrazione originale. Conservato solo dentro Spotilol UI.</string>
     <string name="downloads_size">%1$s su questo telefono</string>
     <string name="download_unavailable">Nessuna registrazione corrispondente trovata</string>
     <string name="download_retry">Riprova</string>
@@ -69,8 +69,8 @@
     <string name="browse_workout">Allenamento</string>
     <string name="browse_dance_electronic">Dance/Elettronica</string>
     <string name="language_auto">Automatica</string>
-    <string name="language_auto_detail">La lingua del telefono se Myspoti la ha (francese, greco, inglese, italiano, portoghese, spagnolo, tedesco), altrimenti l\'inglese</string>
-    <string name="language_partial_note">Altre lingue: le etichette di Spotify sono tradotte, i testi di Myspoti restano in inglese.</string>
+    <string name="language_auto_detail">La lingua del telefono se Spotilol UI la ha (francese, greco, inglese, italiano, portoghese, spagnolo, tedesco), altrimenti l\'inglese</string>
+    <string name="language_partial_note">Altre lingue: le etichette di Spotify sono tradotte, i testi di Spotilol UI restano in inglese.</string>
     <string name="restart_player_title">Riavvia il lettore</string>
     <string name="restart_player_detail">Se la musica non risponde più: ricarica il lettore di Spotify</string>
     <string name="local_playlist_subtitle">Su questo dispositivo</string>
@@ -84,21 +84,21 @@
     <string name="local_playlist_empty">Aggiungi brani dai File locali con il loro pulsante +.</string>
     <string name="playlist_change_refused">Spotify ha rifiutato la modifica a questa playlist</string>
     <string name="download_kept_by_list">Ancora scaricato: una playlist scaricata lo contiene</string>
-    <string name="support_title">Sostieni Myspoti</string>
-    <string name="support_body">Myspoti è gratuito, senza pubblicità, e fatto nel mio tempo libero. Se ti piace, una piccola donazione aiuta a farlo andare avanti.</string>
+    <string name="support_title">Sostieni Spotilol UI</string>
+    <string name="support_body">Spotilol UI è gratuito, senza pubblicità, e fatto nel mio tempo libero. Se ti piace, una piccola donazione aiuta a farlo andare avanti.</string>
     <string name="support_action">Sostieni su Ko-fi</string>
     <string name="support_decline">No grazie</string>
     <string name="support_row_detail">Una piccola donazione su Ko-fi o GitHub Sponsors aiuta l\'app ad andare avanti</string>
     <string name="supporter_perks_title">Vantaggi per i sostenitori</string>
     <string name="supporter_perks_detail">Colore principale, icona dell\'app e un badge, per dire grazie</string>
-    <string name="supporter_perks_locked">Sbloccati sostenendo Myspoti. Ci fidiamo della tua parola: niente viene controllato.</string>
-    <string name="supporter_i_supported">Ho sostenuto Myspoti</string>
+    <string name="supporter_perks_locked">Sbloccati sostenendo Spotilol UI. Ci fidiamo della tua parola: niente viene controllato.</string>
+    <string name="supporter_i_supported">Ho sostenuto Spotilol UI</string>
     <string name="supporter_how">Come l\'hai sostenuto?</string>
     <string name="supporter_once">Una donazione</string>
     <string name="supporter_monthly">Ogni mese</string>
     <string name="supporter_badge">Sostenitore</string>
     <string name="supporter_thanks_title">Grazie per il tuo sostegno!</string>
-    <string name="supporter_thanks_body">Se Myspoti ti è ancora utile, una nuova piccola donazione aiuta a farlo andare avanti.</string>
+    <string name="supporter_thanks_body">Se Spotilol UI ti è ancora utile, una nuova piccola donazione aiuta a farlo andare avanti.</string>
     <string name="support_again">Sostieni di nuovo</string>
     <string name="supporter_accent">Colore principale</string>
     <string name="supporter_icon">Icona dell\'app</string>
@@ -120,7 +120,7 @@
     <string name="song_radio_failed">Impossibile aprire la radio di questo brano</string>
     <string name="local_files_find_hint">Cerca nei File locali</string>
     <string name="data_saver_title">Risparmio dati</string>
-    <string name="data_saver_summary">Con i dati mobili, Myspoti non usa dati: si riproducono solo i brani scaricati e i File locali</string>
+    <string name="data_saver_summary">Con i dati mobili, Spotilol UI non usa dati: si riproducono solo i brani scaricati e i File locali</string>
     <string name="data_saver_blocked">Risparmio dati: con i dati mobili si riproducono solo i brani scaricati e i File locali</string>
     <string name="new_releases_followed">Dagli artisti che segui</string>
     <string name="new_releases_latest">Ultime uscite</string>
@@ -138,7 +138,7 @@
     <string name="recap_top_tracks">Brani più ascoltati</string>
     <string name="recap_top_artists">Artisti più ascoltati</string>
     <string name="recap_top_albums">Album più ascoltati</string>
-    <string name="recap_private_note">Conta tutto ciò che è stato riprodotto in Myspoti (Spotify, download, file locali). Resta su questo telefono e non viene mai inviato a Spotify.</string>
+    <string name="recap_private_note">Conta tutto ciò che è stato riprodotto in Spotilol UI (Spotify, download, file locali). Resta su questo telefono e non viene mai inviato a Spotify.</string>
     <string name="recap_detail">I tuoi ascolti, download e file locali inclusi</string>
     <string name="track_credits">Crediti</string>
     <string name="exclude_taste">Escludi dal tuo profilo dei gusti</string>
@@ -171,7 +171,7 @@
     <string name="track_sort_artist">Artista</string>
     <string name="track_sort_album">Album</string>
     <string name="track_sort_duration">Durata</string>
-    <string name="setup_title">Configura Myspoti</string>
+    <string name="setup_title">Configura Spotilol UI</string>
     <string name="setup_subtitle">Consenti ciò che vuoi; potrai cambiarlo più tardi nelle impostazioni del telefono.</string>
     <string name="setup_notifications_title">Notifiche</string>
     <string name="setup_notifications_detail">Controlli sulla schermata di blocco e nel pannello delle notifiche</string>
@@ -191,7 +191,7 @@
     <string name="track_sort_added">Data di aggiunta</string>
     <!-- Lossless (SpotiFLAC) downloads -->
     <string name="spotiflac_row_title">Download senza perdita (FLAC)</string>
-    <string name="spotiflac_row_on">Verificato — Myspoti usa i server di SpotiFLAC.</string>
+    <string name="spotiflac_row_on">Verificato — Spotilol UI usa i server di SpotiFLAC.</string>
     <string name="spotiflac_row_off">Non verificato — tocca per completare il controllo una tantum.</string>
     <string name="spotiflac_verify_title">Verifica SpotiFLAC</string>
     <string name="spotiflac_verify_start_failed">Impossibile avviare la verifica. Tocca Riprova o torna più tardi.</string>
@@ -235,7 +235,7 @@
     <string name="quality_download_hires">FLAC Hi-Res</string>
     <string name="quality_download_hires_detail">24 bit quando esiste, file circa tre volte più grandi</string>
     <string name="setup_quality_title">Qualità audio</string>
-    <string name="setup_quality_subtitle">Scegli come Myspoti riproduce e salva la tua musica. Potrai cambiarlo più tardi nelle Impostazioni.</string>
+    <string name="setup_quality_subtitle">Scegli come Spotilol UI riproduce e salva la tua musica. Potrai cambiarlo più tardi nelle Impostazioni.</string>
     <string name="downloads_off_toast">I download sono disattivati. Attivali nelle Impostazioni.</string>
     <string name="quality_streaming_high_detail">160 kbit/s, il suono migliore</string>
     <string name="downloads_verify_hint">Nessuna fonte senza perdita ha risposto. Verifica SpotiFLAC una volta in Impostazioni, Download: i suoi server sono i più affidabili.</string>
@@ -251,7 +251,7 @@
     <string name="spotiflac_verify_in_browser">Completa la verifica nella scheda del browser che si è aperta, poi torna qui.</string>
     <string name="update_downloading">Download… %1$d%%</string>
     <string name="update_installing">Installazione…</string>
-    <string name="update_needs_permission">Per aggiornare, consenti a Myspoti di installare app, poi torna qui.</string>
+    <string name="update_needs_permission">Per aggiornare, consenti a Spotilol UI di installare app, poi torna qui.</string>
     <string name="update_allow">Consenti</string>
     <string name="update_failed">Aggiornamento non riuscito: %1$s</string>
     <string name="update_retry">Riprova</string>

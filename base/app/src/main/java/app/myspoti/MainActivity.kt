@@ -66,10 +66,6 @@ class MainActivity : AppCompatActivity() {
                             connecting -> ConnectingScreen()
                             else -> WelcomeScreen(onLogin = { showLogin() })
                         }
-                        // Diagnostics switched on in Settings: hold the faint dot to copy the redacted logs.
-                        if (com.music.spotui.data.BetaLogs.enabled.value || app.myspoti.engine.BuildConfig.DEBUG)
-                            com.music.spotui.ui.components.BetaLogButton(
-                                androidx.compose.ui.Modifier.align(androidx.compose.ui.Alignment.BottomEnd))
                     }
                 }
             }

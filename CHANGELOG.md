@@ -1,6 +1,19 @@
 # Changelog
 
-Each release on GitHub shows its section below. The app shows it too when it offers the update. Every detail: [docs/CHANGELOG-full.md](docs/CHANGELOG-full.md).
+## Spotilol UI 0.1 — 2026-10-19
+
+First variant build on Myspoti 2.0.0-beta.8 (`5b247b3`): package `com.project.lol.fork.ui`, next to Spotilol Lite.
+
+- Spotilol security rules: listener-only bridge without fallback, bounded relay without redirects or cookies, exact-host navigation, player-only Widevine, bounded direct requests, shared log redaction.
+- Spotilol blocking scope: Spotify ad hosts, ad media, `gabo-receiver-service` events, pixels and trackers.
+- Removed: SpotiFLAC downloads, Android Auto, YouTube music videos, third-party lyrics and translation, in-app updater, donation prompts, widget, Play services QR scanner (ML Kit logging); Jam joins by invite link.
+- Added: encrypted account profiles, switchable diagnostics.
+
+Automated checks (JVM tests, signed release build) pass in CI; real-device testing is separate.
+
+# Upstream Myspoti history
+
+Full detail: [docs/CHANGELOG-full.md](docs/CHANGELOG-full.md).
 
 ## 2.0.0-beta.8
 

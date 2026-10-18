@@ -85,7 +85,8 @@ jobs:
               abis = {p.split('/')[1] for p in names if p.startswith('lib/') and p.endswith('.so')}
               assert abis <= {'arm64-v8a'}, abis
               dex = b''.join(apk.read(n) for n in names if n.endswith('.dex'))
-          banned = [b'org/schabi/newpipe', b'com/music/spotui/lossless', b'com/music/spotui/data/offline/OfflineDownloader', b'com/music/spotui/di/AutoBrowser']
+          banned = [b'org/schabi/newpipe', b'com/music/spotui/lossless', b'com/music/spotui/data/offline/OfflineDownloader', b'com/music/spotui/di/AutoBrowser',
+                    b'com/google/mlkit', b'com/google/android/datatransport', b'com/google/firebase', b'io/ktor']
           found = [b.decode() for b in banned if b in dex]
           print('removed components present:', found or 'none')
           if os.environ.get('UI_STRICT_REMOVALS') == '1':

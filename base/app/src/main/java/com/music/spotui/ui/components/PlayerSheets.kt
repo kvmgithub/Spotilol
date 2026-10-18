@@ -300,20 +300,6 @@ private fun JamSection(onDismiss: () -> Unit) {
             modifier = Modifier.fillMaxWidth().clickable {
                 scope.launch { if (runCatching { jam.start() }.isFailure) failed() }
             }.padding(vertical = 10.dp))
-        // Join: scan the QR code another phone shows in its Jam.
-        Text(stringResource(R.string.jam_scan), color = Green, fontSize = 15.sp,
-            modifier = Modifier.fillMaxWidth().clickable {
-                com.google.mlkit.vision.codescanner.GmsBarcodeScanning.getClient(context).startScan()
-                    .addOnSuccessListener { code ->
-                        val raw = code.rawValue.orEmpty()
-                        scope.launch {
-                            val token = JamLinks.token(raw)
-                            if (token == null || runCatching { jam.join(token) }.isFailure) failed() else onDismiss()
-                        }
-                    }
-                    // No scanner on this phone (Play services missing or too old): say so.
-                    .addOnFailureListener { failed() }
-            }.padding(vertical = 10.dp))
         // Join: an invite link copied from a message.
         Text(stringResource(R.string.jam_paste_link), color = Green, fontSize = 15.sp,
             modifier = Modifier.fillMaxWidth().clickable {

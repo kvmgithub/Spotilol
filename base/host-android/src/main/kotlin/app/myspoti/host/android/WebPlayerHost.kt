@@ -239,6 +239,9 @@ class WebPlayerHost(context: Context) : BridgeHost {
      */
     fun switchSession(cookies: Map<String, String>, done: (Boolean) -> Unit) = main.post {
         val manager = CookieManager.getInstance()
+        // The old account's page goes first, so it cannot write its cookies back meanwhile.
+        loadAsked = false
+        view.loadUrl("about:blank")
         manager.removeAllCookies {
             val pairs = cookies.flatMap { (origin, header) ->
                 header.split(';').mapNotNull { WebPolicy.restoreCookie(it.trim())?.let { cookie -> origin to cookie } }

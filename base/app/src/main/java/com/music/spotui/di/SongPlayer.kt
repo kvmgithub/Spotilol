@@ -43,6 +43,7 @@ object SongPlayer {
     /** How long a play has to show up in the page's state before it is sent again. */
     private const val PLAY_CHECK_MS = 4_000L
     /** "Next" taps closer than this are sent as one jump. */
+    private const val PAUSE_CHECK_MS = 1_200L
     private const val SKIP_BURST_MS = 350L
     /** After a local file starts, engine states this recent still predate the pause. */
     private const val LOCAL_GRACE_MS = 2500L
@@ -76,7 +77,10 @@ object SongPlayer {
     @Volatile private var wantPlayingUntil = 0L
     @Volatile private var wantPausedUntil = 0L
 
-    private fun intendPlaying() { wantPlayingUntil = SystemClock.elapsedRealtime() + 4000; wantPausedUntil = 0 }
+    private fun intendPlaying() { wantPlayingUntil = SystemClock.elapsedRealtime() + 4000; wantPausedUntil = 0; pauseGen++ }
+
+    /** Bumped by every pause and every play/skip intent: a pending pause check stops on change. */
+    @Volatile private var pauseGen = 0
     private fun intendPaused() { wantPausedUntil = SystemClock.elapsedRealtime() + 1500; wantPlayingUntil = 0 }
 
     private fun resolvePlaying(paused: Boolean): Boolean {
@@ -546,6 +550,23 @@ object SongPlayer {
         intendPaused()
         positionMs = getCurrentPosition(); positionAt = SystemClock.elapsedRealtime(); playing = false
         transport(pullBack = false) { api.player.pause() }
+        ensurePaused(++pauseGen, attempt = 1)
+    }
+
+    /**
+     * The Web Player drops a pause that arrives while a play command is still buffering
+     * (seen in a device log: the song kept playing until a second tap). While the user still
+     * wants it paused and the page still reports playing, the pause is sent again, twice at most.
+     */
+    private fun ensurePaused(gen: Int, attempt: Int) {
+        main.postDelayed({
+            if (gen != pauseGen || playing || LocalPlayer.active.value) return@postDelayed
+            if (api.player.state.value?.isPaused != false) return@postDelayed
+            Log.d(TAG, "pause not applied by the page, sending it again ($attempt)")
+            intendPaused()
+            transport(pullBack = false) { api.player.pause() }
+            if (attempt < 2) ensurePaused(gen, attempt + 1)
+        }, PAUSE_CHECK_MS)
     }
 
     fun stop() = pause()

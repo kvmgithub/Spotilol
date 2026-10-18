@@ -130,7 +130,12 @@ class WebPlayerHost(context: Context) : BridgeHost {
         webViewClient = object : WebViewClient() {
             override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? {
                 val url = request.url.toString()
-                if (AdBlock.isTelemetry(url)) return emptySuccess(request)
+                if (AdBlock.isTelemetry(url)) {
+                    // Once per host and route a session, so the diagnostics show what is blocked.
+                    val key = "${request.url.host}${request.url.path?.substringBeforeLast('/')?.take(48).orEmpty()}"
+                    if (telemetrySeen.add(key)) log("telemetry blocked: $key")
+                    return emptySuccess(request)
+                }
                 if (!AdBlock.isAd(url)) return null
                 log("blocked ad request ${request.url.host}")
                 // Refused like a blocked request: the player reports a failed ad and moves on.
@@ -157,6 +162,15 @@ class WebPlayerHost(context: Context) : BridgeHost {
 
             override fun onPageFinished(view: WebView, url: String) {
                 log("page finished ${url.take(120)}")
+                // A secure-spawned process (GrapheneOS) can lose the first navigation: it then
+                // reports a finish without any start. Asked again at once, once per load, instead
+                // of after the watchdog's first delay; the watchdog stays as the fallback.
+                if (pageStarts == 0 && loadAsked && !quickRetried && url.startsWith(PLAYER_URL)) {
+                    quickRetried = true
+                    log("page finished without a start: loading again now")
+                    view.loadUrl(PLAYER_URL)
+                    return
+                }
                 _url.value = url
                 _loginRequired.value = isLoginPage(url)
                 if (url.startsWith(PLAYER_URL)) onPageLoaded?.invoke()
@@ -189,6 +203,7 @@ class WebPlayerHost(context: Context) : BridgeHost {
 
     fun load() = main.post {
         pageStarts = 0
+        quickRetried = false
         loadAsked = true
         view.loadUrl(PLAYER_URL)
         watchLoad(PLAYER_URL, attempt = 1)
@@ -196,6 +211,10 @@ class WebPlayerHost(context: Context) : BridgeHost {
 
     /** Page starts since the last [load]; the load watchdog looks at it. */
     private var pageStarts = 0
+    /** The lost-first-navigation retry ran for this load (see onPageFinished). */
+    private var quickRetried = false
+    /** Telemetry routes already logged this session. */
+    private val telemetrySeen = java.util.Collections.synchronizedSet(HashSet<String>())
     /** [load] was called and no [unload] since (data saver keeps the page off). */
     private var loadAsked = false
 

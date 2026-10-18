@@ -18,27 +18,22 @@ android {
     namespace = "app.myspoti.engine"
     compileSdk = 37
 
-    // Two channels that install side by side: betas ("2.0.0-beta.3") stay "app.myspoti",
-    // signed with the first key, as "Myspoti Beta"; releases are "app.myspoti.stable",
-    // signed with their own key, as "Myspoti".
-    // Local builds (no version given) are on the beta side, like the phone test builds.
-    val version = (findProperty("appVersionName") as String?) ?: "2.0.0"
-    val beta = findProperty("appVersionName") == null || version.contains("-")
+    // Spotilol UI: own package next to Spotilol Lite (com.project.lol.fork), same signing key.
+    // CI passes -PappVersionName / -PappVersionCode; local builds use the defaults.
+    val version = (findProperty("appVersionName") as String?) ?: "0.1.0"
     defaultConfig {
-        applicationId = if (beta) "app.myspoti" else "app.myspoti.stable"
-        manifestPlaceholders["appLabel"] = if (beta) "Myspoti Beta" else "Myspoti"
+        applicationId = "com.project.lol.fork.ui"
+        manifestPlaceholders["appLabel"] = "Spotilol UI"
         minSdk = 29
         targetSdk = 36
-        // CI release builds pass the tag's version (-PappVersionName / -PappVersionCode).
-        versionCode = (findProperty("appVersionCode") as String?)?.toIntOrNull() ?: 200
+        versionCode = (findProperty("appVersionCode") as String?)?.toIntOrNull() ?: 1
         versionName = version
-        // GitHub "owner/repo" whose releases the app checks for updates; empty = off
-        // (local builds). CI sets it to the repository it builds.
         // Inspectable hidden player in a test build (-PwebDebug=true); never in releases.
         buildConfigField("boolean", "WEB_DEBUG", "${(findProperty("webDebug") as String?) == "true"}")
-        buildConfigField("String", "UPDATE_REPO", "\"${(findProperty("updateRepo") as String?) ?: System.getenv("MYSPOTI_UPDATE_REPO") ?: ""}\"")
+        // In-app updates are removed in this variant; kept empty so no update request is made.
+        buildConfigField("String", "UPDATE_REPO", "\"\"")
         ndk {
-            abiFilters += listOf("arm64-v8a", "armeabi-v7a")
+            abiFilters += listOf("arm64-v8a")
         }
         // On-device tests (codecs): ./gradlew connectedDebugAndroidTest
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
@@ -49,16 +44,17 @@ android {
         buildConfig = true
     }
 
-    // Release key from the CI secrets (env), else keystore/keystore.properties.
-    val envStore = System.getenv("MYSPOTI_KEYSTORE")
+    // Release key from Spotilol's CI bundle (APK_KEYSTORE/APK_KEY_PASSWORD/APK_KEY_ALIAS),
+    // else keystore/keystore.properties.
+    val envStore = System.getenv("APK_KEYSTORE")
     val hasReleaseKey = envStore != null || keystorePropertiesFile.exists()
     signingConfigs {
         create("release") {
             if (envStore != null) {
                 storeFile = file(envStore)
-                storePassword = System.getenv("MYSPOTI_KEYSTORE_PASSWORD")
-                keyAlias = System.getenv("MYSPOTI_KEY_ALIAS")
-                keyPassword = System.getenv("MYSPOTI_KEY_PASSWORD")
+                storePassword = System.getenv("APK_KEY_PASSWORD")
+                keyAlias = System.getenv("APK_KEY_ALIAS")
+                keyPassword = System.getenv("APK_KEY_PASSWORD")
             } else if (keystorePropertiesFile.exists()) {
                 storeFile = rootProject.file("keystore/${keystoreProperties.getProperty("storeFile")}")
                 storePassword = keystoreProperties.getProperty("storePassword")
@@ -72,7 +68,7 @@ android {
         debug {
             // Installs next to the release apps (own data, own sign-in).
             applicationIdSuffix = ".dev"
-            manifestPlaceholders["appLabel"] = "Myspoti dev"
+            manifestPlaceholders["appLabel"] = "Spotilol UI dev"
         }
         release {
             // Real key when provided (CI releases); otherwise the debug key, so a local
@@ -84,8 +80,7 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
-            // Betas are release builds too, but their log reports read Log.v/d/i.
-            if (!beta) proguardFiles("proguard-strip-logs.pro")
+            // Logs stay (redacted diagnostics, as in Spotilol); only this app can read its logcat.
         }
     }
     compileOptions {

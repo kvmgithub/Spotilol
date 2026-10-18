@@ -1,0 +1,125 @@
+# Spotilol UI: Myspoti's native interface with Spotilol's security scope.
+# Builds on every push to myspoti-ui, signs with the fork key (APK_SIGNING_BUNDLE) and
+# publishes a pre-release tagged ui-v<version>. Pre-releases never become "latest", so
+# Spotilol Lite's update check (releases/latest) ignores them.
+name: Spotilol UI
+on:
+  push:
+    branches: [myspoti-ui]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: spotilol-ui-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  build:
+    if: github.repository_owner == 'kvmgithub'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    permissions:
+      contents: write
+    defaults:
+      run:
+        working-directory: base
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3
+        with:
+          cmdline-tools-version: 15641748
+          packages: platform-tools
+      - name: Install Android build dependencies
+        run: sdkmanager 'platforms;android-37.0' 'build-tools;36.0.0' 'build-tools;37.0.0'
+      - uses: gradle/actions/setup-gradle@v6
+      - name: Prepare signing and version
+        env:
+          APK_SIGNING_BUNDLE: ${{ secrets.APK_SIGNING_BUNDLE }}
+        run: |
+          python3 - <<'PY'
+          import os, json, base64
+          from pathlib import Path
+          bundle = json.loads(os.environ['APK_SIGNING_BUNDLE'])
+          key = Path(os.environ['RUNNER_TEMP']) / 'release.p12'
+          key.write_bytes(base64.b64decode(bundle['keystore'], validate=True))
+          key.chmod(0o600)
+          password = bundle['password']
+          print('::add-mask::' + password)
+          code = 1000 + int(os.environ['GITHUB_RUN_NUMBER'])
+          with open(os.environ['GITHUB_ENV'], 'a') as out:
+              out.write(f'APK_KEYSTORE={key}\nAPK_KEY_PASSWORD={password}\nAPK_KEY_ALIAS=release\n')
+              out.write(f'APK_VERSION_CODE={code}\nAPK_VERSION_NAME=0.1.{code}\n')
+          PY
+      - name: Unit tests and signed release
+        run: |
+          set -o pipefail
+          ./gradlew testDebugUnitTest :api:test :api-spotify:test :app:assembleRelease \
+            --no-daemon --console=plain -Pkotlin.incremental=false \
+            -PappVersionCode="$APK_VERSION_CODE" -PappVersionName="$APK_VERSION_NAME" \
+            2>&1 | tee "$RUNNER_TEMP/build.log"
+      - name: Verify and name APK
+        run: |
+          mkdir -p release-assets
+          apk="release-assets/Spotilol-UI-arm64-${APK_VERSION_NAME}.apk"
+          cp app/build/outputs/apk/release/app-release.apk "$apk"
+          tools="$ANDROID_HOME/build-tools/37.0.0"
+          "$tools/apksigner" verify --print-certs "$apk" | grep -E 'Signer #1 certificate (DN|SHA-256)'
+          "$tools/aapt" dump badging "$apk" > "$RUNNER_TEMP/apk-metadata.txt"
+          python3 - "$apk" <<'PY'
+          import os, re, sys, zipfile
+          from pathlib import Path
+          data = (Path(os.environ['RUNNER_TEMP']) / 'apk-metadata.txt').read_text()
+          fields = dict(re.findall(r"(\w+)='([^']*)'", next(x for x in data.splitlines() if x.startswith('package:'))))
+          assert fields['name'] == 'com.project.lol.fork.ui', fields
+          assert fields['versionName'] == os.environ['APK_VERSION_NAME'], fields
+          assert 'application-debuggable' not in data
+          with zipfile.ZipFile(sys.argv[1]) as apk:
+              names = apk.namelist()
+              abis = {p.split('/')[1] for p in names if p.startswith('lib/') and p.endswith('.so')}
+              assert abis <= {'arm64-v8a'}, abis
+              dex = b''.join(apk.read(n) for n in names if n.endswith('.dex'))
+          banned = [b'org/schabi/newpipe', b'com/music/spotui/lossless', b'com/music/spotui/data/offline/OfflineDownloader', b'com/music/spotui/di/AutoBrowser']
+          found = [b.decode() for b in banned if b in dex]
+          print('removed components present:', found or 'none')
+          if os.environ.get('UI_STRICT_REMOVALS') == '1':
+              assert not found, found
+          PY
+          (cd release-assets && sha256sum *.apk > SHA256SUMS.txt && cat SHA256SUMS.txt)
+      - name: Publish pre-release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="ui-v${APK_VERSION_NAME}"
+          printf 'Spotilol UI test build %s from `%s`.\n\nMyspoti 2.0.0-beta.8 interface with Spotilol security scope. Package `com.project.lol.fork.ui` installs next to Spotilol Lite (`com.project.lol.fork`) and needs its own sign-in.\n\nPre-release: Spotilol Lite update checks ignore it.\n' "$APK_VERSION_NAME" "$GITHUB_SHA" > "$RUNNER_TEMP/notes.md"
+          gh release create "$tag" release-assets/* --target "$GITHUB_SHA" --title "Spotilol UI ${APK_VERSION_NAME}" \
+            --notes-file "$RUNNER_TEMP/notes.md" --prerelease --latest=false
+      - name: Publish failure log
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          out="$RUNNER_TEMP/ci-log"; mkdir -p "$out"
+          log="$RUNNER_TEMP/build.log"; touch "$log"
+          python3 - "$log" "$out" <<'PY'
+          import os, re, sys
+          from pathlib import Path
+          text = Path(sys.argv[1]).read_text(errors='replace')
+          secret = os.environ.get('APK_KEY_PASSWORD')
+          if secret: text = text.replace(secret, '[redacted]')
+          lines = text.splitlines()
+          keep = [l for l in lines if re.search(r'^e: |FAILED|FAILURE:|What went wrong|error:|Exception', l)]
+          Path(sys.argv[2], 'errors.txt').write_text('\n'.join(keep[:800]) + '\n')
+          Path(sys.argv[2], 'tail.txt').write_text('\n'.join(lines[-1500:]) + '\n')
+          Path(sys.argv[2], 'run.txt').write_text(f"run={os.environ['GITHUB_RUN_NUMBER']} sha={os.environ['GITHUB_SHA']}\n")
+          PY
+          cd "$out"
+          git init -q -b ui-ci-logs
+          git add -A
+          git -c user.name=ci -c user.email=ci@localhost commit -qm "Spotilol UI run $GITHUB_RUN_NUMBER failed"
+          git push -fq "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" ui-ci-logs
+      - name: Remove signing material
+        if: always()
+        run: rm -f "$RUNNER_TEMP/release.p12"

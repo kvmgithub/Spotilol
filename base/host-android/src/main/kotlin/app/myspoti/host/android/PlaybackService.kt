@@ -187,7 +187,13 @@ class PlaybackService : MediaBrowserServiceCompat() {
         scope.launch {
             val bitmap = withContext(Dispatchers.IO) {
                 runCatching {
-                    http.newCall(Request.Builder().url(url).build()).execute().use { BitmapFactory.decodeStream(it.body.byteStream()) }
+                    // Cover art from Spotify's image CDNs only, bounded like every native request.
+                    val host = app.myspoti.spotify.security.WebPolicy.httpsHost(url)
+                    require(host != null && (host.endsWith(".scdn.co") || host.endsWith(".spotifycdn.com")))
+                    http.newCall(Request.Builder().url(url).build()).execute().use {
+                        val bytes = app.myspoti.spotify.security.BoundedHttp.readBytes(it.body.byteStream(), 8 * 1024 * 1024)
+                        BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+                    }
                 }.getOrNull()
             }
             if (url == lastCoverUrl && bitmap != null) {
@@ -291,13 +297,9 @@ class PlaybackService : MediaBrowserServiceCompat() {
 
     // Media browser (Android Auto).
     override fun onGetRoot(clientPackageName: String, clientUid: Int, rootHints: Bundle?): BrowserRoot? {
-        // The service is exported (Android Auto requires it), but the library —
-        // playlists, Liked Songs, search — is only for Auto, Assistant, Bluetooth,
-        // Wear, System UI, other system apps and the app itself. Any other app
-        // gets an empty root: it can still connect and use the session's
-        // play/pause controls, but browsing and search return nothing.
-        val packages = runCatching { packageManager.getPackagesForUid(clientUid)?.toList() }.getOrNull().orEmpty()
-        if (clientPackageName != packageName && clientPackageName !in packages) return null
+        // Spotilol UI has no Android Auto: the service is not exported and only this app
+        // may connect. Notification, lock screen and Bluetooth use the media session.
+        if (clientPackageName != packageName || clientUid != android.os.Process.myUid()) return null
         if (!mayBrowse(clientPackageName)) {
             android.util.Log.w("Myspoti", "media browser: empty root for $clientPackageName")
             return BrowserRoot(EMPTY_ROOT_ID, null)
@@ -343,7 +345,7 @@ class PlaybackService : MediaBrowserServiceCompat() {
         private const val NOTIFICATION_ID = 1
         private const val ACTION_LIKE = "like"
         private const val ACTION_SHUFFLE = "shuffle"
-        private val http = OkHttpClient()
+        private val http = app.myspoti.spotify.security.BoundedHttp.client(OkHttpClient(), callTimeoutSeconds = 20)
 
         @Volatile private var instance: PlaybackService? = null
         @Volatile private var current: NowPlayingInfo? = null

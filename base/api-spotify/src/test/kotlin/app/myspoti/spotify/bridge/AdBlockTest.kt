@@ -14,18 +14,30 @@ class AdBlockTest {
     }
 
     @Test
-    fun `blocks foreign ad servers only`() {
-        assertTrue(AdBlock.isBlocked("https://pubads.g.doubleclick.net/gampad/ads?x=1"))
-        assertTrue(AdBlock.isBlocked("https://imasdk.googleapis.com/js/sdkloader/ima3.js"))
-        // Spotify's own ad endpoints stay reachable: a client that never calls them stands out.
-        assertFalse(AdBlock.isBlocked("https://spclient.wg.spotify.com/ads/v2/config"))
-        assertFalse(AdBlock.isBlocked("https://gew4-spclient.spotify.com/ad-logic/state/config?a=b"))
-        assertFalse(AdBlock.isBlocked("https://adeventtracker.spotify.com/x"))
-        assertFalse(AdBlock.isBlocked("https://sponsored-recommendations.spotify.com/x"))
-        assertFalse(AdBlock.isBlocked("https://gew4-spclient.spotify.com/track-playback/v1/devices"))
-        assertFalse(AdBlock.isBlocked("https://gew4-spclient.spotify.com/metadata/4/track/abc?ads=1"))
-        assertFalse(AdBlock.isBlocked("https://api-partner.spotify.com/pathfinder/v2/query"))
+    fun `blocks ad servers and Spotify's ad hosts (Spotilol scope)`() {
+        assertTrue(AdBlock.isAd("https://pubads.g.doubleclick.net/gampad/ads?x=1"))
+        assertTrue(AdBlock.isAd("https://imasdk.googleapis.com/js/sdkloader/ima3.js"))
+        assertTrue(AdBlock.isAd("https://audio-ads.spotify.com/x"))
+        assertTrue(AdBlock.isAd("https://audio-fa.scdn.co/mp3-ad/abc"))
+        assertFalse(AdBlock.isAd("https://gew4-spclient.spotify.com/track-playback/v1/devices"))
+        assertFalse(AdBlock.isAd("https://gew4-spclient.spotify.com/metadata/4/track/abc?ads=1"))
+        assertFalse(AdBlock.isAd("https://api-partner.spotify.com/pathfinder/v2/query"))
         assertFalse(AdBlock.isBlocked("https://open.spotify.com/ads/"))
+        assertFalse(AdBlock.isBlocked("https://evilads.spotify.com.example/x"))
+    }
+
+    @Test
+    fun `telemetry is answered empty, playback traffic is untouched`() {
+        assertTrue(AdBlock.isTelemetry("https://gew4-spclient.spotify.com/gabo-receiver-service/public/v3/events"))
+        assertTrue(AdBlock.isTelemetry("https://spclient.wg.spotify.com/gabo-receiver-service/v3/events?x=1"))
+        assertTrue(AdBlock.isTelemetry("https://adeventtracker.spotify.com/x"))
+        assertTrue(AdBlock.isTelemetry("https://o1.ingest.sentry.io/api/1/envelope/"))
+        assertTrue(AdBlock.isTelemetry("https://www.google-analytics.com/g/collect"))
+        assertFalse(AdBlock.isTelemetry("https://evil.test/gabo-receiver-service/x"))
+        assertFalse(AdBlock.isTelemetry("https://gew4-spclient.spotify.com/connect-state/v1/devices/hobs_1"))
+        assertFalse(AdBlock.isTelemetry("https://gew4-spclient.spotify.com/track-playback/v1/devices"))
+        assertFalse(AdBlock.isBlocked("https://i.scdn.co/image/ab67616d0000b273"))
+        assertFalse(AdBlock.isBlocked("https://open.spotifycdn.com/cdn/build/web-player/web-player.js"))
     }
 
     @Test

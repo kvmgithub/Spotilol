@@ -28,10 +28,12 @@ object MyspotiRuntime {
     /** [loadPage] false (data saver on a metered network): nothing goes out until [resume]. */
     fun start(context: Context, loadPage: Boolean = true) {
         if (isStarted) return
-        val updater = app.myspoti.spotify.gql.GqlOpsUpdater(okhttp3.OkHttpClient(), java.io.File(context.filesDir, "spotify/gql-ops.json"))
+        // Spotilol transport rules for every direct request: no redirects, bounded time.
+        val http = app.myspoti.spotify.security.BoundedHttp.client()
+        val updater = app.myspoti.spotify.gql.GqlOpsUpdater(http, java.io.File(context.filesDir, "spotify/gql-ops.json"))
         host = WebPlayerHost(context)
-        spotify = SpotifyApi(host, scope, language = Locale.getDefault().language, ops = updater.load())
-        spotify.bridge.logger = { line -> android.util.Log.d(WebPlayerHost.LOG, line) }
+        spotify = SpotifyApi(host, scope, http = http, language = Locale.getDefault().language, ops = updater.load())
+        spotify.bridge.logger = { line -> WebPlayerHost.log(line) }
         host.onPageLoaded = { scope.launch { spotify.onPageLoaded() } }
         host.onPageStarting = { spotify.onPageStarting() }
         spotify.player.reloadHost = { host.reload() }
@@ -46,7 +48,7 @@ object MyspotiRuntime {
                     "track=${s?.item?.name} paused=${s?.isPaused} buffering=${s?.isBuffering} url=${host.url.value.take(60)}"
                 if (line != last) {
                     last = line
-                    android.util.Log.d(WebPlayerHost.LOG, line)
+                    WebPlayerHost.log(line)
                 }
             }
         }

@@ -141,7 +141,8 @@ class CdpHost private constructor(private val socket: WebSocket, private val lis
             host.send("Fetch.enable", buildJsonObject {
                 put("patterns", buildJsonArray {
                     AdBlock.blockedHosts.forEach { h -> add(buildJsonObject { put("urlPattern", "*://$h/*") }) }
-                    AdBlock.blockedPaths.forEach { p -> add(buildJsonObject { put("urlPattern", "*spclient*$p*") }) }
+                    AdBlock.blockedHosts.forEach { h -> add(buildJsonObject { put("urlPattern", "*://*.$h/*") }) }
+                    listOf("*/gabo-receiver-service/*", "*/mp3-ad/*").forEach { p -> add(buildJsonObject { put("urlPattern", p) }) }
                     add(buildJsonObject { put("urlPattern", "*/track-playback/v1/devices") })
                 })
             })

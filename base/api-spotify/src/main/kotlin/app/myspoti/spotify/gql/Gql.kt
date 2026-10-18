@@ -103,8 +103,7 @@ class SpotifyHttp(
     /** Sends a request with browser headers. Returns the status and body text. */
     suspend fun send(method: String, url: String, body: String? = null, contentType: String = JSON_TYPE, accept: String = "application/json"): Pair<Int, String> {
         // The account's token only ever goes to Spotify itself.
-        val host = url.toHttpUrl().host
-        require(host == "spotify.com" || host.endsWith(".spotify.com")) { "not a Spotify host: $host" }
+        require(app.myspoti.spotify.security.WebPolicy.isSpotifyApi(url)) { "not a Spotify HTTPS host: ${url.toHttpUrl().host}" }
         val (w, c) = tokens()
         val builder = Request.Builder().url(url)
             .header("authorization", "Bearer ${w.access}")
@@ -119,7 +118,7 @@ class SpotifyHttp(
         // Bytes keep the content type exactly as given (OkHttp appends a charset to String bodies,
         // which some Spotify endpoints reject with 400).
         builder.method(method, body?.toByteArray()?.toRequestBody(contentType.toMediaType()) ?: if (method == "GET" || method == "DELETE") null else ByteArray(0).toRequestBody(null))
-        val result = withContext(Dispatchers.IO) { http.newCall(builder.build()).execute().use { it.code to it.body.string() } }
+        val result = withContext(Dispatchers.IO) { http.newCall(builder.build()).execute().use { it.code to app.myspoti.spotify.security.BoundedHttp.text(it.body) } }
         if (result.first == 401) lock.withLock { web = null }
         return result
     }
@@ -162,7 +161,7 @@ class SpotifyHttp(
             .header("accept", "application/json")
             .header("user-agent", USER_AGENT)
             .build()
-        val (code, text) = withContext(Dispatchers.IO) { http.newCall(request).execute().use { it.code to it.body.string() } }
+        val (code, text) = withContext(Dispatchers.IO) { http.newCall(request).execute().use { it.code to app.myspoti.spotify.security.BoundedHttp.text(it.body) } }
         val granted = runCatching { Bridge.json.parseToJsonElement(text).jsonObject["granted_token"]?.jsonObject }.getOrNull()
             ?: throw GqlException("clienttoken", "HTTP $code: ${text.take(200)}")
         val seconds = (granted["expires_after_seconds"] as? JsonPrimitive)?.long ?: 86_400

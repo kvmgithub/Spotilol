@@ -72,11 +72,15 @@ class GqlOpsUpdater(private val http: OkHttpClient, private val cache: File) {
         return GqlOps(ops.mapValues { it.value.jsonObject["hash"]!!.jsonPrimitive.content })
     }
 
-    private fun get(url: String): String =
-        http.newCall(Request.Builder().url(url).header("user-agent", SpotifyHttp.USER_AGENT).build()).execute().use {
-            check(it.isSuccessful) { "HTTP ${it.code} for $url" }
-            it.body.string()
+    private fun get(url: String): String {
+        // Public player files only: the page itself and its CDN bundles, over strict HTTPS.
+        val host = app.myspoti.spotify.security.WebPolicy.httpsHost(url)
+        require(host == "open.spotify.com" || host == "open.spotifycdn.com") { "untrusted ops source" }
+        return http.newCall(Request.Builder().url(url).header("user-agent", SpotifyHttp.USER_AGENT).build()).execute().use {
+            check(it.isSuccessful) { "HTTP ${it.code}" }
+            app.myspoti.spotify.security.BoundedHttp.text(it.body)
         }
+    }
 
     /** `<script id="...">base64 JSON</script>` blocks of the page. */
     private fun script(html: String, id: String): JsonObject? {

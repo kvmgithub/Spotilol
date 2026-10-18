@@ -62,11 +62,12 @@ jobs:
             2>&1 | tee "$RUNNER_TEMP/build.log"
       - name: Verify and name APK
         run: |
+          exec > >(tee -a "$RUNNER_TEMP/build.log") 2>&1
           mkdir -p release-assets
           apk="release-assets/Spotilol-UI-arm64-${APK_VERSION_NAME}.apk"
           cp app/build/outputs/apk/release/app-release.apk "$apk"
           tools="$ANDROID_HOME/build-tools/37.0.0"
-          "$tools/apksigner" verify --print-certs "$apk" | grep -E 'Signer #1 certificate (DN|SHA-256)'
+          "$tools/apksigner" verify --print-certs "$apk" | grep -E 'certificate (DN|SHA-256 digest)'
           "$tools/aapt" dump badging "$apk" > "$RUNNER_TEMP/apk-metadata.txt"
           python3 - "$apk" <<'PY'
           import os, re, sys, zipfile

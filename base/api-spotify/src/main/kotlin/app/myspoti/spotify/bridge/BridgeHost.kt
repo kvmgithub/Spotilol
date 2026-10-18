@@ -40,41 +40,59 @@ object BridgeScript {
  */
 object AdBlock {
     /**
-     * Only ad media and third-party ad servers are refused. Spotify's own ad endpoints (ad
-     * config, ad events, sponsored recommendations) are left alone on purpose: a client that
-     * never calls them stands out. Ads that come anyway are muted and skipped by the player,
-     * and sponsored content is dropped from the screens.
+     * Spotilol's scope: ad media, third-party ad servers and trackers, Spotify's own ad hosts
+     * and its event telemetry are refused. (Upstream Myspoti leaves Spotify's ad and event
+     * endpoints reachable so the client looks ordinary; this variant prefers less telemetry,
+     * as Spotilol does.) Ads that come anyway are muted and skipped by the player.
      */
-    val blockedHosts = listOf(
-        // The ad audio files.
-        "adstudio-assets.scdn.co",
+    val adHosts = listOf(
+        // Ad audio and ad media.
+        "adstudio-assets.scdn.co", "mp3ad.scdn.co", "amillionads.com", "2mdn.net", "adxcel.com",
+        // Spotify's ad hosts.
+        "audio-ads.spotify.com", "ads-akp.spotify.com", "ads-fa.spotify.com", "adstudio.spotify.com", "ads.spotify.com",
         // Google's ad servers (audio and video ads served in other markets).
-        "pubads.g.doubleclick.net",
-        "securepubads.g.doubleclick.net",
-        "googleads.g.doubleclick.net",
-        "pagead2.googlesyndication.com",
-        "imasdk.googleapis.com",
-        // Third-party audience trackers the page loads (nothing it needs to play).
-        "googletagmanager.com",
-        "google-analytics.com",
-        "scorecardresearch.com",
-        "fastly-insights.com",
+        "doubleclick.net", "googlesyndication.com", "imasdk.googleapis.com",
     )
 
-    /** Paths refused on Spotify's api hosts; none, see [blockedHosts]. */
-    val blockedPaths = emptyList<String>()
+    /** Tracking and event hosts: answered with an empty success so the page does not retry. */
+    val telemetryHosts = listOf(
+        "adeventtracker.spotify.com", "pixel-static.spotify.com", "pixel.spotify.com", "aet.spotify.com",
+        "googletagmanager.com", "google-analytics.com", "scorecardresearch.com", "fastly-insights.com",
+        "sentry.io", "t.6sc.co", "tracker.samplicio.us", "adsrvr.org",
+    )
+
+    /** Kept for callers listing everything refused. */
+    val blockedHosts = adHosts + telemetryHosts
+
+    private fun hostOf(url: String): String =
+        url.substringAfter("://").substringBefore('/').substringBefore('?').substringBefore('#')
+            .substringAfterLast('@').substringBefore(':').lowercase()
+
+    private fun pathOf(url: String): String =
+        "/" + url.substringAfter("://").substringAfter('/', "").substringBefore('?').substringBefore('#')
+
+    private fun spotifyOwned(host: String) =
+        host == "spotify.com" || host.endsWith(".spotify.com") || host == "scdn.co" || host.endsWith(".scdn.co")
+
+    private fun List<String>.matchesHost(host: String) = any { host == it || host.endsWith(".$it") }
+
+    /** Ad media: refused (403), the player reports a failed ad and moves on. */
+    fun isAd(url: String): Boolean {
+        val host = hostOf(url)
+        return adHosts.matchesHost(host) || (spotifyOwned(host) && "/mp3-ad/" in pathOf(url))
+    }
+
+    /** Event telemetry and trackers (Spotify's gabo event sender included). */
+    fun isTelemetry(url: String): Boolean {
+        val host = hostOf(url)
+        if (telemetryHosts.matchesHost(host) || "retargeting-pixels" in url) return true
+        return spotifyOwned(host) && pathOf(url).startsWith("/gabo-receiver-service/")
+    }
+
+    fun isBlocked(url: String): Boolean = isAd(url) || isTelemetry(url)
 
     /** Formats only ads use: the ad mp3 links and the ad manifests. Songs and episodes use others. */
     val adFormats = setOf("manifest_urls_audio_ad", "file_urls_mp3")
-
-    fun isBlocked(url: String): Boolean {
-        val rest = url.substringAfter("://")
-        val host = rest.substringBefore('/').substringBefore('?').substringBefore(':').lowercase()
-        if (blockedHosts.any { host == it || host.endsWith(".$it") }) return true
-        if (!host.endsWith(".spotify.com") || "spclient" !in host) return false
-        val path = "/" + rest.substringAfter('/', "").substringBefore('?')
-        return blockedPaths.any { path.startsWith(it) }
-    }
 
     /** The player's registration (POST track-playback/v1/devices), to rewrite with [withoutAdFormats]. */
     fun isDeviceRegistration(method: String, url: String): Boolean =

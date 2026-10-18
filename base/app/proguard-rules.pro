@@ -1,8 +1,3 @@
-# The Web Player page calls the host through this @JavascriptInterface on WebViews without
-# web message listeners (PlayerChannel.kt).
--keepclassmembers class app.myspoti.host.android.PlayerChannel {
-    @android.webkit.JavascriptInterface <methods>;
-}
 # Bundled resources read by name (bridge script, GraphQL operation table).
 -keep class app.myspoti.spotify.bridge.BridgeScript { *; }
 -keep class app.myspoti.spotify.gql.GqlOps { *; }

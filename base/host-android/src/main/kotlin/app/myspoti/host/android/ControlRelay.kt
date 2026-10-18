@@ -3,6 +3,11 @@ package app.myspoti.host.android
 import android.os.Handler
 import android.os.Looper
 import android.webkit.WebView
+import androidx.webkit.JavaScriptReplyProxy
+import app.myspoti.spotify.bridge.AdBlock
+import app.myspoti.spotify.security.BoundedHttp
+import app.myspoti.spotify.security.LogRedactor
+import app.myspoti.spotify.security.WebPolicy
 import okhttp3.Call
 import okhttp3.Callback
 import okhttp3.Headers
@@ -12,6 +17,7 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.Response
 import org.json.JSONObject
 import java.io.IOException
+import java.util.Locale
 import java.util.concurrent.TimeUnit
 
 /**
@@ -19,116 +25,123 @@ import java.util.concurrent.TimeUnit
  * device and track-playback state) from the app instead of the WebView.
  *
  * Every WebView request carries "X-Requested-With: <package>", and an app can no longer turn
- * that off (androidx.webkit's allow-list API is a no-op on current WebViews). Spotify
- * acknowledges Connect commands that carry it but never delivers them to the player, so
- * nothing plays. Tested on desktop Chrome: adding only that header to the command request
- * reproduces the silence, and removing it restores playback.
+ * that off. Spotify acknowledges Connect commands that carry it but never delivers them to the
+ * player, so nothing plays. The page's `fetch` is wrapped at document start; matching requests
+ * go through `MyspotiNet.postMessage` and are repeated with OkHttp using the page's headers.
  *
- * The page's `fetch` is wrapped at document start. Matching requests go through
- * `MyspotiNet.postMessage` ([exposeToPlayer]), which repeats them with OkHttp using the page's own headers (its token,
- * client token, connection id), then hands the response back to the page.
+ * Spotilol's native transport rules apply: exact HTTPS spclient hosts and paths
+ * ([WebPolicy.isRelayTarget]), bounded requests and responses, a total call deadline, no
+ * redirects, no cookies either way, and the answer goes back through the sending document's
+ * reply proxy, never to whatever page is current.
  */
 internal class ControlRelay(private val view: WebView) {
     private val main = Handler(Looper.getMainLooper())
-    private val http = OkHttpClient.Builder()
-        .connectTimeout(15, TimeUnit.SECONDS)
-        .readTimeout(30, TimeUnit.SECONDS)
+    private val http: OkHttpClient = BoundedHttp.client(callTimeoutSeconds = 20).newBuilder()
+        .readTimeout(15, TimeUnit.SECONDS)
         .build()
 
     fun install() {
-        view.exposeToPlayer("MyspotiNet", ::onMessage)
-        val documentStart = androidx.webkit.WebViewFeature.isFeatureSupported(androidx.webkit.WebViewFeature.DOCUMENT_START_SCRIPT)
-        if (documentStart) androidx.webkit.WebViewCompat.addDocumentStartJavaScript(view, SCRIPT, setOf("https://open.spotify.com"))
-        android.util.Log.d(WebPlayerHost.LOG, "control relay installed (document start: $documentStart)")
+        view.exposeToPlayer("MyspotiNet", MAX_REQUEST_BYTES, ::onMessage)
+        androidx.webkit.WebViewCompat.addDocumentStartJavaScript(view, SCRIPT, setOf(WebPolicy.PLAYER_ORIGIN))
+        android.util.Log.d(WebPlayerHost.LOG, "control relay installed")
     }
-
-    /** Fallback for WebViews without document-start scripts; harmless when already installed. */
-    fun injectNow() = view.evaluateJavascript(SCRIPT, null)
 
     /** `{id, url, method, headers, body}` from the page's wrapped `fetch`. */
-    private fun onMessage(json: String) {
+    private fun onMessage(json: String, reply: JavaScriptReplyProxy) {
         val m = runCatching { JSONObject(json) }.getOrNull() ?: return
         val id = m.optInt("id", -1).takeIf { it >= 0 } ?: return
-        val body = if (m.isNull("body")) null else m.optString("body")
-        send(id, m.optString("url"), m.optString("method", "GET"), m.optJSONObject("headers") ?: JSONObject(), body)
+        val request = runCatching { build(m) }.getOrElse {
+            android.util.Log.d(WebPlayerHost.LOG, "relay #$id rejected: ${it.message}")
+            return answer(reply, id, 0, "{}", "")
+        }
+        send(id, request, reply)
     }
 
-    private fun send(id: Int, url: String, method: String, given: JSONObject, body: String?) {
-        if (!isRelayed(url)) {
-            reply(id, 0, "{}", "")
-            return
-        }
+    /** The validated OkHttp request, or an exception naming the rule it broke. */
+    private fun build(m: JSONObject): Request {
+        val url = m.optString("url")
+        require(WebPolicy.isRelayTarget(url)) { "untrusted target" }
+        require(!AdBlock.isBlocked(url)) { "blocked target" }
+        val method = m.optString("method", "GET").uppercase(Locale.ROOT)
+        require(method in METHODS) { "method" }
+        val given = m.optJSONObject("headers") ?: JSONObject()
+        require(given.length() <= 64) { "too many headers" }
         val headers = Headers.Builder()
+        var headerBytes = 0
         given.keys().forEach { key ->
-            // OkHttp sets the transport headers itself.
-            if (key.lowercase() !in setOf("host", "content-length", "connection", "accept-encoding", "x-requested-with"))
-                runCatching { headers.add(key, given.getString(key)) }
+            val lower = key.lowercase(Locale.ROOT)
+            if (lower in BLOCKED_HEADERS || lower.startsWith("sec-") || lower.startsWith("proxy-") || given.isNull(key)) return@forEach
+            val value = given.getString(key)
+            headerBytes += key.length + value.length
+            require(headerBytes <= MAX_HEADER_BYTES) { "headers too large" }
+            headers.add(key, value)
         }
         headers["User-Agent"] = WebPlayerHost.DESKTOP_UA
-        headers["Origin"] = "https://open.spotify.com"
-        headers["Referer"] = "https://open.spotify.com/"
-        val built = headers.build()
+        headers["Origin"] = WebPolicy.PLAYER_ORIGIN
+        headers["Referer"] = "${WebPolicy.PLAYER_ORIGIN}/"
+        val body = if (m.isNull("body")) null else m.optString("body")
+        require((body?.length ?: 0) <= MAX_REQUEST_BYTES) { "body too large" }
         // The player's registration leaves out the ad formats (see AdBlock).
-        val sent = if (body != null && app.myspoti.spotify.bridge.AdBlock.isDeviceRegistration(method, url)) app.myspoti.spotify.bridge.AdBlock.withoutAdFormats(body) else body
+        val sent = if (body != null && AdBlock.isDeviceRegistration(method, url)) AdBlock.withoutAdFormats(body) else body
         // Bytes, not a String body: OkHttp would append "; charset=utf-8" to the content type.
-        val payload = if (method == "GET" || method == "HEAD") null else (sent ?: "").toByteArray().toRequestBody(null)
-        val request = Request.Builder().url(url).headers(built).method(method, payload).build()
+        val payload = when (method) {
+            "GET", "HEAD" -> { require(sent.isNullOrEmpty()) { "body on $method" }; null }
+            else -> (sent ?: "").toByteArray().toRequestBody(null)
+        }
+        return Request.Builder().url(url).headers(headers.build()).method(method, payload).build()
+    }
+
+    private fun send(id: Int, request: Request, reply: JavaScriptReplyProxy) {
         val asked = android.os.SystemClock.uptimeMillis()
+        val label = "${request.method} ${shortPath(request.url.toString())}"
         http.newCall(request).enqueue(object : Callback {
             override fun onFailure(call: Call, e: IOException) {
-                android.util.Log.d(WebPlayerHost.LOG, "relay $method ${shortPath(url)} failed: ${e.message}")
-                reply(id, 0, "{}", "")
+                android.util.Log.d(WebPlayerHost.LOG, "relay $label failed: ${e.javaClass.simpleName}")
+                answer(reply, id, 0, "{}", "")
             }
 
             override fun onResponse(call: Call, response: Response) {
                 response.use {
+                    if (it.isRedirect || it.code in 300..399) {
+                        android.util.Log.d(WebPlayerHost.LOG, "relay $label redirect ${it.code} rejected")
+                        return answer(reply, id, 0, "{}", "")
+                    }
+                    val text = runCatching { BoundedHttp.text(it.body, MAX_RESPONSE_BYTES) }.getOrElse { e ->
+                        android.util.Log.d(WebPlayerHost.LOG, "relay $label response rejected: ${e.message}")
+                        return answer(reply, id, 0, "{}", "")
+                    }
                     val out = JSONObject()
-                    it.headers.names().forEach { name -> out.put(name, it.header(name)) }
-                    val text = it.body.string()
+                    it.headers.names().forEach { name ->
+                        if (!name.equals("Set-Cookie", true) && !name.equals("Set-Cookie2", true)) out.put(name, it.header(name))
+                    }
                     val net = android.os.SystemClock.uptimeMillis() - asked
-                    android.util.Log.d(WebPlayerHost.LOG, "relay $method ${shortPath(url)} -> ${it.code} in $net ms")
-                    if (it.code >= 400) android.util.Log.d(WebPlayerHost.LOG, "relay error body: ${text.take(400)}")
-                    if (debuggable && AD_MARK.containsMatchIn(text)) keepAdSample(method, url, body, text)
-                    reply(id, it.code, out.toString(), text)
+                    android.util.Log.d(WebPlayerHost.LOG, "relay $label -> ${it.code} in $net ms")
+                    if (it.code >= 400) android.util.Log.d(WebPlayerHost.LOG, "relay error body: ${LogRedactor.redact(text.take(400))}")
+                    answer(reply, id, it.code, out.toString(), text)
                 }
             }
         })
     }
 
-    private fun reply(id: Int, status: Int, headersJson: String, body: String) {
-        val posted = android.os.SystemClock.uptimeMillis()
-        main.post { replyNow(id, status, headersJson, body, posted) }
-    }
-
-    private fun replyNow(id: Int, status: Int, headersJson: String, body: String, posted: Long) {
-        val waited = android.os.SystemClock.uptimeMillis() - posted
-        if (waited > 30) android.util.Log.d(WebPlayerHost.LOG, "relay reply #$id waited $waited ms for the main thread")
-        view.evaluateJavascript(
-            "window.__mspNetDone && window.__mspNetDone($id, $status, ${JSONObject.quote(headersJson)}, ${JSONObject.quote(body)})",
-            null,
-        )
-    }
-
-    private val debuggable = view.context.applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE != 0
-
-    /** Debug builds: a playback response that carries an ad, kept in cache/ad-samples for study. */
-    private fun keepAdSample(method: String, url: String, sent: String?, received: String) = runCatching {
-        val dir = java.io.File(view.context.cacheDir, "ad-samples").apply { mkdirs() }
-        java.io.File(dir, "${System.currentTimeMillis()}.json").writeText(
-            JSONObject().put("method", method).put("url", url.substringBefore('?')).put("sent", sent ?: "").put("received", received).toString())
-        android.util.Log.d(WebPlayerHost.LOG, "relay: ad in $method ${shortPath(url)} (sample kept)")
+    /** Back to the document that asked, on the main thread (reply proxies are thread-bound). */
+    private fun answer(reply: JavaScriptReplyProxy, id: Int, status: Int, headersJson: String, body: String) {
+        val message = JSONObject().put("id", id).put("status", status).put("headers", headersJson).put("body", body).toString()
+        main.post { runCatching { reply.postMessage(message) } }
     }
 
     private fun shortPath(url: String) = url.substringBefore('?').substringAfter(".com").replace(Regex("[0-9a-f]{20,}"), "…")
 
     companion object {
-        private val RELAYED = Regex("^https://[a-z0-9-]+(\\.[a-z0-9-]+)*\\.spotify\\.com/(connect-state|track-playback)/v1/")
+        private const val MAX_REQUEST_BYTES = 1_048_576
+        private const val MAX_RESPONSE_BYTES = 4_194_304
+        private const val MAX_HEADER_BYTES = 16_384
+        private val METHODS = setOf("GET", "HEAD", "POST", "PUT", "PATCH", "DELETE")
+        private val BLOCKED_HEADERS = setOf(
+            "cookie", "cookie2", "host", "origin", "referer", "connection", "content-length", "transfer-encoding",
+            "te", "trailer", "upgrade", "accept-encoding", "user-agent", "x-requested-with",
+        )
 
-        fun isRelayed(url: String) = RELAYED.containsMatchIn(url)
-
-        private val AD_MARK = Regex("\"is_advertisement\"\\s*:\\s*\"?true|spotify:ad:|\"ad_id\"")
-
-        /** Wraps window.fetch; the same pattern as [RELAYED]. */
+        /** Wraps window.fetch for the relayed routes; answers arrive on MyspotiNet's message events. */
         private val SCRIPT = """
             (() => {
               if (window.__mspNetInstalled || !window.MyspotiNet) return;
@@ -144,21 +157,27 @@ internal class ControlRelay(private val view: WebView) {
                 if (window.__mspMuted) { this.muted = false; this.volume = 0.001; }
                 return play.apply(this, arguments);
               };
-              const relayed = /^https:\/\/[a-z0-9-]+(\.[a-z0-9-]+)*\.spotify\.com\/(connect-state|track-playback)\/v1\//;
+              const relayed = /^https:\/\/(spclient\.wg|[a-z0-9]+-spclient)\.spotify\.com\/(connect-state|track-playback)\/v1\//;
               const pending = new Map();
               let seq = 0;
-              window.__mspNetDone = (id, status, headers, body) => {
-                const p = pending.get(id);
+              const net = window.MyspotiNet;
+              net.addEventListener('message', (event) => {
+                let m;
+                try { m = JSON.parse(event.data); } catch (e) { return; }
+                const p = pending.get(m.id);
                 if (!p) return;
-                pending.delete(id);
+                pending.delete(m.id);
+                const status = m.status;
                 if (!status) return p.reject(new TypeError('Failed to fetch'));
                 // A refused play or transfer (free accounts in some countries): the app tries another way.
                 if ((status === 402 || status === 403) && /player\/command|connect\/transfer/.test(p.url) && window.MyspotiHost) {
                   try { window.MyspotiHost.postMessage(JSON.stringify({ type: 'refused', status, path: p.url.split('?')[0].replace(/^.*\/v1\//, '').replace(/\/from\/.*$/, '') })); } catch (e) { /* host gone */ }
                 }
                 const noBody = status === 204 || status === 205 || status === 304;
-                p.resolve(new Response(noBody ? null : body, { status, headers: JSON.parse(headers) }));
-              };
+                let headers = {};
+                try { headers = JSON.parse(m.headers); } catch (e) { /* none */ }
+                p.resolve(new Response(noBody ? null : m.body, { status, headers }));
+              });
               const original = window.fetch;
               window.fetch = function (input, init) {
                 const url = typeof input === 'string' ? input : (input instanceof URL ? input.href : null);
@@ -170,7 +189,7 @@ internal class ControlRelay(private val view: WebView) {
                 return new Promise((resolve, reject) => {
                   const id = ++seq;
                   pending.set(id, { resolve, reject, url });
-                  window.MyspotiNet.postMessage(JSON.stringify({ id, url, method, headers, body: body == null ? null : body }));
+                  net.postMessage(JSON.stringify({ id, url, method, headers, body: body == null ? null : body }));
                 });
               };
             })();

@@ -93,8 +93,6 @@ dependencies {
     implementation(project(":host-android"))
     // Jam: scan the invite QR code (Google code scanner, no camera permission).
     implementation("com.google.android.gms:play-services-code-scanner:16.1.0")
-    // The SpotiFLAC verification opens in a browser tab, as SpotiFLAC Mobile does.
-    implementation("androidx.browser:browser:1.8.0")
     testImplementation("junit:junit:4.13.2")
     // The real org.json in unit tests (android.jar only has stubs).
     testImplementation("org.json:json:20240303")
@@ -104,6 +102,8 @@ dependencies {
     implementation(libs.androidx.appcompat)
     implementation(libs.androidx.webkit)
     implementation(libs.androidx.media)
+    // Spotilol's encrypted account profiles (Keystore-backed EncryptedSharedPreferences).
+    implementation(libs.security.crypto)
 
 
     // Jetpack Compose
@@ -128,19 +128,12 @@ dependencies {
     implementation("androidx.compose.material:material-icons-extended:1.7.8")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")
     implementation(libs.serialization.json)
-    implementation(libs.ktor.client.core)
-    implementation(libs.ktor.client.okhttp)
-    implementation(libs.ktor.client.content.negotiation)
-    implementation(libs.ktor.client.encoding)
-    implementation(libs.ktor.serialization.json)
     // Looping Spotify Canvas video on the now-playing screen
     implementation("androidx.media3:media3-exoplayer:1.8.0")
     implementation("androidx.media3:media3-exoplayer-dash:1.8.0")
     // Installs the Baseline Profiles shipped by Compose & co. on sideloaded builds
     // (faster start, less jank; Play does this itself for store installs).
     implementation("androidx.profileinstaller:profileinstaller:1.4.1")
-    // YouTube music videos (search + streams), as in Spotui / NewPipe.
-    implementation("com.github.TeamNewPipe:NewPipeExtractor:v0.26.5")
     implementation(libs.okhttp)
     implementation("androidx.media3:media3-ui:1.8.0")
     implementation("androidx.media3:media3-datasource:1.8.0")

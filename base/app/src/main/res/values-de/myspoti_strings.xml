@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- Myspoti-eigene Texte (Englisch als Standard, Deutsch). -->
 <resources>
-    <string name="welcome_tagline">Deine Musik, mit synchronisierten Songtexten und offiziellen Musikvideos.</string>
+    <string name="welcome_tagline">Deine Musik, nativ, mit Spotilols Datenschutz- und Sicherheitsregeln.</string>
     <string name="welcome_login">Mit Spotify anmelden</string>
     <string name="welcome_privacy">Du meldest dich auf Spotifys eigener Seite an. Myspoti sieht dein Passwort nie.</string>
     <string name="crash_heading">Myspoti ist abgestürzt</string>

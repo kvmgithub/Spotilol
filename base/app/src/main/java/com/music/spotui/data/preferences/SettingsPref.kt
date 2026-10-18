@@ -10,11 +10,7 @@ import androidx.compose.runtime.setValue
 private const val PREF = "settings_prefs"
 private const val KEY_LIBRARY_GRID = "library_grid_view"
 private const val KEY_LYRIC_TRANSLATE_LANG = "lyric_translate_lang"
-private const val KEY_LYRICS_EXTRA = "lyrics_extra_sources"
 
-/** Extra lyrics sources (NetEase, Genius) when Spotify and LRCLIB have none. Off by default. */
-fun isLyricsExtraSources(c: Context): Boolean = prefs(c).getBoolean(KEY_LYRICS_EXTRA, false)
-fun setLyricsExtraSources(c: Context, v: Boolean) = prefs(c).edit().putBoolean(KEY_LYRICS_EXTRA, v).apply()
 
 private fun prefs(c: Context) = c.getSharedPreferences(PREF, Context.MODE_PRIVATE)
 

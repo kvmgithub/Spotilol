@@ -6,11 +6,9 @@ import android.net.Uri
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -25,7 +23,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.foundation.border
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -34,11 +31,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.myspoti.engine.BuildConfig
 import app.myspoti.engine.R
-import com.music.spotui.data.api.SupportReminder
-import com.music.spotui.ui.theme.AppAccent
 
-const val DISCORD_URL = "https://discord.gg/jXKnGVFnGS"
-private val repo get() = BuildConfig.UPDATE_REPO.ifBlank { "kota-zo/myspoti" }
+private const val SOURCE_URL = "https://github.com/kvmgithub/Spotilol/tree/myspoti-ui"
+private const val UPSTREAM_URL = "https://github.com/kota-zo/myspoti"
 
 private fun openUrl(context: Context, url: String) {
     runCatching {
@@ -46,12 +41,11 @@ private fun openUrl(context: Context, url: String) {
     }
 }
 
-/** About: the version, the Discord community, the source code and Ko-fi. */
+/** About: the version, the source code and the upstream credit (GPL-3.0). No donation prompts. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AboutSheet(onDismiss: () -> Unit) {
     val context = LocalContext.current
-    // Opened in full: half open, it hid the support buttons at the bottom.
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = androidx.compose.material3.rememberModalBottomSheetState(skipPartiallyExpanded = true),
@@ -64,59 +58,15 @@ fun AboutSheet(onDismiss: () -> Unit) {
                     modifier = Modifier.size(56.dp).clip(RoundedCornerShape(14.dp)).background(Color(0xFF121212)),
                 )
                 Column(Modifier.padding(start = 14.dp)) {
-                    Text("Myspoti", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                    Text(stringResource(R.string.app_name), color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold)
                     Text("${stringResource(R.string.settings_item_version_title)} ${BuildConfig.VERSION_NAME}",
                         color = Color(0xFFB3B3B3), fontSize = 13.sp)
                 }
             }
-            Text(stringResource(R.string.about_free), color = Color(0xFFB3B3B3), fontSize = 13.sp,
+            Text(stringResource(R.string.spotilol_about_body), color = Color(0xFFB3B3B3), fontSize = 13.sp,
                 modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 12.dp, bottom = 8.dp))
-            AboutRow(stringResource(R.string.about_discord), stringResource(R.string.about_discord_detail)) { openUrl(context, DISCORD_URL) }
-            AboutRow(stringResource(R.string.about_github), stringResource(R.string.about_github_detail)) { openUrl(context, "https://github.com/$repo") }
-            Text(stringResource(R.string.support_body), color = Color(0xFFB3B3B3), fontSize = 13.sp,
-                modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 14.dp, bottom = 12.dp))
-            Box(
-                contentAlignment = Alignment.Center,
-                modifier = Modifier.padding(horizontal = 20.dp).fillMaxWidth().height(48.dp).clip(RoundedCornerShape(50))
-                    .background(AppAccent).pressable(0.96f) { SupportReminder.open(context) },
-            ) { Text(stringResource(R.string.support_action), color = Color.Black, fontSize = 16.sp, fontWeight = FontWeight.Bold) }
-            GitHubSponsorButton(Modifier.padding(start = 20.dp, end = 20.dp, top = 10.dp))
-        }
-    }
-}
-
-/** GitHub Sponsors, under the Ko-fi button: outlined, so Ko-fi stays the main one. */
-@Composable
-fun GitHubSponsorButton(modifier: Modifier = Modifier, onClick: (() -> Unit)? = null) {
-    val context = LocalContext.current
-    Box(
-        contentAlignment = Alignment.Center,
-        modifier = modifier.fillMaxWidth().height(48.dp).clip(RoundedCornerShape(50))
-            .border(1.dp, Color.White.copy(alpha = 0.6f), RoundedCornerShape(50))
-            .pressable(0.96f) { onClick?.invoke() ?: SupportReminder.openSponsors(context) },
-    ) { Text(stringResource(R.string.support_github_action), color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold) }
-}
-
-/** "Support Myspoti" from the profile menu: Ko-fi or GitHub Sponsors, the user picks. */
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun SupportSheet(onDismiss: () -> Unit) {
-    val context = LocalContext.current
-    ModalBottomSheet(
-        onDismissRequest = onDismiss,
-        sheetState = androidx.compose.material3.rememberModalBottomSheetState(skipPartiallyExpanded = true),
-        containerColor = Color(0xFF282828),
-    ) {
-        androidx.compose.foundation.layout.Column(Modifier.padding(start = 20.dp, end = 20.dp, bottom = 28.dp)) {
-            Text(stringResource(R.string.support_title), color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold)
-            Text(stringResource(R.string.support_body), color = Color(0xFFB3B3B3), fontSize = 14.sp,
-                modifier = Modifier.padding(top = 10.dp, bottom = 18.dp))
-            Box(
-                contentAlignment = Alignment.Center,
-                modifier = Modifier.fillMaxWidth().height(48.dp).clip(RoundedCornerShape(50))
-                    .background(AppAccent).pressable(0.96f) { onDismiss(); SupportReminder.open(context) },
-            ) { Text(stringResource(R.string.support_action), color = Color.Black, fontSize = 16.sp, fontWeight = FontWeight.Bold) }
-            GitHubSponsorButton(Modifier.padding(top = 10.dp)) { onDismiss(); SupportReminder.openSponsors(context) }
+            AboutRow(stringResource(R.string.spotilol_about_source), stringResource(R.string.spotilol_about_source_detail)) { openUrl(context, SOURCE_URL) }
+            AboutRow(stringResource(R.string.spotilol_about_upstream), stringResource(R.string.spotilol_about_upstream_detail)) { openUrl(context, UPSTREAM_URL) }
         }
     }
 }

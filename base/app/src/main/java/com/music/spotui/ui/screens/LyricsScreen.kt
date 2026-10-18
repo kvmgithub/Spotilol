@@ -87,8 +87,6 @@ import com.music.spotui.data.api.LyricsApi
 import com.music.spotui.data.entity.LyricLine
 import com.music.spotui.data.entity.Lyrics
 import com.music.spotui.data.preferences.getLyricTranslateLang
-import com.music.spotui.data.preferences.isLyricsExtraSources
-import com.music.spotui.data.preferences.setLyricsExtraSources
 import com.music.spotui.di.SongPlayer
 import com.music.spotui.ui.components.rememberFrameClock
 import com.music.spotui.ui.viewmodel.LyricsViewModel
@@ -315,7 +313,7 @@ fun LyricsScreen(
                 LyricsMenu(
                     expanded = menu,
                     onDismiss = { menu = false },
-                    canTranslate = state is LyricsViewModel.State.Loaded,
+                    canTranslate = false,
                     translating = (state as? LyricsViewModel.State.Loaded)?.showTranslation == true,
                     onTranslate = { vm.toggleTranslation(targetLanguage) },
                     onReload = { SongPlayer.currentLyricsTrack()?.let { vm.load(it, force = true) } },
@@ -382,7 +380,7 @@ fun LyricsScreen(
                 LyricsControls(
                     palette = palette,
                     position = position,
-                    showTranslate = state.translationChecked && !sameLanguage,
+                    showTranslate = false,
                     translationActive = state.showTranslation,
                     translating = state.translating && state.translationRequested,
                     onTranslate = { vm.toggleTranslation(targetLanguage) },
@@ -402,28 +400,10 @@ private fun LyricsMenu(
     onTranslate: () -> Unit,
     onReload: () -> Unit,
 ) {
-    val context = LocalContext.current
-    var extra by remember { mutableStateOf(isLyricsExtraSources(context)) }
     DropdownMenu(expanded = expanded, onDismissRequest = onDismiss) {
         if (canTranslate) DropdownMenuItem(
             text = { Text(stringResource(if (translating) R.string.lyrics_fullscreen_translate_button_enabled_readout_value else R.string.lyrics_fullscreen_context_menu_main_page_translate_lyrics_action)) },
             onClick = { onDismiss(); onTranslate() },
-        )
-        DropdownMenuItem(
-            text = {
-                Column {
-                    Text(stringResource(R.string.lyrics_extra_title))
-                    Text(stringResource(R.string.lyrics_extra_summary), fontSize = 12.sp, color = Color.Gray)
-                }
-            },
-            trailingIcon = { if (extra) Icon(Icons.Default.Check, contentDescription = null) },
-            onClick = {
-                extra = !extra
-                setLyricsExtraSources(context, extra)
-                LyricsApi.extraSources = extra
-                onDismiss()
-                onReload()
-            },
         )
         DropdownMenuItem(text = { Text(stringResource(R.string.lyrics_reload)) }, onClick = { onDismiss(); onReload() })
     }

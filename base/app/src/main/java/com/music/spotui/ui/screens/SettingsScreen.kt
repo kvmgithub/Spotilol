@@ -45,13 +45,12 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import app.myspoti.engine.R
-import com.music.spotui.ui.components.DownloadQualityPicker
 import com.music.spotui.ui.components.StreamingQualityPicker
 import com.music.spotui.ui.theme.AppBackground
 
 /**
- * Settings, on one page: sound quality (streaming and downloads), the lossless source,
- * data and battery, display, language, and the player's own repair tools.
+ * Settings, on one page: streaming quality, Spotilol's encrypted account profiles, data and
+ * battery, display, language, diagnostics and the player's own repair tools.
  */
 @Composable
 fun SettingsScreen(navController: NavController) {
@@ -75,23 +74,8 @@ fun SettingsScreen(navController: NavController) {
             )
             Divider()
 
-            Section(R.string.settings_section_downloads)
-            DownloadQualityPicker()
-            // The lossless source: SpotiFLAC's own servers once verified.
-            Column(
-                Modifier.fillMaxWidth().clickable { navController.navigate(com.music.spotui.ui.navigation.Routes.Spotiflac.route) }
-                    .padding(horizontal = 20.dp, vertical = 10.dp),
-            ) {
-                Text(stringResource(R.string.spotiflac_row_title), color = Color.White, fontSize = 16.sp)
-                Text(
-                    stringResource(
-                        if (com.music.spotui.data.preferences.hasSpotiflacSession(ctx)) R.string.spotiflac_row_on
-                        else R.string.spotiflac_row_off,
-                    ),
-                    color = Color(0xFFB3B3B3), fontSize = 12.sp,
-                )
-            }
-            if (com.music.spotui.data.offline.OfflineStore.tracks.isNotEmpty()) RemoveDownloadsRow()
+            Section(R.string.spotilol_section_accounts)
+            com.music.spotui.ui.components.AccountProfiles()
             Divider()
 
             Section(R.string.settings_section_data)
@@ -149,6 +133,12 @@ fun SettingsScreen(navController: NavController) {
             Divider()
 
             Section(R.string.settings_section_app)
+            OptionRow(
+                label = stringResource(R.string.spotilol_diagnostics_title),
+                detail = stringResource(R.string.spotilol_diagnostics_detail),
+                checked = com.music.spotui.data.BetaLogs.enabled.value,
+                onChecked = { com.music.spotui.data.BetaLogs.setEnabled(ctx, it) },
+            )
             // The hidden Web Player stuck or crashed: rebuild it without leaving the app.
             Column(
                 Modifier.fillMaxWidth().clickable { app.myspoti.host.android.MyspotiRuntime.host.reload() }
@@ -278,39 +268,6 @@ private fun LanguageRow() {
         }
     }
 }
-
-/** "Remove all downloads", with the space they take; asks first, like the official app. */
-@Composable
-private fun RemoveDownloadsRow() {
-    val ctx = androidx.compose.ui.platform.LocalContext.current
-    var ask by remember { androidx.compose.runtime.mutableStateOf(false) }
-    val size = android.text.format.Formatter.formatShortFileSize(ctx, com.music.spotui.data.offline.OfflineStore.totalBytes())
-    androidx.compose.foundation.layout.Column(
-        Modifier.fillMaxWidth().clickable { ask = true }.padding(horizontal = 20.dp, vertical = 10.dp),
-    ) {
-        Text(stringResource(R.string.settings_item_remove_downloads_title), color = Color.White, fontSize = 16.sp)
-        Text(stringResource(R.string.downloads_size, size), color = Color(0xFFB3B3B3), fontSize = 12.sp)
-    }
-    if (ask) androidx.compose.material3.AlertDialog(
-        onDismissRequest = { ask = false },
-        containerColor = Color(0xFF282828),
-        title = { Text(stringResource(R.string.settings_storage_remove_downloads_dialog_title), color = Color.White) },
-        text = { Text(stringResource(R.string.playlist_entity_remove_download_dialog_description), color = Color(0xFFB3B3B3)) },
-        confirmButton = {
-            androidx.compose.material3.TextButton(onClick = {
-                ask = false
-                com.music.spotui.data.offline.OfflineDownloader.removeAll()
-            }) { Text(stringResource(R.string.playlist_entity_remove_download_dialog_positive_button), color = com.music.spotui.ui.theme.AppAccent) }
-        },
-        dismissButton = {
-            androidx.compose.material3.TextButton(onClick = { ask = false }) {
-                Text(stringResource(R.string.add_to_playlist_button_cancel), color = Color.White)
-            }
-        },
-    )
-}
-
-
 
 @Composable
 private fun OptionRow(label: String, detail: String, checked: Boolean,

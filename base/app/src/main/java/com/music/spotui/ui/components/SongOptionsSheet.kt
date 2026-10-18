@@ -170,31 +170,7 @@ fun SongOptionsSheet(
                     onOpenQueue()
                 }
             }
-            val offline = com.music.spotui.data.offline.OfflineStore.statusOf(song.spotifyTrackId)
-            when (offline) {
-                com.music.spotui.data.offline.OfflineStatus.Done -> MenuRow(
-                    null, stringResource(R.string.context_menu_undownload),
-                    leading = { DownloadBadge(offline, size = 22.dp) },
-                ) {
-                    toast(context.getString(if (com.music.spotui.data.offline.OfflineCollections.removeSong(song.spotifyTrackId)) R.string.toast_undownload else R.string.download_kept_by_list))
-                    onDismiss()
-                }
-                com.music.spotui.data.offline.OfflineStatus.Queued, is com.music.spotui.data.offline.OfflineStatus.Downloading -> MenuRow(
-                    null, stringResource(R.string.download_cancel),
-                    leading = { DownloadBadge(offline, size = 22.dp) },
-                ) {
-                    com.music.spotui.data.offline.OfflineDownloader.cancel(song.spotifyTrackId)
-                    onDismiss()
-                }
-                else -> MenuRow(Icons.Outlined.ArrowCircleDown, stringResource(R.string.context_menu_download), enabled = hasId) {
-                    com.music.spotui.ui.components.DownloadAsk.start(context) { q ->
-                        com.music.spotui.data.offline.OfflineCollections.downloadSong(song, q)
-                        com.music.spotui.di.Haptics.confirm()
-                        toast(context.getString(R.string.download_notification_downloading))
-                    }
-                    onDismiss()
-                }
-            }
+            // Downloads are removed in Spotilol UI.
             MenuRow(Icons.Outlined.Radio, stringResource(R.string.context_menu_go_to_song_radio), enabled = hasId) {
                 onDismiss()
                 playerViewModel.goToSongRadio(song.spotifyTrackId, song.title,

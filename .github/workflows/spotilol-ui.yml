@@ -61,6 +61,8 @@ jobs:
             -PappVersionCode="$APK_VERSION_CODE" -PappVersionName="$APK_VERSION_NAME" \
             2>&1 | tee "$RUNNER_TEMP/build.log"
       - name: Verify and name APK
+        env:
+          UI_STRICT_REMOVALS: '1'
         run: |
           exec > >(tee -a "$RUNNER_TEMP/build.log") 2>&1
           mkdir -p release-assets
@@ -77,6 +79,7 @@ jobs:
           assert fields['name'] == 'com.project.lol.fork.ui', fields
           assert fields['versionName'] == os.environ['APK_VERSION_NAME'], fields
           assert 'application-debuggable' not in data
+          assert 'REQUEST_INSTALL_PACKAGES' not in data, 'in-app installer permission present'
           with zipfile.ZipFile(sys.argv[1]) as apk:
               names = apk.namelist()
               abis = {p.split('/')[1] for p in names if p.startswith('lib/') and p.endswith('.so')}

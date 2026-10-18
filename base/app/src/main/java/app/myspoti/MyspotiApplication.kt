@@ -2,10 +2,6 @@ package app.myspoti
 
 import android.app.Application
 import android.content.Context
-import android.support.v4.media.MediaBrowserCompat
-import app.myspoti.host.android.MediaLibrary
-import app.myspoti.host.android.PlaybackService
-import com.music.spotui.di.AutoBrowser
 import com.music.spotui.di.Graph
 import com.music.spotui.di.SongPlayer
 import kotlinx.coroutines.flow.first
@@ -16,7 +12,7 @@ class MyspotiApplication : Application() {
     override fun onCreate() {
         super.onCreate()
         app.myspoti.power.EnergySettings.init(this)
-        // Spotify session (hidden Web Player + API), caches, downloads, data saver.
+        // Spotify session (hidden Web Player + API), caches, data saver.
         Graph.init(this)
         SongPlayer.attachEngine(Graph.currentSongState)
         // Headphones or Bluetooth gone: pause rather than play on the speaker.
@@ -24,11 +20,6 @@ class MyspotiApplication : Application() {
         // Downloaded songs are no longer reported to Spotify: drop the old report queue,
         // whose replays sent play commands that took over the Web Player.
         runCatching { java.io.File(filesDir, "wrapped_queue.json").delete() }
-        PlaybackService.library = object : MediaLibrary {
-            override suspend fun children(context: Context, parentId: String): List<MediaBrowserCompat.MediaItem> =
-                AutoBrowser.children(context, parentId)
-            override suspend fun search(query: String): List<MediaBrowserCompat.MediaItem> = AutoBrowser.search(query)
-        }
         prefetch()
     }
 

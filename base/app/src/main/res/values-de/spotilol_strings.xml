@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Spotilol-UI-eigene Texte (Deutsch). -->
+<resources>
+    <string name="spotilol_section_accounts">Konten</string>
+    <string name="spotilol_profile_save">Aktuelles Konto speichern</string>
+    <string name="spotilol_profile_save_hint">Verschlüsselt auf diesem Gerät; später ohne erneute Anmeldung wechseln.</string>
+    <string name="spotilol_profile_name_hint">Profilname</string>
+    <string name="spotilol_profile_saved">Profil gespeichert</string>
+    <string name="spotilol_profile_save_failed">Keine angemeldete Sitzung zum Speichern</string>
+    <string name="spotilol_profile_unavailable">Verschlüsselter Speicher nicht verfügbar</string>
+    <string name="spotilol_profile_switch_title">Zu %1$s wechseln?</string>
+    <string name="spotilol_profile_switch_detail">Die Wiedergabe stoppt; Caches und Rückblick dieses Kontos auf dem Gerät werden geleert.</string>
+    <string name="spotilol_profile_switch">Wechseln</string>
+    <string name="spotilol_profile_switch_failed">Profil konnte nicht angewendet werden</string>
+    <string name="spotilol_profile_delete">Löschen</string>
+    <string name="spotilol_profile_delete_title">Profil %1$s löschen?</string>
+    <string name="spotilol_profile_save_button">Speichern</string>
+    <string name="spotilol_diagnostics_title">Diagnoseprotokoll</string>
+    <string name="spotilol_diagnostics_detail">Zeigt den Log-Punkt unten rechts. Protokolle sind geschwärzt und verlassen das Gerät nur, wenn du sie kopierst.</string>
+    <string name="spotilol_about_body">Die native Oberfläche von Myspoti mit dem Datenschutz- und Sicherheitsumfang von Spotilol Lite. Freie Software unter der GPL-3.0.</string>
+    <string name="spotilol_about_source">Quellcode</string>
+    <string name="spotilol_about_source_detail">kvmgithub/Spotilol, Branch myspoti-ui</string>
+    <string name="spotilol_about_upstream">Basiert auf Myspoti</string>
+    <string name="spotilol_about_upstream_detail">kota-zo/myspoti (GPL-3.0), Oberfläche aus Spotui und Metrolist</string>
+</resources>

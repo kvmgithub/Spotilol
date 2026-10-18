@@ -64,7 +64,7 @@ private fun granted(context: Context, permission: String) =
     context.checkSelfPermission(permission) == PackageManager.PERMISSION_GRANTED
 
 @Composable
-fun SetupScreen(onDone: () -> Unit, onSpotiflac: () -> Unit = {}) {
+fun SetupScreen(onDone: () -> Unit) {
     val context = LocalContext.current
     // Re-read when coming back from a system dialog or the settings.
     var tick by remember { mutableIntStateOf(0) }
@@ -105,12 +105,6 @@ fun SetupScreen(onDone: () -> Unit, onSpotiflac: () -> Unit = {}) {
             stringResource(R.string.setup_battery_title), stringResource(R.string.setup_battery_detail),
             BatteryExemption.isExempt(context),
         ) { BatteryExemption.request(context) }
-        // Lossless downloads need SpotiFLAC's one-off verification (the quality toggle
-        // lives in Settings); not verified yet, the lossless source stays OFF.
-        if (com.music.spotui.data.preferences.getDownloadQuality(context) != com.music.spotui.data.preferences.DownloadQuality.OFF) SetupRow(
-            stringResource(R.string.setup_spotiflac_title), stringResource(R.string.setup_spotiflac_detail),
-            com.music.spotui.data.preferences.hasSpotiflacSession(context),
-        ) { onSpotiflac() }
         Spacer(Modifier.height(12.dp))
         Button(
             onClick = { Setup.done(context); onDone() },
@@ -133,7 +127,6 @@ private fun QualityStep(onNext: () -> Unit) {
         Text(stringResource(R.string.setup_quality_subtitle), color = Color(0xFFB3B3B3), fontSize = 14.sp,
             modifier = Modifier.padding(horizontal = 20.dp))
         com.music.spotui.ui.components.StreamingQualityPicker(Modifier.padding(top = 8.dp))
-        com.music.spotui.ui.components.DownloadQualityPicker()
         Button(
             onClick = onNext,
             colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1DB954), contentColor = Color.Black),

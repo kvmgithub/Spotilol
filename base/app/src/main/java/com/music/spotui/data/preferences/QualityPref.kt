@@ -1,7 +1,7 @@
 package com.music.spotui.data.preferences
 
 /*
- * Sound quality: what the Web Player streams, and how downloads are saved.
+ * Sound quality: what the Web Player streams (downloads are removed in Spotilol UI).
  */
 
 import android.content.Context
@@ -23,21 +23,6 @@ enum class StreamingQuality(val level: String) {
     }
 }
 
-/**
- * How a downloaded song is saved: not at all, small (AAC re-encoded from the checked FLAC),
- * FLAC 16-bit (CD), or FLAC 24-bit when it exists.
- */
-enum class DownloadQuality {
-    OFF, SMALL, CD, HI_RES,
-    /** Asked when a download starts (once for a whole playlist or album). */
-    ASK;
-
-    companion object {
-        /** A quality a file can be saved in ([ASK] and [OFF] are not); null when unknown. */
-        fun saved(name: String?): DownloadQuality? = entries.firstOrNull { it.name == name }?.takeIf { it != ASK && it != OFF }
-    }
-}
-
 fun getStreamingQuality(c: Context): StreamingQuality =
     StreamingQuality.of(prefs(c).getString(KEY_STREAMING, null))
 
@@ -52,21 +37,6 @@ fun applyStreamingQuality(q: StreamingQuality) {
     val runtime = app.myspoti.host.android.MyspotiRuntime
     if (!runtime.isStarted) return
     runtime.scope.launch { runtime.spotify.player.setAudioQuality(q.level) }
-}
-
-fun getDownloadQuality(c: Context): DownloadQuality = when {
-    !isLosslessEnabled(c) -> DownloadQuality.OFF
-    isAskDownloadQuality(c) -> DownloadQuality.ASK
-    isSmallDownloads(c) -> DownloadQuality.SMALL
-    isHiRes(c) -> DownloadQuality.HI_RES
-    else -> DownloadQuality.CD
-}
-
-fun setDownloadQuality(c: Context, q: DownloadQuality) {
-    setLosslessEnabled(c, q != DownloadQuality.OFF)
-    setHiRes(c, q == DownloadQuality.HI_RES)
-    setSmallDownloads(c, q == DownloadQuality.SMALL)
-    setAskDownloadQuality(c, q == DownloadQuality.ASK)
 }
 
 /** The quality step of the onboarding was seen (new installs and updates alike). */

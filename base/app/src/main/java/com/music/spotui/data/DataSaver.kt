@@ -65,9 +65,7 @@ object DataSaver {
         runCatching {
             cm.registerDefaultNetworkCallback(object : ConnectivityManager.NetworkCallback() {
                 override fun onCapabilitiesChanged(network: Network, caps: NetworkCapabilities) {
-                    val was = metered
                     metered = !caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_METERED)
-                    if (was && !metered) com.music.spotui.data.offline.OfflineCollections.onUnmetered(app)
                     changed()
                 }
                 override fun onLost(network: Network) {

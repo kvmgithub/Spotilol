@@ -15,6 +15,19 @@ import java.util.Locale
  */
 object BetaLogs {
     const val MINUTES = 3
+    private const val PREF = "diagnostics"
+
+    /** Spotilol's switchable diagnostics: shows the log button when on (Settings). */
+    val enabled by lazy {
+        androidx.compose.runtime.mutableStateOf(
+            com.music.spotui.di.Graph.app.getSharedPreferences(PREF, android.content.Context.MODE_PRIVATE).getBoolean("enabled", false))
+    }
+
+    fun setEnabled(context: android.content.Context, on: Boolean) {
+        enabled.value = on
+        context.getSharedPreferences(PREF, android.content.Context.MODE_PRIVATE).edit().putBoolean("enabled", on).apply()
+    }
+
     /** Clipboard and share sheets refuse very large texts. */
     private const val MAX_CHARS = 400_000
 
@@ -26,16 +39,14 @@ object BetaLogs {
                 .redirectErrorStream(true).start()
             process.inputStream.bufferedReader().use { it.readText() }.also { process.waitFor() }
         }.getOrElse { "logcat unavailable: ${it.message}" }
-        val header = "Myspoti ${app.myspoti.engine.BuildConfig.VERSION_NAME} · Android ${android.os.Build.VERSION.RELEASE} (SDK ${android.os.Build.VERSION.SDK_INT}) · " +
+        val header = "Spotilol UI ${app.myspoti.engine.BuildConfig.VERSION_NAME} · Android ${android.os.Build.VERSION.RELEASE} (SDK ${android.os.Build.VERSION.SDK_INT}) · " +
             "${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL} · last $minutes min\n\n"
         header + sanitize(useful(text)).takeLast(MAX_CHARS)
     }
 
     /** The app's log tags (Myspoti = the Web Player bridge). */
     private val TAGS = listOf(
-        "Myspoti", "MspPlayer", "Api", "player", "Offline", "OfflineLists", "LosslessSource", "LosslessRegistry",
-        "DashFlacRemux", "Spotiflac", "Wrapped", "SpotifySync", "LyricsApi", "LyricTranslate", "MusicVideo",
-        "ScreenCache", "AppUpdater",
+        "Myspoti", "MspPlayer", "Api", "player", "Offline", "Wrapped", "SpotifySync", "LyricsApi", "ScreenCache",
     )
 
     /** Lines that only repeat what the page or the player already said. */
@@ -68,5 +79,7 @@ object BetaLogs {
         Regex("[A-Za-z0-9+/_\\-]{80,}={0,2}") to "<long value>",
     )
 
-    fun sanitize(text: String): String = rules.fold(text) { t, (r, s) -> r.replace(t, s) }
+    /** Myspoti's masks, then Spotilol's shared LogRedactor (cookies, secrets, challenge paths). */
+    fun sanitize(text: String): String =
+        app.myspoti.spotify.security.LogRedactor.redact(rules.fold(text) { t, (r, s) -> r.replace(t, s) })
 }

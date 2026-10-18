@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Spotilol UI's own texts (English default, German in values-de). -->
+<resources>
+    <string name="spotilol_section_accounts">Accounts</string>
+    <string name="spotilol_profile_save">Save current account</string>
+    <string name="spotilol_profile_save_hint">Encrypted on this phone; switch later without signing in again.</string>
+    <string name="spotilol_profile_name_hint">Profile name</string>
+    <string name="spotilol_profile_saved">Profile saved</string>
+    <string name="spotilol_profile_save_failed">No signed-in session to save</string>
+    <string name="spotilol_profile_unavailable">Encrypted storage unavailable</string>
+    <string name="spotilol_profile_switch_title">Switch to %1$s?</string>
+    <string name="spotilol_profile_switch_detail">Playback stops; this account\'s caches and Recap on the phone are cleared.</string>
+    <string name="spotilol_profile_switch">Switch</string>
+    <string name="spotilol_profile_switch_failed">Profile could not be applied</string>
+    <string name="spotilol_profile_delete">Delete</string>
+    <string name="spotilol_profile_delete_title">Delete profile %1$s?</string>
+    <string name="spotilol_profile_save_button">Save</string>
+    <string name="spotilol_diagnostics_title">Diagnostic logs</string>
+    <string name="spotilol_diagnostics_detail">Shows the log dot at the bottom right. Logs are redacted and leave the phone only when you copy them.</string>
+    <string name="spotilol_about_body">Myspoti\'s native interface with Spotilol Lite\'s privacy and security scope. Free software under the GPL-3.0.</string>
+    <string name="spotilol_about_source">Source code</string>
+    <string name="spotilol_about_source_detail">kvmgithub/Spotilol, branch myspoti-ui</string>
+    <string name="spotilol_about_upstream">Based on Myspoti</string>
+    <string name="spotilol_about_upstream_detail">kota-zo/myspoti (GPL-3.0), with UI from Spotui and Metrolist</string>
+</resources>

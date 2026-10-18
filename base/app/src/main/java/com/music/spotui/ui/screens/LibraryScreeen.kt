@@ -272,8 +272,8 @@ fun LibraryScreen(navController: NavController) {
                 val localName = stringResource(R.string.local_files_title)
                 val downloadsName = stringResource(R.string.collection_downloaded)
                 val localSubtitle = stringResource(R.string.assisted_curation_search_playlist) + " • " + stringResource(R.string.local_playlist_subtitle)
-                val hasDownloads = com.music.spotui.data.offline.OfflineStore.tracks.isNotEmpty() ||
-                    com.music.spotui.data.offline.OfflineDownloader.requests.isNotEmpty()
+                // Downloads are removed in Spotilol UI: the "Downloaded" folder never appears.
+                val hasDownloads = false
                 val likedName = stringResource(R.string.collection_liked_songs_title)
                 // Liked Songs, Local Files and Downloaded stay on top; the rest follows the chosen sort.
                 val rootPinned = ((entries as? Response.Success)?.data ?: emptyList())
@@ -544,7 +544,6 @@ private fun prefetchLibraryEntry(entry: LibraryEntry) = when {
 private fun openLibraryEntry(entry: LibraryEntry, navController: NavController) {
     if (entry.isFolder) navController.navigate(folderRoute(entry.folderUri, entry.name))
     else if (entry.spotifyId.startsWith(LOCAL_PLAYLIST_PREFIX)) navController.navigate(localPlaylistRoute(entry.spotifyId.removePrefix(LOCAL_PLAYLIST_PREFIX)))
-    else if (entry.spotifyId == Api.HomeCache.DOWNLOADS_ID) navController.navigate(Routes.Downloads.route)
     else if (entry.spotifyId == Api.HomeCache.LOCAL_FILES_ID) navController.navigate(Routes.LocalFiles.route)
     else if (entry.spotifyId == Api.HomeCache.LIKED_SONGS_ID) navController.navigate(Routes.Liked.route)
     else if (entry.spotifyId == Api.HomeCache.EPISODES_ID) navController.navigate(Routes.Episodes.route)

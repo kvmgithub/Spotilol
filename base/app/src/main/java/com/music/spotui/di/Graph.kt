@@ -19,16 +19,13 @@ object Graph {
         // The streaming quality the user chose, set on the player at every page load.
         com.music.spotui.data.preferences.applyStreamingQuality(com.music.spotui.data.preferences.getStreamingQuality(application))
         com.music.spotui.data.local.ListenHistory.init(application)
-        // Downloaded songs (private storage), and the downloads left unfinished last time.
-        // Supporter thank-yous (accent colour) before any screen draws.
+        // Supporter accent colour state before any screen draws (no prompts in this variant).
         com.music.spotui.data.api.SupportReminder.init(application)
+        // The (always empty) download index: downloads are removed, the index stays inert.
         com.music.spotui.data.offline.OfflineStore.init(application)
-        com.music.spotui.data.offline.OfflineCollections.init(application)
-        com.music.spotui.data.offline.OfflineCollections.refreshAll(application)
         com.music.spotui.data.local.LocalPlaylists.init(application)
         com.music.spotui.data.local.LibraryOrder.init(application)
         runCatching { com.music.spotui.data.DataSaverGlide.install(application) }
-        com.music.spotui.data.offline.OfflineDownloader.resumePending()
     }
 
     val api: Api by lazy { Api(app) }

@@ -64,7 +64,7 @@ fun MainBottomNavigation(navController: NavHostController, bottomBarState: Mutab
     // which raced during transitions and left the mini player over the full one).
     val shownRoute = navController.currentBackStackEntryAsState().value?.destination?.route
     // The SpotiFLAC verification too: under the bar its retry and skip buttons were out of reach.
-    val fullScreen = shownRoute == Routes.Player.route || shownRoute == Routes.Queue.route || shownRoute == Routes.Spotiflac.route
+    val fullScreen = shownRoute == Routes.Player.route || shownRoute == Routes.Queue.route
     val hasTrack = com.music.spotui.di.Graph.currentSongState.title.value.isNotBlank()
     // No motion of its own: the bar sits above the pages, so sliding it while the
     // player rises (or collapses behind it) made one gesture look like two.

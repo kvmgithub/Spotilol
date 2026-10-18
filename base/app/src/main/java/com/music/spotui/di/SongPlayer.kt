@@ -133,8 +133,6 @@ object SongPlayer {
     /** Wires the API's flows into the UI's now-playing state. Call once, on the main thread. */
     fun attachEngine(state: CurrentSongState) {
         boundState = state
-        com.music.spotui.data.api.LyricsApi.extraSources =
-            com.music.spotui.data.preferences.isLyricsExtraSources(Graph.app)
         restoreLastTrack(state)
         scope.launch { api.player.state.collect { s -> if (acceptsSessionUpdates()) applyState(s) } }
         // Another device plays (the phone as a remote): the page does not always report its
@@ -167,8 +165,9 @@ object SongPlayer {
         override fun previous() = SongPlayer.previous()
         override fun seekTo(ms: Long) = SongPlayer.seekTo(ms)
         override fun setLiked(liked: Boolean) = SongPlayer.setLiked(liked)
-        override fun playFromMediaId(mediaId: String) = AutoBrowser.play(mediaId)
-        override fun playFromSearch(query: String) { scope.launch { AutoBrowser.playFromSearch(query) } }
+        // No Android Auto / voice browsing in this variant.
+        override fun playFromMediaId(mediaId: String) {}
+        override fun playFromSearch(query: String) {}
         override fun setRemoteVolume(volume: Int) = SongPlayer.setRemoteVolume(volume)
         override fun setShuffle(on: Boolean) = SongPlayer.setShuffle(on)
     }
@@ -282,11 +281,6 @@ object SongPlayer {
             liked = liked,
             shuffle = st?.shuffle?.value == true,
         ))
-        com.music.spotui.widget.NowPlayingWidget.show(Graph.app,
-            title = song?.title ?: st?.title?.value.orEmpty(),
-            artist = song?.singer ?: st?.singer?.value.orEmpty(),
-            coverUrl = song?.coverUri ?: st?.coverUri?.value,
-            playing = isPlaying())
     }
 
     /** The autoplay item already paused on, so it is paused once, not on every state. */
@@ -371,14 +365,8 @@ object SongPlayer {
             refreshCurrentLiked()
             refreshDevice()
         }
-        val mv = com.music.spotui.video.MusicVideoController
-        mv.onAudioBuffering(isBuffering, song.spotifyTrackId)
-        // Clip lookup only where it can pay off: video wanted, or the player screen
-        // is up (toggle then is instant). Looking up every track by default cost
-        // searches and full-audio alignment downloads for users who never watch.
-        if (!isBuffering && playing && mv.inForeground && (mv.wantVideo || mv.hasPlayerScreen) && song.spotifyTrackId.isNotBlank())
-            com.music.spotui.video.MusicVideoController.prepare(song.spotifyTrackId, song.title, song.singer, durationMs)
-        if (!isBuffering && playing && mv.inForeground && app.myspoti.power.EnergySettings.state.value.policy.allowBackgroundLookups) {
+        // Spotify's own lyrics only (no third-party sources in this variant), while on screen.
+        if (!isBuffering && playing && inForeground && app.myspoti.power.EnergySettings.state.value.policy.allowBackgroundLookups) {
             com.music.spotui.data.api.LyricsApi.prefetch(lyricsTrack(song))
             _nowPlaying.value.next?.let { com.music.spotui.data.api.LyricsApi.prefetch(lyricsTrack(it)) }
         }
@@ -840,8 +828,11 @@ object SongPlayer {
     private val libraryLock = kotlinx.coroutines.sync.Mutex()
     private val libraryWrites = java.util.concurrent.atomic.AtomicInteger()
 
-    // ── Music video: Spotify's own clips are not played by this engine; the YouTube
-    // clips (MusicVideoController) are. These keep the player screen's contract. ──
+    /** The app is on screen (MainActivity onStart/onStop): background lookups wait otherwise. */
+    @Volatile var inForeground = false
+
+    // ── Music video: removed in Spotilol UI (no YouTube clips). These keep the player
+    // screen's contract; nothing is ever available. ──
     data class VideoState(val available: Boolean = false, val on: Boolean = false, val ready: Boolean = false, val aspect: Float = 0f, val placed: Boolean = false)
     private val _video = mutableStateOf(VideoState())
     val video: State<VideoState> get() = _video

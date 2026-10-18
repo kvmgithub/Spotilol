@@ -63,12 +63,6 @@ fun MyNavHost(
     val context = LocalContext.current
     val startDestination = Routes.Home.route
 
-    // A download asked for without a verified SpotiFLAC server opens the verification.
-    LaunchedEffect(navHostController) {
-        com.music.spotui.data.offline.SpotiflacGate.open.collect {
-            if (navHostController.currentDestination?.route != Routes.Spotiflac.route) navHostController.navigate(Routes.Spotiflac.route)
-        }
-    }
     NavHost(
         navController = navHostController,
         startDestination = startDestination,
@@ -125,23 +119,6 @@ fun MyNavHost(
             com.music.spotui.ui.screens.LocalFilesScreen(navHostController)
         }
 
-        page(Routes.Downloads.route){
-            LaunchedEffect(playerState) {
-                bottomBarState.value = true
-                bottomBarPlayerState.value = playerState != ""
-            }
-            // Not verified with SpotiFLAC (or it lapsed): the verification first, once per visit.
-            var askedVerify by androidx.compose.runtime.saveable.rememberSaveable { androidx.compose.runtime.mutableStateOf(false) }
-            val context = androidx.compose.ui.platform.LocalContext.current
-            LaunchedEffect(Unit) {
-                if (!askedVerify && !com.music.spotui.data.preferences.hasSpotiflacSession(context)) {
-                    askedVerify = true
-                    navHostController.navigate(Routes.Spotiflac.route)
-                }
-            }
-            com.music.spotui.ui.screens.DownloadsScreen(navHostController)
-        }
-
         page(Routes.NewReleases.route) {
             LaunchedEffect(playerState) {
                 bottomBarState.value = true
@@ -174,7 +151,7 @@ fun MyNavHost(
             ContextScreen(navHostController, type = "liked", id = "")
         }
 
-        // Settings: sound quality, downloads, data, display, language.
+        // Settings: sound quality, data, display, language, diagnostics.
         page(Routes.Settings.route){
             LaunchedEffect(playerState) {
                 bottomBarState.value = true
@@ -183,13 +160,6 @@ fun MyNavHost(
             com.music.spotui.ui.screens.SettingsScreen(navHostController)
         }
 
-        // SpotiFLAC: the verification that gives the lossless downloads their best source.
-        page(Routes.Spotiflac.route){
-            com.music.spotui.ui.screens.SpotiflacScreen(onClose = {
-                navHostController.popBackStack()
-                com.music.spotui.data.offline.SpotiflacGate.resume()
-            })
-        }
 
 
 

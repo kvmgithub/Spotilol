@@ -267,36 +267,16 @@ fun PlayerScreen(navController: NavController) {
     var canvasOnly by remember(canvasUrl) { mutableStateOf(false) }
     val chrome by androidx.compose.animation.core.animateFloatAsState(
         if (canvasOnly) 0f else 1f, androidx.compose.animation.core.tween(CANVAS_FADE_MS / 2), label = "chrome")
-    // Music video (YouTube, synced to the Spotify playback): looked up for every track
-    // shown here, offered once its time map is known, shown in place of the artwork.
-    val mv = com.music.spotui.video.MusicVideoController
-    androidx.compose.runtime.DisposableEffect(mv) {
-        mv.attachPlayerScreen()
-        onDispose { mv.detachPlayerScreen() }
-    }
-    LaunchedEffect(actualTrackId, songTitle, audioBuffering) {
-        if (!audioBuffering) mv.prepare(actualTrackId, songTitle, songSinger, SongPlayer.getDuration())
-    }
-    val remote = SongPlayer.activeDevice.value != null
-    val readyVideo = mv.state.value as? com.music.spotui.video.MusicVideoController.State.Ready
-    val videoMatchesTrack = displayedTrackId.isNotBlank() && actualTrackId == displayedTrackId && readyVideo?.trackId == actualTrackId
-    val videoReady = videoMatchesTrack && !remote && !audioBuffering && !com.music.spotui.data.DataSaver.active
-    // Switching to mobile data with the data saver on stops a clip that is playing.
-    LaunchedEffect(com.music.spotui.data.DataSaver.active) {
-        if (com.music.spotui.data.DataSaver.active && mv.on.value) mv.setOn(false)
-    }
-    val videoOn = mv.on.value && videoMatchesTrack && !remote
-    // Canvas / clip players are built once the sheet has finished rising (then kept):
+    // No music videos in Spotilol UI (the YouTube clips are removed).
+    val videoOn = false
+    // Canvas players are built once the sheet has finished rising (then kept):
     // creating them in the first frame stalled it and the slide jumped.
     val settled by com.music.spotui.ui.navigation.LocalPageSettled.current
     var mediaReady by remember { mutableStateOf(false) }
     LaunchedEffect(settled) { if (settled) mediaReady = true }
-    val showVideo = videoOn && !showLyrics && !mv.fullscreen.value && mediaReady
-    // Buffer the clip as soon as it is known for the track on screen.
-    LaunchedEffect(mv.state.value, remote, audioBuffering, displayedTrackId) { if (videoReady && !audioBuffering) mv.warm() }
     // Pulled down from the top, the player closes, like the back button (issue #4).
     val pullToClose = com.music.spotui.ui.components.rememberPullToDismiss { com.music.spotui.ui.navigation.PlayerSheet.close() }
-    pullToClose.enabled = !showLyrics && !mv.fullscreen.value
+    pullToClose.enabled = !showLyrics
     Box(
         modifier = Modifier
             .graphicsLayer { translationY = pullToClose.offset }
@@ -402,12 +382,7 @@ fun PlayerScreen(navController: NavController) {
                     }
                 }
             }) {
-            if (showVideo) Box(
-                contentAlignment = Alignment.Center,
-                modifier = Modifier.fillMaxSize(),
-            ) {
-                com.music.spotui.ui.components.VideoSurface(onTap = { mv.fullscreen.value = true })
-            } else HorizontalPager(
+            HorizontalPager(
                 state = artworkPagerState,
                 modifier = Modifier
                     .fillMaxWidth()
@@ -434,27 +409,8 @@ fun PlayerScreen(navController: NavController) {
                         contentDescription = "")
                 }
             }
-            // Over the artwork / video; with a Canvas the artwork is hidden, so the
-            // pill sits above the title instead of floating mid-screen.
-            if ((videoReady || videoOn) && !pillAboveTitle) {
-                com.music.spotui.ui.components.VideoSwitchPill(
-                    on = videoOn,
-                    modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 36.dp),
-                )
-            }
-            if (showVideo) {
-                com.music.spotui.ui.components.VideoFullscreenButton(
-                    modifier = Modifier.align(Alignment.BottomEnd).padding(end = 36.dp, bottom = 36.dp),
-                )
-            }
             }
             Spacer(modifier = Modifier.weight(1f))
-            if ((videoReady || videoOn) && pillAboveTitle) {
-                com.music.spotui.ui.components.VideoSwitchPill(
-                    on = videoOn,
-                    modifier = Modifier.padding(bottom = 20.dp),
-                )
-            }
 
             PlayerInfo(
                 songTitle = songTitle,
@@ -477,19 +433,19 @@ fun PlayerScreen(navController: NavController) {
             // Seek bar: follows the finger while dragging, seeks once on release.
             var isDragging by remember { mutableStateOf(false) }
             var dragValue by remember { mutableStateOf(0f) }
-            val duration = mv.duration()
+            val duration = SongPlayer.getDuration()
             SpotifySeekBar(
                 fraction = {
                     frame.value // redraw each frame
                     if (isDragging) dragValue else {
-                        val d = mv.duration()
-                        if (d > 0) (mv.position().toFloat() / d).coerceIn(0f, 1f) else 0f
+                        val d = SongPlayer.getDuration()
+                        if (d > 0) (SongPlayer.getCurrentPosition().toFloat() / d).coerceIn(0f, 1f) else 0f
                     }
                 },
                 onDrag = { isDragging = true; dragValue = it },
                 onRelease = {
-                    val target = (dragValue * mv.duration()).toLong()
-                    mv.seekTo(target)
+                    val target = (dragValue * SongPlayer.getDuration()).toLong()
+                    SongPlayer.seekTo(target)
                     isDragging = false
                 },
                 modifier = Modifier
@@ -563,40 +519,8 @@ fun PlayerScreen(navController: NavController) {
                 onClose = { showLyrics = false }
             )
         }
-        // Full-screen clip: the video over everything, turned sideways, with its own controls.
-        if (videoOn && mv.fullscreen.value) VideoFullscreen()
     }
 }
-
-/** The clip filling the screen, landscape while it shows; back or the exit button leaves. */
-@Composable
-private fun VideoFullscreen() {
-    val activity = LocalContext.current as? android.app.Activity
-    androidx.compose.runtime.DisposableEffect(activity) {
-        val before = activity?.requestedOrientation
-        activity?.requestedOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
-        val window = activity?.window
-        val bars = window?.let { androidx.core.view.WindowCompat.getInsetsController(it, it.decorView) }
-        bars?.systemBarsBehavior = androidx.core.view.WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
-        bars?.hide(androidx.core.view.WindowInsetsCompat.Type.systemBars())
-        onDispose {
-            bars?.show(androidx.core.view.WindowInsetsCompat.Type.systemBars())
-            activity?.requestedOrientation = before ?: android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
-        }
-    }
-    Box(Modifier.fillMaxSize().background(Color.Black), contentAlignment = Alignment.Center) {
-        com.music.spotui.ui.components.VideoSurface(fitHeight = true)
-        com.music.spotui.ui.components.VideoFullscreenOverlay()
-    }
-}
-
-
-
-
-
-
-
-
 
 /** "Lecture à partir de <type>" + context name, or the queue (like the official app). */
 @Composable
@@ -814,20 +738,19 @@ fun PlayerInfo(
 /** Elapsed time text with its own ticker (doesn't recompose the whole player). */
 @Composable
 private fun ElapsedLabel(playing: Boolean, override: Long?, format: (Long) -> String) {
-    val mv = com.music.spotui.video.MusicVideoController
-    var now by remember { mutableStateOf(mv.position()) }
+    var now by remember { mutableStateOf(SongPlayer.getCurrentPosition()) }
     val lifecycle = LocalLifecycleOwner.current.lifecycle
-    LaunchedEffect(playing, mv.on.value, lifecycle) {
+    LaunchedEffect(playing, lifecycle) {
         lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
             while (true) {
-                now = mv.position()
+                now = SongPlayer.getCurrentPosition()
                 if (!playing) break
                 delay(250L)
             }
         }
     }
     // Seek while paused: pick the new position up as soon as it changes.
-    LaunchedEffect(override) { if (override == null) now = mv.position() }
+    LaunchedEffect(override) { if (override == null) now = SongPlayer.getCurrentPosition() }
     Text(text = format(override ?: now), color = Color.White.copy(alpha = 0.7f), fontSize = 12.sp)
 }
 

@@ -115,7 +115,6 @@ fun SupporterSheet(onDismiss: () -> Unit) {
                         modifier = Modifier.fillMaxWidth().height(48.dp).clip(RoundedCornerShape(50)).background(AppAccent)
                             .pressable(0.96f) { SupportReminder.open(context) },
                     ) { Text(stringResource(R.string.support_action), color = Color.Black, fontSize = 16.sp, fontWeight = FontWeight.Bold) }
-                    GitHubSponsorButton(Modifier.padding(top = 10.dp))
                     Text(stringResource(R.string.supporter_i_supported), color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Bold,
                         modifier = Modifier.align(Alignment.CenterHorizontally).padding(top = 8.dp)
                             .pressable(0.96f) { choosing = true }.padding(horizontal = 24.dp, vertical = 12.dp))

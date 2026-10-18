@@ -3,8 +3,6 @@
     xmlns:tools="http://schemas.android.com/tools">
 
     <uses-permission android:name="android.permission.VIBRATE" />
-    <!-- In-app updates: the release APK goes through Android's package installer. -->
-    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
@@ -30,11 +28,6 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.Myspoti"
         android:usesCleartextTraffic="false">
-        <!-- Cover art for Android Auto (content:// only); Spotify image CDN hosts only. -->
-        <provider
-            android:name="com.music.spotui.di.ArtworkProvider"
-            android:authorities="${applicationId}.artwork"
-            android:exported="true" />
         <!-- Share-as-image cards, handed to the target app through a read grant. -->
         <provider
             android:name="androidx.core.content.FileProvider"
@@ -48,19 +41,6 @@
         <!-- Lets the system profiler (Perfetto, Android Studio) trace release builds; no debugging. -->
         <profileable android:shell="true" />
 
-        <meta-data
-            android:name="com.google.android.gms.car.application"
-            android:resource="@xml/automotive_app_desc" />
-
-        <meta-data
-            android:name="firebase_analytics_collection_deactivated"
-            android:value="true" />
-        <meta-data
-            android:name="google_analytics_adid_collection_enabled"
-            android:value="false" />
-        <meta-data
-            android:name="firebase_performance_collection_deactivated"
-            android:value="true" />
 
 
         <activity
@@ -68,24 +48,12 @@
             android:exported="true"
             android:launchMode="singleTask"
             android:screenOrientation="unspecified"
-            android:supportsPictureInPicture="true"
             android:configChanges="orientation|screenSize|screenLayout|keyboardHidden"
             android:windowSoftInputMode="adjustResize"
             android:theme="@style/Theme.Myspoti">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
-            </intent-filter>
-            <!-- The SpotiFLAC verification page hands its grant back here, as to SpotiFLAC Mobile. -->
-            <intent-filter>
-                <action android:name="android.intent.action.VIEW" />
-                <category android:name="android.intent.category.DEFAULT" />
-                <category android:name="android.intent.category.BROWSABLE" />
-                <data android:scheme="spotiflac" android:host="session-grant" />
-            </intent-filter>
-            <intent-filter>
-                <action android:name="android.media.action.MEDIA_PLAY_FROM_SEARCH" />
-                <category android:name="android.intent.category.DEFAULT" />
             </intent-filter>
             <!-- No autoVerify: these are Spotify's domains, verification can never
                  pass for this app. spotify.link is not claimed: the id is only in the
@@ -188,9 +156,6 @@
             <meta-data android:name="autoStoreLocales" android:value="true" />
         </service>
         <receiver
-            android:name="com.music.spotui.data.api.AppUpdater$StatusReceiver"
-            android:exported="false" />
-        <receiver
             android:name="androidx.media.session.MediaButtonReceiver"
             android:exported="true">
             <intent-filter>
@@ -200,18 +165,6 @@
 
 
 
-        <!-- Home screen widget: now playing with controls. -->
-        <receiver
-            android:name="com.music.spotui.widget.NowPlayingWidget"
-            android:exported="false"
-            android:label="${appLabel}">
-            <intent-filter>
-                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
-            </intent-filter>
-            <meta-data
-                android:name="android.appwidget.provider"
-                android:resource="@xml/widget_now_playing_info" />
-        </receiver>
     </application>
 
 </manifest>

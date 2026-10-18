@@ -33,9 +33,19 @@ class AccountBrowser : ComponentActivity() {
             settings.javaScriptEnabled = true
             settings.domStorageEnabled = true
             CookieManager.getInstance().setAcceptThirdPartyCookies(this, true)
-            webViewClient = WebViewClient()
+            // Spotilol rule: the signed-in WebView stays on Spotify and its sign-in hosts
+            // (exact HTTPS hosts); other HTTPS links open in the browser, anything else is refused.
+            webViewClient = object : WebViewClient() {
+                override fun shouldOverrideUrlLoading(view: WebView, request: android.webkit.WebResourceRequest): Boolean {
+                    val target = request.url.toString()
+                    if (app.myspoti.spotify.security.WebPolicy.isNavigation(target)) return false
+                    if (request.isForMainFrame && app.myspoti.spotify.security.WebPolicy.httpsHost(target) != null)
+                        runCatching { startActivity(Intent(Intent.ACTION_VIEW, request.url)) }
+                    return true
+                }
+            }
         }
-        val url = intent.getStringExtra(EXTRA_URL) ?: ACCOUNT_URL
+        val url = intent.getStringExtra(EXTRA_URL)?.takeIf { app.myspoti.spotify.security.WebPolicy.isNavigation(it) } ?: ACCOUNT_URL
         val language = com.music.spotui.data.AppLanguage.current(this).ifEmpty { null }
             ?.let { java.util.Locale.forLanguageTag(it).language } ?: resources.configuration.locales[0].language
         lifecycleScope.launch {

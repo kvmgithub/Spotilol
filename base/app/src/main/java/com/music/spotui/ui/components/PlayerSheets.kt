@@ -329,10 +329,13 @@ private fun JamSection(onDismiss: () -> Unit) {
 
 /** Jam invite codes: `open.spotify.com/socialsession/<token>`, or a spotify.link short link to it. */
 private object JamLinks {
-    private val http = okhttp3.OkHttpClient.Builder().followRedirects(true).build()
+    private val http = okhttp3.OkHttpClient.Builder().followRedirects(true).followSslRedirects(false)
+        .callTimeout(10, java.util.concurrent.TimeUnit.SECONDS).build()
 
     suspend fun token(raw: String): String? {
-        val url = if (raw.contains("spotify.link") || raw.contains("spoti.fi")) resolve(raw) ?: raw else raw
+        // Short links only by exact HTTPS host; nothing else is ever requested.
+        val host = app.myspoti.spotify.security.WebPolicy.httpsHost(raw.trim())
+        val url = if (host == "spotify.link" || host == "spoti.fi") resolve(raw.trim()) ?: raw else raw
         Regex("socialsession/([A-Za-z0-9_-]+)").find(url)?.let { return it.groupValues[1] }
         Regex("spotify:socialsession:([A-Za-z0-9_-]+)").find(url)?.let { return it.groupValues[1] }
         return null
@@ -345,7 +348,7 @@ private object JamLinks {
                 val final = r.request.url.toString()
                 // Some short links answer with a page that holds the target in a meta refresh / link.
                 if (final.contains("socialsession")) final
-                else Regex("https://open\\.spotify\\.com/socialsession/[A-Za-z0-9_-]+").find(r.body.string())?.value ?: final
+                else Regex("https://open\\.spotify\\.com/socialsession/[A-Za-z0-9_-]+").find(app.myspoti.spotify.security.BoundedHttp.text(r.body, 1_048_576))?.value ?: final
             }
         }.getOrNull()
     }

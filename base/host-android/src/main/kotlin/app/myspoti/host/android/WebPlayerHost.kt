@@ -232,6 +232,34 @@ class WebPlayerHost(context: Context) : BridgeHost {
         }
     }
 
+    /**
+     * Switches to a saved account (Spotilol profiles): all cookies and Web storage go, the
+     * profile's cookies come back (validated by [WebPolicy.restoreCookie], Secure and the auth
+     * cookie HttpOnly), then the player loads. [done] gets false when nothing was restored.
+     */
+    fun switchSession(cookies: Map<String, String>, done: (Boolean) -> Unit) = main.post {
+        val manager = CookieManager.getInstance()
+        manager.removeAllCookies {
+            val pairs = cookies.flatMap { (origin, header) ->
+                header.split(';').mapNotNull { WebPolicy.restoreCookie(it.trim())?.let { cookie -> origin to cookie } }
+            }
+            if (pairs.isEmpty()) { done(false); return@removeAllCookies }
+            var left = pairs.size
+            pairs.forEach { (origin, cookie) ->
+                manager.setCookie(origin, cookie) {
+                    if (--left > 0) return@setCookie
+                    manager.flush()
+                    android.webkit.WebStorage.getInstance().deleteAllData()
+                    view.clearCache(true)
+                    pageStarts = 0
+                    loadAsked = true
+                    view.loadUrl(PLAYER_URL)
+                    done(true)
+                }
+            }
+        }
+    }
+
     override suspend fun evaluate(script: String) {
         val done = CompletableDeferred<Unit>()
         main.post {

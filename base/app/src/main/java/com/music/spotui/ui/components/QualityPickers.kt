@@ -25,11 +25,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.myspoti.engine.R
-import com.music.spotui.data.preferences.DownloadQuality
 import com.music.spotui.data.preferences.StreamingQuality
-import com.music.spotui.data.preferences.getDownloadQuality
 import com.music.spotui.data.preferences.getStreamingQuality
-import com.music.spotui.data.preferences.setDownloadQuality
 import com.music.spotui.data.preferences.setStreamingQuality
 
 /** The streaming levels of the Web Player, one choice; saved and applied at once. */
@@ -48,27 +45,6 @@ fun StreamingQualityPicker(modifier: Modifier = Modifier) {
         ),
         selected = current,
         onSelect = { current = it; setStreamingQuality(ctx, it) },
-        modifier = modifier,
-    )
-}
-
-/** Downloads: off, FLAC CD quality or FLAC hi-res; saved at once. */
-@Composable
-fun DownloadQualityPicker(modifier: Modifier = Modifier) {
-    val ctx = LocalContext.current
-    var current by remember { mutableStateOf(getDownloadQuality(ctx)) }
-    QualityGroup(
-        title = stringResource(R.string.quality_download_title),
-        detail = stringResource(R.string.quality_download_detail),
-        options = listOf(
-            Option(DownloadQuality.OFF, R.string.quality_download_off, R.string.quality_download_off_detail),
-            Option(DownloadQuality.SMALL, R.string.quality_download_small, R.string.quality_download_small_detail),
-            Option(DownloadQuality.CD, R.string.quality_download_cd, R.string.quality_download_cd_detail),
-            Option(DownloadQuality.HI_RES, R.string.quality_download_hires, R.string.quality_download_hires_detail),
-            Option(DownloadQuality.ASK, R.string.quality_download_ask, R.string.quality_download_ask_detail),
-        ),
-        selected = current,
-        onSelect = { current = it; setDownloadQuality(ctx, it) },
         modifier = modifier,
     )
 }
@@ -102,56 +78,4 @@ private fun <T> QualityGroup(
             }
         }
     }
-}
-
-/**
- * "Ask each time": a download asks its quality first, once for a whole list. The
- * question is drawn by [DownloadAskHost], at the root, so it outlives the menu that
- * started the download.
- */
-object DownloadAsk {
-    internal var pending by mutableStateOf<((DownloadQuality) -> Unit)?>(null)
-
-    /** Runs [start] now with the Settings quality (null), or after the user picked one. */
-    fun start(context: android.content.Context, start: (DownloadQuality?) -> Unit) {
-        if (getDownloadQuality(context) == DownloadQuality.ASK) pending = { start(it) } else start(null)
-    }
-}
-
-@Composable
-fun DownloadAskHost() {
-    val action = DownloadAsk.pending ?: return
-    val choices = listOf(
-        Option(DownloadQuality.SMALL, R.string.quality_download_small, R.string.quality_download_small_detail),
-        Option(DownloadQuality.CD, R.string.quality_download_cd, R.string.quality_download_cd_detail),
-        Option(DownloadQuality.HI_RES, R.string.quality_download_hires, R.string.quality_download_hires_detail),
-    )
-    androidx.compose.material3.AlertDialog(
-        onDismissRequest = { DownloadAsk.pending = null },
-        containerColor = Color(0xFF282828),
-        title = { Text(stringResource(R.string.quality_download_title), color = Color.White) },
-        text = {
-            Column {
-                for (o in choices) {
-                    Column(
-                        Modifier.fillMaxWidth().heightIn(min = 52.dp)
-                            .selectable(selected = false, role = Role.Button, onClick = {
-                                DownloadAsk.pending = null
-                                action(o.value)
-                            })
-                            .padding(vertical = 8.dp),
-                    ) {
-                        Text(stringResource(o.label), color = Color.White, fontSize = 16.sp)
-                        Text(stringResource(o.detail), color = Color(0xFFB3B3B3), fontSize = 12.sp)
-                    }
-                }
-            }
-        },
-        confirmButton = {},
-        dismissButton = {
-            androidx.compose.material3.TextButton(onClick = { DownloadAsk.pending = null }) {
-                Text(stringResource(R.string.add_to_playlist_button_cancel), color = Color.White)
-            }
-        },
-    )
 }

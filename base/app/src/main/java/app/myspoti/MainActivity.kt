@@ -21,7 +21,6 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import app.myspoti.host.android.MyspotiRuntime
 import com.music.spotui.App
-import com.music.spotui.di.AutoBrowser
 import com.music.spotui.ui.screens.WelcomeScreen
 import com.music.spotui.ui.theme.SpotuiTheme
 import kotlinx.coroutines.flow.combine
@@ -40,8 +39,6 @@ class MainActivity : AppCompatActivity() {
     private var connecting by mutableStateOf(false)
     /** The one-time setup screen (permissions, battery) after signing in. */
     private var setupNeeded by mutableStateOf(false)
-    /** SpotiFLAC verification, opened from the setup screen or the settings. */
-    private var showSpotiflac by mutableStateOf(false)
 
     private val prefs get() = getSharedPreferences("myspoti_prefs", Context.MODE_PRIVATE)
 
@@ -62,19 +59,15 @@ class MainActivity : AppCompatActivity() {
                     }
                     androidx.compose.foundation.layout.Box(androidx.compose.ui.Modifier.fillMaxSize()) {
                         when {
-                            showSpotiflac -> com.music.spotui.ui.screens.SpotiflacScreen(onClose = { showSpotiflac = false; com.music.spotui.data.offline.SpotiflacGate.resume() })
                             signedIn && setupNeeded -> com.music.spotui.ui.screens.SetupScreen(
                                 onDone = { setupNeeded = false },
-                                onSpotiflac = { showSpotiflac = true },
                             )
                             signedIn -> App()
                             connecting -> ConnectingScreen()
                             else -> WelcomeScreen(onLogin = { showLogin() })
                         }
-                        // "Ask each time": the download quality question, above every screen.
-                        com.music.spotui.ui.components.DownloadAskHost()
-                        // Beta and dev builds only: hold the faint dot to copy the recent logs.
-                        if (com.music.spotui.data.api.UpdateChecker.isBeta || app.myspoti.engine.BuildConfig.DEBUG)
+                        // Diagnostics switched on in Settings: hold the faint dot to copy the redacted logs.
+                        if (com.music.spotui.data.BetaLogs.enabled.value || app.myspoti.engine.BuildConfig.DEBUG)
                             com.music.spotui.ui.components.BetaLogButton(
                                 androidx.compose.ui.Modifier.align(androidx.compose.ui.Alignment.BottomEnd))
                     }
@@ -101,15 +94,15 @@ class MainActivity : AppCompatActivity() {
         handle(intent)
     }
 
-    // The clip player follows the app on screen: paused with its side jobs in the background.
+    // Background lookups (lyrics prefetch) only while the app is on screen.
     override fun onStart() {
         super.onStart()
-        com.music.spotui.video.MusicVideoController.onForeground()
+        com.music.spotui.di.SongPlayer.inForeground = true
     }
 
     override fun onStop() {
         super.onStop()
-        if (!isChangingConfigurations) com.music.spotui.video.MusicVideoController.onBackground()
+        if (!isChangingConfigurations) com.music.spotui.di.SongPlayer.inForeground = false
     }
 
     override fun onDestroy() {
@@ -138,8 +131,13 @@ class MainActivity : AppCompatActivity() {
             com.music.spotui.di.SessionActions.signedOut.collect { out ->
                 if (out && signedIn) {
                     signedIn = false
-                    showingLogin = true
-                    MyspotiRuntime.host.attach(root, visible = true)
+                    if (com.music.spotui.di.SessionActions.switching.value) {
+                        // A saved profile is being applied: wait on the loading screen.
+                        connecting = true
+                    } else {
+                        showingLogin = true
+                        MyspotiRuntime.host.attach(root, visible = true)
+                    }
                 }
             }
         }
@@ -149,7 +147,7 @@ class MainActivity : AppCompatActivity() {
     private fun watchLoginReturn() {
         lifecycleScope.launch {
             MyspotiRuntime.host.url.collect { url ->
-                val backOnPlayer = url.startsWith("https://open.spotify.com") && !url.contains("/login")
+                val backOnPlayer = app.myspoti.spotify.security.WebPolicy.isPlayerPage(url)
                 if (showingLogin && backOnPlayer) {
                     hideLogin()
                     if (!signedIn) connecting = true
@@ -167,7 +165,7 @@ class MainActivity : AppCompatActivity() {
         lifecycleScope.launch {
             combine(api.ready, MyspotiRuntime.loginRequired) { ready, login -> ready to login }.collect { (ready, login) ->
                 when {
-                    login && !showingLogin && signedIn -> showLogin()
+                    login && !showingLogin && (signedIn || connecting) -> showLogin()
                     ready && !login -> {
                         val user = runCatching { MyspotiRuntime.isSignedIn() }.getOrDefault(false)
                         if (user) {
@@ -199,23 +197,13 @@ class MainActivity : AppCompatActivity() {
     /** Spotify links (open.spotify.com/...) play their item; voice search plays its best match. */
     private fun handle(intent: Intent?) {
         intent ?: return
-        // The SpotiFLAC verification's return (spotiflac://session-grant?grant=…&state=…).
-        if (intent.data?.scheme == "spotiflac" && intent.data?.host == "session-grant") {
-            com.music.spotui.lossless.ZarzSession.grants.value = intent.data.toString()
-            return
-        }
-        when (intent.action) {
-            Intent.ACTION_VIEW -> {
-                val uri = spotifyUri(intent.data?.toString() ?: return) ?: return
-                lifecycleScope.launch {
-                    MyspotiRuntime.api.ready.first { it }
-                    runCatching { MyspotiRuntime.api.player.play(uri) }
-                }
-            }
-            android.provider.MediaStore.INTENT_ACTION_MEDIA_PLAY_FROM_SEARCH -> {
-                val query = intent.getStringExtra(android.app.SearchManager.QUERY).orEmpty()
-                if (query.isNotBlank()) lifecycleScope.launch { AutoBrowser.playFromSearch(query) }
-            }
+        if (intent.action != Intent.ACTION_VIEW) return
+        // Spotify links only, by exact HTTPS host (WebPolicy), never other schemes.
+        val link = intent.data?.toString()?.takeIf { app.myspoti.spotify.security.WebPolicy.isDeepLink(it) } ?: return
+        val uri = spotifyUri(link) ?: return
+        lifecycleScope.launch {
+            MyspotiRuntime.api.ready.first { it }
+            runCatching { MyspotiRuntime.api.player.play(uri) }
         }
     }
 

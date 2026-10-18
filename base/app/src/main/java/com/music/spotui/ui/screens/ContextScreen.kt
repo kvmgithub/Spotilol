@@ -315,7 +315,6 @@ private fun ContextContent(navController: NavController, vm: ContextViewModel, p
     // "Sort by" for the list, kept per list (also after leaving it or restarting the app).
     val ctx = LocalContext.current
     var sort by remember(p.uri) { mutableStateOf(TrackOrder.load(ctx, p.uri)) }
-    var askRemoveDownloads by remember { mutableStateOf(false) }
     var playlistMenu by remember { mutableStateOf(false) }
     if (playlistMenu) com.music.spotui.ui.components.PlaylistOptionsSheet(
         page = p,
@@ -323,24 +322,6 @@ private fun ContextContent(navController: NavController, vm: ContextViewModel, p
         onChanged = { vm.reload() },
         onDeleted = { navController.navigateUp() },
         onProfile = { navController.navigate(com.music.spotui.ui.navigation.profileRoute(it, p.ownerName)) },
-    )
-    if (askRemoveDownloads) androidx.compose.material3.AlertDialog(
-        onDismissRequest = { askRemoveDownloads = false },
-        containerColor = Color(0xFF282828),
-        title = { Text(stringResource(R.string.playlist_entity_remove_download_dialog_title), color = Color.White) },
-        text = { Text(stringResource(R.string.playlist_entity_remove_download_dialog_description), color = Color(0xFFB3B3B3)) },
-        confirmButton = {
-            androidx.compose.material3.TextButton(onClick = {
-                askRemoveDownloads = false
-                com.music.spotui.data.offline.OfflineCollections.remove(p.uri)
-                android.widget.Toast.makeText(context, context.getString(R.string.toast_undownload), android.widget.Toast.LENGTH_SHORT).show()
-            }) { Text(stringResource(R.string.playlist_entity_remove_download_dialog_positive_button), color = SpotifyGreen) }
-        },
-        dismissButton = {
-            androidx.compose.material3.TextButton(onClick = { askRemoveDownloads = false }) {
-                Text(stringResource(R.string.add_to_playlist_button_cancel), color = Color.White)
-            }
-        },
     )
     menuSong?.let { sel ->
         com.music.spotui.ui.components.SongOptionsSheet(
@@ -472,29 +453,7 @@ private fun ContextContent(navController: NavController, vm: ContextViewModel, p
                         LikeButton(liked = SongPlayer.library[p.uri] ?: contextSaved, size = 28.dp) { vm.toggleContextSaved(p) }
                         Spacer(Modifier.width(20.dp))
                     }
-                    val ids = p.tracks.map { it.spotifyTrackId }.filter { it.isNotBlank() }.distinct()
-                    // Songs with no matching recording count as settled: the list can still be removed.
-                    val downloadedCount = ids.count {
-                        com.music.spotui.data.offline.OfflineStore.isDownloaded(it) ||
-                            com.music.spotui.data.offline.OfflineStore.status[it] == com.music.spotui.data.offline.OfflineStatus.Unavailable
-                    }
-                    val busy = ids.any {
-                        val st = com.music.spotui.data.offline.OfflineStore.status[it]
-                        st == com.music.spotui.data.offline.OfflineStatus.Queued || st is com.music.spotui.data.offline.OfflineStatus.Downloading
-                    }
-                    // A list downloaded as a whole stays in step with Spotify (new songs in, gone songs out).
-                    val listKept = com.music.spotui.data.offline.OfflineCollections.isDownloaded(p.uri)
-                    LaunchedEffect(listKept, p.complete, p.tracks.size) { if (listKept && p.complete) com.music.spotui.data.offline.OfflineCollections.sync(p) }
-                    com.music.spotui.ui.components.DownloadListButton(downloadedCount, ids.size, busy, kept = listKept) {
-                        if (listKept) askRemoveDownloads = true
-                        else {
-                            com.music.spotui.ui.components.DownloadAsk.start(context) { q ->
-                                com.music.spotui.di.Haptics.confirm()
-                                com.music.spotui.data.offline.OfflineCollections.download(p, q)
-                                android.widget.Toast.makeText(context, context.getString(R.string.download_notification_downloading), android.widget.Toast.LENGTH_SHORT).show()
-                            }
-                        }
-                    }
+                    // Downloads are removed in Spotilol UI (no download button).
                     if (p.type == "playlist") {
                         Spacer(Modifier.width(16.dp))
                         Icon(Icons.Default.MoreVert, stringResource(R.string.content_description_context_menu), tint = Color.White.copy(alpha = 0.8f),

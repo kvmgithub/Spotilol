@@ -1,6 +1,6 @@
 # Spotilol UI: Myspoti's native interface with Spotilol's security scope.
 # Builds on every push to myspoti-ui, signs with the fork key (APK_SIGNING_BUNDLE) and
-# publishes a pre-release tagged ui-v<version>. Pre-releases never become "latest", so
+# publishes a pre-release tagged ui-v<version> for commits marked [publish]. Pre-releases never become "latest", so
 # Spotilol Lite's update check (releases/latest) ignores them.
 name: Spotilol UI
 on:
@@ -89,6 +89,8 @@ jobs:
           PY
           (cd release-assets && sha256sum *.apk > SHA256SUMS.txt && cat SHA256SUMS.txt)
       - name: Publish pre-release
+        # Only commits marked [publish] become a downloadable pre-release.
+        if: contains(github.event.head_commit.message, '[publish]')
         env:
           GH_TOKEN: ${{ github.token }}
         run: |

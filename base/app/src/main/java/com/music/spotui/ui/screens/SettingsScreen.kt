@@ -45,6 +45,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import app.myspoti.engine.R
+import kotlinx.coroutines.launch
 import com.music.spotui.ui.components.DownloadQualityPicker
 import com.music.spotui.ui.components.StreamingQualityPicker
 import com.music.spotui.ui.theme.AppBackground
@@ -73,6 +74,7 @@ fun SettingsScreen(navController: NavController) {
                 checked = com.music.spotui.data.preferences.AutoplayPref.on,
                 onChecked = { com.music.spotui.data.preferences.AutoplayPref.set(ctx, it) },
             )
+            CrossfadeRow()
             Divider()
 
             Section(R.string.settings_section_downloads)
@@ -149,6 +151,14 @@ fun SettingsScreen(navController: NavController) {
             Divider()
 
             Section(R.string.settings_section_app)
+            // A18: the launch check can be turned off; the manual check below keeps working.
+            OptionRow(
+                label = stringResource(R.string.settings_auto_update_title),
+                detail = stringResource(R.string.settings_auto_update_detail),
+                checked = com.music.spotui.data.preferences.AutoUpdateCheckPref.on,
+                onChecked = { com.music.spotui.data.preferences.AutoUpdateCheckPref.set(ctx, it) },
+            )
+            CheckUpdateRow()
             // The hidden Web Player stuck or crashed: rebuild it without leaving the app.
             Column(
                 Modifier.fillMaxWidth().clickable { app.myspoti.host.android.MyspotiRuntime.host.reload() }
@@ -156,6 +166,19 @@ fun SettingsScreen(navController: NavController) {
             ) {
                 Text(stringResource(R.string.restart_player_title), color = Color.White, fontSize = 16.sp)
                 Text(stringResource(R.string.restart_player_detail), color = Color(0xFFB3B3B3), fontSize = 12.sp)
+            }
+            // The report a tester hands us. The engine's log is otherwise reachable only through
+            // adb logcat, which the person reporting the bug cannot run: the label is a literal
+            // rather than a string resource so this change stays out of the shared string files.
+            Column(
+                Modifier.fillMaxWidth().clickable {
+                    val file = runCatching { app.myspoti.host.android.Logbook.export(ctx) }.getOrNull()
+                    if (file != null) shareDiagnosticReport(ctx, file)
+                    else android.widget.Toast.makeText(ctx, ctx.getString(R.string.diagnostic_export_failed), android.widget.Toast.LENGTH_SHORT).show()
+                }.padding(horizontal = 20.dp, vertical = 10.dp),
+            ) {
+                Text(stringResource(R.string.diagnostic_export_title), color = Color.White, fontSize = 16.sp)
+                Text(stringResource(R.string.diagnostic_export_detail), color = Color(0xFFB3B3B3), fontSize = 12.sp)
             }
             Spacer(Modifier.height(96.dp))
         }
@@ -193,6 +216,42 @@ private fun AccentRow() {
                         .clip(CircleShape).background(a.color)
                         .then(if (selected) Modifier.border(3.dp, Color.White, CircleShape) else Modifier)
                         .clickable { com.music.spotui.data.api.SupportReminder.setAccent(ctx, a) },
+                )
+            }
+        }
+    }
+}
+
+/**
+ * "Crossfade": the length of the fade at the end of a song. The label says what it is: the two
+ * songs never overlap (the page plays one media element), so this is a fade, not a true
+ * crossfade. The default is 0: off, as before.
+ */
+@Composable
+private fun CrossfadeRow() {
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    val pref = com.music.spotui.data.preferences.CrossfadePref
+    androidx.compose.foundation.layout.Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 10.dp)) {
+        Text(stringResource(R.string.settings_crossfade_title), color = Color.White, fontSize = 16.sp)
+        Text(
+            stringResource(R.string.settings_crossfade_detail),
+            color = Color(0xFFB3B3B3), fontSize = 12.sp,
+            modifier = Modifier.padding(top = 2.dp),
+        )
+        Row(
+            horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp),
+            modifier = Modifier.padding(top = 10.dp),
+        ) {
+            for (v in listOf(0, 3, 6, 9, 12)) {
+                val selected = pref.seconds == v
+                Text(
+                    if (v == 0) stringResource(R.string.settings_crossfade_off)
+                    else stringResource(R.string.settings_crossfade_seconds, v),
+                    color = if (selected) Color.Black else Color.White, fontSize = 14.sp,
+                    modifier = Modifier.clip(androidx.compose.foundation.shape.RoundedCornerShape(50))
+                        .background(if (selected) com.music.spotui.ui.theme.AppAccent else Color(0xFF2A2A2A))
+                        .clickable { pref.set(ctx, v) }
+                        .padding(horizontal = 14.dp, vertical = 8.dp),
                 )
             }
         }
@@ -325,4 +384,54 @@ private fun OptionRow(label: String, detail: String, checked: Boolean,
         }
         androidx.compose.material3.Switch(checked = checked, enabled = enabled, onCheckedChange = null)
     }
+}
+
+/** "Check for updates now": the launch check can be off; this one always asks. */
+@Composable
+private fun CheckUpdateRow() {
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
+    var checking by remember { androidx.compose.runtime.mutableStateOf(false) }
+    androidx.compose.foundation.layout.Column(
+        Modifier.fillMaxWidth().clickable(enabled = !checking) {
+            if (checking) return@clickable
+            checking = true
+            scope.launch {
+                val found = runCatching { com.music.spotui.data.api.UpdateChecker.check(ctx) }.getOrNull()
+                checking = false
+                // The card is the app's one update UI: fill it, it shows itself.
+                if (found != null) com.music.spotui.updateRelease.value = found
+                else android.widget.Toast.makeText(ctx, ctx.getString(R.string.settings_update_check_latest), android.widget.Toast.LENGTH_SHORT).show()
+            }
+        }.padding(horizontal = 20.dp, vertical = 10.dp),
+    ) {
+        Text(
+            stringResource(if (checking) R.string.settings_update_checking else R.string.settings_check_update_title),
+            color = Color.White, fontSize = 16.sp,
+        )
+        Text(stringResource(R.string.settings_check_update_detail), color = Color(0xFFB3B3B3), fontSize = 12.sp)
+    }
+}
+
+/**
+ * Hands the exported report to the share sheet. The file goes through the app's FileProvider;
+ * if the provider refuses the path (external storage absent), the report's own path is shared
+ * instead, so the tester still has something to send.
+ */
+private fun shareDiagnosticReport(context: android.content.Context, file: java.io.File) {
+    val send = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+        type = "text/plain"
+        putExtra(android.content.Intent.EXTRA_SUBJECT, "Myspoti diagnostic report")
+    }
+    val uri = runCatching {
+        androidx.core.content.FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
+    }.getOrNull()
+    if (uri != null) {
+        send.type = "application/octet-stream"
+        send.putExtra(android.content.Intent.EXTRA_STREAM, uri)
+        send.addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+    } else {
+        send.putExtra(android.content.Intent.EXTRA_TEXT, "Myspoti diagnostic report: ${file.absolutePath}")
+    }
+    context.startActivity(android.content.Intent.createChooser(send, null).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK))
 }

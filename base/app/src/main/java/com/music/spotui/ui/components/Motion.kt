@@ -1,6 +1,19 @@
 package com.music.spotui.ui.components
 
 import androidx.compose.animation.core.Spring
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.animation.togetherWith
+import androidx.compose.animation.core.tween
+import androidx.compose.material3.Icon
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.painterResource
+import app.myspoti.engine.R
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.clickable
@@ -61,4 +74,34 @@ fun Modifier.pressScale(source: MutableInteractionSource, pressedScale: Float = 
         label = "press",
     )
     graphicsLayer { scaleX = scale; scaleY = scale }
+}
+
+/**
+ * The play/pause glyph of the official app: the new one springs in from a smaller size
+ * while the old one fades out, instead of swapping in a single frame. [playing] picks
+ * the pause glyph.
+ */
+@Composable
+fun PlayPauseIcon(
+    playing: Boolean,
+    contentDescription: String?,
+    tint: Color,
+    modifier: Modifier = Modifier,
+) {
+    AnimatedContent(
+        targetState = playing,
+        transitionSpec = {
+            (scaleIn(spring(dampingRatio = 0.55f, stiffness = Spring.StiffnessMediumLow), initialScale = 0.6f) + fadeIn(tween(120))) togetherWith
+                (scaleOut(tween(120), targetScale = 0.6f) + fadeOut(tween(90)))
+        },
+        contentAlignment = Alignment.Center,
+        label = "playPause",
+    ) { isPlaying ->
+        Icon(
+            painter = painterResource(if (isPlaying) R.drawable.ic_playing else R.drawable.play_svgrepo_com),
+            contentDescription = contentDescription,
+            tint = tint,
+            modifier = modifier,
+        )
+    }
 }

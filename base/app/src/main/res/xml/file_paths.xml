@@ -2,4 +2,6 @@
 <paths>
     <!-- Share-as-image cards (ShareCard.kt). -->
     <cache-path name="shared" path="shared/" />
+    <!-- Diagnostic reports (Logbook.export writes to getExternalFilesDir). -->
+    <external-files-path name="diagnostics" path="." />
 </paths>

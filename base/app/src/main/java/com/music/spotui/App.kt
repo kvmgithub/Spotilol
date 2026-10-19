@@ -74,6 +74,12 @@ fun App() {
 private val updateCardOpen = mutableStateOf(false)
 
 /**
+ * The release the update card shows. The launch check fills it; so does the manual check in
+ * Settings, which is why it is not private to [UpdatePrompt].
+ */
+internal val updateRelease = mutableStateOf<com.music.spotui.data.api.UpdateChecker.Release?>(null)
+
+/**
  * The donation reminder (see SupportReminder): a card a few seconds after launch, only
  * when due, signed in, and no update card is open. "No thanks" closes it for 2 weeks.
  */
@@ -176,8 +182,10 @@ private fun SupportDialog(supporter: Boolean, onSupport: () -> Unit, onSponsor: 
 @Composable
 private fun UpdatePrompt() {
     val context = androidx.compose.ui.platform.LocalContext.current
-    var release by androidx.compose.runtime.remember { mutableStateOf<com.music.spotui.data.api.UpdateChecker.Release?>(null) }
+    var release by updateRelease
     androidx.compose.runtime.LaunchedEffect(Unit) {
+        // Turned off in Settings: no check at launch. The manual check there still asks.
+        if (!com.music.spotui.data.preferences.AutoUpdateCheckPref.on) return@LaunchedEffect
         kotlinx.coroutines.delay(5_000)
         release = com.music.spotui.data.api.UpdateChecker.check(context)
     }

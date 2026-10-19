@@ -1,27 +1,32 @@
 package com.music.spotui.ui.screens
 
-import androidx.compose.ui.res.stringResource
-
-import com.music.spotui.ui.components.pressable
-import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.combinedClickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -34,134 +39,428 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
+import app.myspoti.engine.R
 import com.bumptech.glide.integration.compose.ExperimentalGlideComposeApi
-import com.music.spotui.data.entity.SongsModel
-import com.music.spotui.ui.components.SongOptionsSheet
+import com.bumptech.glide.integration.compose.CrossFade
 import com.bumptech.glide.integration.compose.GlideImage
 import com.bumptech.glide.integration.compose.placeholder
-import app.myspoti.engine.R
 import com.music.spotui.data.api.Response
+import com.music.spotui.data.entity.PodcastModel
+import com.music.spotui.data.entity.SongsModel
 import com.music.spotui.di.SongPlayer
+import com.music.spotui.ui.components.EpisodeDownloadButton
+import com.music.spotui.ui.components.EpisodeOptionsSheet
 import com.music.spotui.ui.components.Loader
+import com.music.spotui.ui.components.episodeClock
+import com.music.spotui.ui.components.episodeDateLabel
+import com.music.spotui.ui.components.episodeMinutes
+import com.music.spotui.ui.components.pressable
+import com.music.spotui.ui.components.spotifyUri
+import com.music.spotui.ui.navigation.episodeRoute
+import com.music.spotui.ui.theme.AppAccent
 import com.music.spotui.ui.theme.AppBackground
 import com.music.spotui.ui.viewmodel.ShowViewModel
 
-@OptIn(ExperimentalGlideComposeApi::class, ExperimentalFoundationApi::class)
+/**
+ * A show page, laid out like the official app: cover and name, follow, the episodes (or the
+ * chapters of a book) with their own play / download / "…" controls, and an About tab.
+ */
+@OptIn(ExperimentalGlideComposeApi::class)
 @Composable
 fun ShowScreen(navController: NavController, showId: String, showName: String = "") {
     val vm: ShowViewModel = viewModel()
     val context = LocalContext.current
     LaunchedEffect(showId) { vm.loadShow(showId) }
 
-    val episodesState by vm.episodes.collectAsState()
-    val show by vm.show.collectAsState()
-    val episodes = (episodesState as? Response.Success)?.data.orEmpty()
+    val pageState by vm.page.collectAsState()
+    val page = (pageState as? Response.Success)?.data
+    val show = page?.show
+    val audiobook = page?.audiobook == true
+    val items = page?.items.orEmpty()
 
+    var tab by remember { mutableStateOf(0) }
+    var oldestFirst by remember { mutableStateOf(false) }
     var menuSong by remember { mutableStateOf<SongsModel?>(null) }
+    val np by SongPlayer.nowPlaying
+
+    fun playAt(index: Int) {
+        val song = items.getOrNull(index) ?: return
+        vm.updateQueue(items)
+        SongPlayer.playSong(song.url, context, contextUri = "spotify:show:$showId")
+        vm.updateSongState(song.coverUri, song.title, song.singer, true, song.id, index, song.album)
+    }
+
+    val rows = remember(items, oldestFirst) { if (oldestFirst) items.reversed() else items }
+
     menuSong?.let { sel ->
-        SongOptionsSheet(
+        EpisodeOptionsSheet(
             song = sel,
-            navController = navController,
-            context = context,
+            finished = vm.isFinished(sel),
+            onPlay = {
+                val index = items.indexOfFirst { it.url == sel.url }
+                if (index >= 0) playAt(index)
+            },
+            onMarkFinished = { vm.setFinished(sel, it) },
+            onOpen = { navController.navigate(episodeRoute(sel.url.removePrefix("episode:"), sel.title)) },
             onDismiss = { menuSong = null },
         )
     }
 
-    LazyColumn(
-        contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = com.music.spotui.ui.components.bottomBarsSpace()),
+    Box(Modifier.fillMaxSize().background(AppBackground)) {
+        LazyColumn(
+            contentPadding = PaddingValues(bottom = com.music.spotui.ui.components.bottomBarsSpace()),
+            modifier = Modifier.fillMaxSize(),
+        ) {
+            item {
+                Header(
+                    navController = navController,
+                    show = show,
+                    fallbackName = showName,
+                    cover = page?.coverUri.orEmpty(),
+                    audiobook = audiobook,
+                    following = vm.following.value,
+                    onFollow = { vm.setFollow(showId, it) },
+                )
+            }
+            item {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    TabLabel(
+                        text = stringResource(if (audiobook) R.string.show_tab_chapters else R.string.show_tab_episodes),
+                        selected = tab == 0,
+                        modifier = Modifier.weight(1f),
+                    ) { tab = 0 }
+                    TabLabel(stringResource(R.string.show_tab_about), selected = tab == 1, modifier = Modifier.weight(1f)) { tab = 1 }
+                }
+            }
+            if (tab == 0 && rows.isNotEmpty()) {
+                item {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { oldestFirst = !oldestFirst }
+                            .padding(horizontal = 16.dp, vertical = 12.dp),
+                    ) {
+                        Icon(Icons.Default.Tune, contentDescription = null, tint = Color.White.copy(alpha = 0.8f), modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(10.dp))
+                        Text(
+                            text = stringResource(
+                                when {
+                                    audiobook && oldestFirst -> R.string.show_sort_chapters_oldest
+                                    audiobook -> R.string.show_sort_chapters_newest
+                                    oldestFirst -> R.string.show_sort_oldest
+                                    else -> R.string.show_sort_newest
+                                },
+                            ),
+                            color = Color.White.copy(alpha = 0.8f),
+                            fontSize = 13.sp,
+                        )
+                    }
+                }
+            }
+            if (pageState is Response.Loading && page == null) item { Loader() }
+            if (pageState is Response.Error && items.isEmpty()) item {
+                Text(
+                    (pageState as Response.Error).error,
+                    color = Color.White.copy(alpha = 0.7f),
+                    fontSize = 14.sp,
+                    modifier = Modifier.padding(16.dp),
+                )
+            }
+            if (tab == 1) item { About(show) }
+            if (tab == 0 && page != null && items.isEmpty() && pageState !is Response.Loading) item {
+                Text(
+                    stringResource(R.string.show_empty),
+                    color = Color.White.copy(alpha = 0.6f),
+                    fontSize = 14.sp,
+                    modifier = Modifier.padding(16.dp),
+                )
+            }
+            if (tab == 0) items(rows, key = { it.url }) { ep ->
+                EpisodeRow(
+                    episode = ep,
+                    playing = np.uri == "spotify:episode:${ep.url.removePrefix("episode:")}" && SongPlayer.isPlaying(),
+                    finished = vm.isFinished(ep),
+                    onPlay = {
+                        val index = items.indexOfFirst { it.url == ep.url }
+                        if (index >= 0) playAt(index)
+                    },
+                    onOpen = { navController.navigate(episodeRoute(ep.url.removePrefix("episode:"), ep.title)) },
+                    onMenu = { menuSong = ep },
+                )
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalGlideComposeApi::class)
+@Composable
+private fun Header(
+    navController: NavController,
+    show: PodcastModel?,
+    fallbackName: String,
+    cover: String,
+    audiobook: Boolean,
+    following: Boolean,
+    onFollow: (Boolean) -> Unit,
+) {
+    Column(
         modifier = Modifier
-            .fillMaxSize()
-            .background(Color(AppBackground.toArgb()))
+            .fillMaxWidth()
+            .background(Brush.verticalGradient(listOf(Color(0xFF33322F), AppBackground)))
             .statusBarsPadding(),
     ) {
-        item {
-            Icon(
-                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                tint = Color.White,
-                contentDescription = stringResource(R.string.accessibility_navigate_back),
-                modifier = Modifier.pressable(0.96f) { navController.navigateUp() }
-                    .padding(16.dp)
-                    .size(26.dp)
-                    ,
-            )
+        Box(
+            contentAlignment = Alignment.Center,
+            modifier = Modifier
+                .padding(12.dp)
+                .size(40.dp)
+                .clip(CircleShape)
+                .background(Color.Black.copy(alpha = 0.35f))
+                .clickable { navController.navigateUp() },
+        ) {
+            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.accessibility_navigate_back), tint = Color.White)
         }
-        item {
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                modifier = Modifier.fillMaxWidth().padding(16.dp),
-            ) {
-                GlideImage(
-                    model = show?.coverUri ?: episodes.firstOrNull()?.coverUri,
-                    contentScale = ContentScale.Crop,
-                    failure = placeholder(R.drawable.placeholder),
-                    modifier = Modifier.size(180.dp).clip(RoundedCornerShape(8.dp)),
-                    contentDescription = null,
-                )
-                Spacer(Modifier.height(12.dp))
+        Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
+            GlideImage(
+                transition = CrossFade,
+                model = cover,
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                failure = placeholder(R.drawable.placeholder),
+                modifier = Modifier
+                    .size(128.dp)
+                    .clip(RoundedCornerShape(6.dp)),
+            )
+            Column(Modifier.weight(1f).padding(start = 16.dp)) {
                 Text(
-                    text = show?.name ?: showName,
+                    text = show?.name?.takeIf { it.isNotBlank() } ?: fallbackName,
                     color = Color.White,
-                    fontSize = 22.sp,
+                    fontSize = 24.sp,
                     fontWeight = FontWeight.Bold,
-                    maxLines = 2,
+                    maxLines = 3,
                     overflow = TextOverflow.Ellipsis,
                 )
-                show?.publisher?.takeIf { it.isNotBlank() }?.let {
-                    Text(it, color = Color(0xFFB3B3B3), fontSize = 13.sp)
+                val authors = show?.authors.orEmpty().joinToString(", ")
+                val narrators = show?.narrators.orEmpty().joinToString(", ")
+                if (authors.isNotBlank()) {
+                    Spacer(Modifier.height(6.dp))
+                    Text(stringResource(R.string.show_authors, authors), color = Color.White.copy(alpha = 0.8f), fontSize = 13.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                }
+                if (narrators.isNotBlank()) {
+                    Spacer(Modifier.height(2.dp))
+                    Text(stringResource(R.string.show_narrators, narrators), color = Color.White.copy(alpha = 0.65f), fontSize = 12.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                }
+                if (authors.isBlank() && show != null && show.publisher.isNotBlank()) {
+                    Spacer(Modifier.height(6.dp))
+                    Text(show.publisher, color = Color.White.copy(alpha = 0.8f), fontSize = 13.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
                 }
             }
         }
-
-        if (episodesState is Response.Loading) {
-            item { Loader() }
-        }
-
-        items(episodes.size) { i ->
-            val ep = episodes[i]
+        // Rating, as the official header shows it under the cover.
+        val rating = show?.rating ?: 0.0
+        if (rating > 0.0) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .combinedClickable(
-                        interactionSource = remember { MutableInteractionSource() },
-                        indication = null,
-                        onLongClick = { menuSong = ep },
-                        onClick = {
-                            vm.updateQueue(listOf(ep))
-                            SongPlayer.playSong(ep.url, context)
-                            vm.updateSongState(ep.coverUri, ep.title, ep.singer, true, ep.id, 0, ep.album)
-                        },
-                    )
-                    .padding(16.dp, 10.dp),
+                modifier = Modifier.padding(start = 16.dp, top = 12.dp),
             ) {
-                GlideImage(
-                    model = ep.coverUri,
-                    contentScale = ContentScale.Crop,
-                    failure = placeholder(R.drawable.placeholder),
-                    modifier = Modifier.size(48.dp).clip(RoundedCornerShape(4.dp)),
-                    contentDescription = null,
+                Icon(Icons.Default.Star, contentDescription = null, tint = Color.White.copy(alpha = 0.8f), modifier = Modifier.size(16.dp))
+                Spacer(Modifier.width(6.dp))
+                Text(
+                    text = String.format(java.util.Locale.getDefault(), "%.1f", rating),
+                    color = Color.White.copy(alpha = 0.8f),
+                    fontSize = 13.sp,
                 )
-                Column(modifier = Modifier.padding(start = 12.dp).weight(1f)) {
+            }
+        }
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 14.dp),
+        ) {
+            FollowPill(following) { onFollow(!following) }
+        }
+    }
+}
+
+@Composable
+private fun FollowPill(following: Boolean, onClick: () -> Unit) {
+    Box(
+        contentAlignment = Alignment.Center,
+        modifier = Modifier
+            .height(32.dp)
+            .clip(RoundedCornerShape(16.dp))
+            .background(if (following) Color.White.copy(alpha = 0.12f) else Color.Transparent)
+            .pressable(0.96f, onClick = onClick)
+            .padding(horizontal = 16.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            if (following) {
+                Icon(Icons.Default.Check, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
+                Spacer(Modifier.width(6.dp))
+            }
+            Text(
+                text = stringResource(if (following) R.string.show_following else R.string.show_follow),
+                color = Color.White,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Bold,
+            )
+        }
+    }
+}
+
+@Composable
+private fun TabLabel(text: String, selected: Boolean, modifier: Modifier = Modifier, onClick: () -> Unit) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = modifier.clickable(onClick = onClick).padding(vertical = 10.dp),
+    ) {
+        Text(
+            text = text,
+            color = if (selected) Color.White else Color.White.copy(alpha = 0.6f),
+            fontSize = 14.sp,
+            fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
+        )
+        Spacer(Modifier.height(6.dp))
+        Box(
+            Modifier
+                .height(2.dp)
+                .width(if (selected) 40.dp else 0.dp)
+                .background(AppAccent),
+        )
+    }
+}
+
+@Composable
+private fun About(show: PodcastModel?) {
+    val authors = show?.authors.orEmpty().joinToString(", ")
+    val narrators = show?.narrators.orEmpty().joinToString(", ")
+    Column(Modifier.fillMaxWidth().padding(16.dp)) {
+        Text(
+            text = show?.description.orEmpty(),
+            color = Color.White.copy(alpha = 0.75f),
+            fontSize = 14.sp,
+        )
+        if (authors.isNotBlank()) {
+            Spacer(Modifier.height(12.dp))
+            Text(stringResource(R.string.show_authors, authors), color = Color.White.copy(alpha = 0.6f), fontSize = 13.sp)
+        }
+        if (narrators.isNotBlank()) {
+            Spacer(Modifier.height(4.dp))
+            Text(stringResource(R.string.show_narrators, narrators), color = Color.White.copy(alpha = 0.6f), fontSize = 13.sp)
+        }
+    }
+}
+
+/** One episode (or chapter): cover, title, snippet, date • length, then its own controls. */
+@OptIn(ExperimentalGlideComposeApi::class)
+@Composable
+private fun EpisodeRow(
+    episode: SongsModel,
+    playing: Boolean,
+    finished: Boolean,
+    onPlay: () -> Unit,
+    onOpen: () -> Unit,
+    onMenu: () -> Unit,
+) {
+    val date = episodeDateLabel(episode.releaseDate)
+    val minutes = episodeMinutes(episode.durationMs)
+    Column(Modifier.fillMaxWidth().clickable(onClick = onOpen).padding(horizontal = 16.dp, vertical = 10.dp)) {
+        Row {
+            GlideImage(
+                transition = CrossFade,
+                model = episode.coverUri,
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                failure = placeholder(R.drawable.placeholder),
+                modifier = Modifier.size(56.dp).clip(RoundedCornerShape(4.dp)),
+            )
+            Column(Modifier.weight(1f).padding(start = 12.dp)) {
+                Text(
+                    text = episode.title,
+                    color = if (playing) AppAccent else Color.White,
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                if (episode.description.isNotBlank()) {
+                    Spacer(Modifier.height(4.dp))
                     Text(
-                        ep.title,
-                        color = if (ep.id == vm.currentSongId.value) com.music.spotui.ui.theme.AppAccent else Color.White,
-                        fontSize = 15.sp,
-                        fontWeight = FontWeight.SemiBold,
+                        text = episode.description,
+                        color = Color.White.copy(alpha = 0.65f),
+                        fontSize = 12.sp,
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis,
                     )
-                    Text(ep.singer, color = Color(0xFFB3B3B3), fontSize = 12.sp, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
                 }
+                Spacer(Modifier.height(4.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    if (finished) {
+                        Text(stringResource(R.string.episode_marked_played), color = Color.White.copy(alpha = 0.6f), fontSize = 12.sp)
+                        Spacer(Modifier.width(6.dp))
+                        Text("•", color = Color.White.copy(alpha = 0.4f), fontSize = 12.sp)
+                        Spacer(Modifier.width(6.dp))
+                    }
+                    val started = episode.playedPositionMs > 0 && !finished
+                    Text(
+                        text = when {
+                            date.isBlank() -> minutes
+                            else -> "$date • $minutes"
+                        },
+                        color = Color.White.copy(alpha = 0.6f),
+                        fontSize = 12.sp,
+                    )
+                    if (started) {
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            text = stringResource(R.string.episode_remaining, episodeClock(episode.durationMs - episode.playedPositionMs)),
+                            color = AppAccent,
+                            fontSize = 12.sp,
+                        )
+                    }
+                }
+            }
+        }
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.End,
+            modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
+        ) {
+            Icon(
+                Icons.Default.MoreVert,
+                contentDescription = stringResource(R.string.episode_options),
+                tint = Color.White.copy(alpha = 0.8f),
+                modifier = Modifier.size(22.dp).pressable(0.9f, onClick = onMenu),
+            )
+            Spacer(Modifier.weight(1f))
+            EpisodeDownloadButton(episode, size = 24.dp)
+            Spacer(Modifier.width(6.dp))
+            Box(
+                contentAlignment = Alignment.Center,
+                modifier = Modifier.size(40.dp).clip(CircleShape).background(Color.White).pressable(0.92f, onClick = onPlay),
+            ) {
+                com.music.spotui.ui.components.PlayPauseIcon(
+                    playing = playing,
+                    contentDescription = stringResource(R.string.episode_play),
+                    tint = Color.Black,
+                    modifier = Modifier.size(20.dp),
+                )
             }
         }
     }

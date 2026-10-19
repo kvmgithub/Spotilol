@@ -1,32 +1,47 @@
 package com.music.spotui.ui.viewmodel
 
-import com.music.spotui.di.Graph
 import androidx.compose.runtime.State
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.snapshots.SnapshotStateMap
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.music.spotui.data.api.Api
 import com.music.spotui.data.api.Response
-import com.music.spotui.data.entity.PodcastModel
 import com.music.spotui.data.entity.SongsModel
+import com.music.spotui.data.entity.ShowPage
 import com.music.spotui.di.CurrentSongState
+import com.music.spotui.di.Graph
+import com.music.spotui.di.SongPlayer
 import com.music.spotui.ui.repository.AppRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 
+/**
+ * A show page (podcast) or a book page (audiobook): one flow for the header and the rows, plus
+ * the states a row can change on its own (followed, finished).
+ */
 class ShowViewModel constructor(
     private val repository: AppRepository = Graph.repository,
+    private val api: Api = Graph.api,
     private val currentSongState: CurrentSongState = Graph.currentSongState,
 ) : ViewModel() {
 
     val currentSongPlayingState: State<Boolean> get() = currentSongState.playingState
     val currentSongId: State<Int> get() = currentSongState.songId
 
-    private val _episodes: MutableStateFlow<Response<List<SongsModel>>> = MutableStateFlow(Response.Loading())
-    val episodes: StateFlow<Response<List<SongsModel>>> = _episodes
+    private val _page = MutableStateFlow<Response<ShowPage>>(Response.Loading())
+    val page: StateFlow<Response<ShowPage>> = _page
 
-    private val _show: MutableStateFlow<PodcastModel?> = MutableStateFlow(null)
-    val show: StateFlow<PodcastModel?> = _show
+    /** Following the show (the pill's state), updated on tap before Spotify answers. */
+    val following = mutableStateOf(false)
+
+    /**
+     * Episode uri → finished. Spotify's per-episode state comes with the rows; this holds what
+     * the user just changed (and the page's own "markedasfinished" set).
+     */
+    val finished: SnapshotStateMap<String, Boolean> = androidx.compose.runtime.mutableStateMapOf()
 
     val queue: State<List<SongsModel>> get() = currentSongState.queue
 
@@ -42,10 +57,41 @@ class ShowViewModel constructor(
         if (showKey == showId) return
         showKey = showId
         viewModelScope.launch(Dispatchers.IO) {
-            _show.value = repository.provideShow(showId)
+            repository.provideShowPage(showId).collect { response ->
+                _page.value = response
+                val loaded = (response as? Response.Success)?.data ?: return@collect
+                following.value = loaded.show.saved || SongPlayer.library["spotify:show:$showId"] == true
+            }
         }
+        // The page's own "finished" marks are a separate set: read once, then the rows carry
+        // Spotify's playedState.
         viewModelScope.launch(Dispatchers.IO) {
-            repository.provideShowEpisodes(showId).collect { _episodes.value = it }
+            val marked = runCatching { api.finishedEpisodes() }.getOrDefault(emptySet())
+            if (marked.isEmpty()) return@launch
+            marked.forEach { uri ->
+                val id = uri.substringAfterLast(':')
+                finished["episode:$id"] = true
+            }
         }
+    }
+
+    /** True when [episode] is finished: the last tap wins over what the row said. */
+    fun isFinished(episode: SongsModel): Boolean = finished[episode.url] ?: episode.played
+
+    /** "Marquer comme terminé" / "Marquer comme non commencé". */
+    fun setFinished(episode: SongsModel, played: Boolean) {
+        finished[episode.url] = played
+        viewModelScope.launch(Dispatchers.IO) {
+            runCatching { api.setEpisodePlayed("spotify:episode:${episode.url.removePrefix("episode:")}", played) }
+                .onFailure {
+                    // Spotify refused: back to what the row said, the row is the truth.
+                    kotlinx.coroutines.withContext(Dispatchers.Main) { finished.remove(episode.url) }
+                }
+        }
+    }
+
+    fun setFollow(showId: String, on: Boolean) {
+        following.value = on
+        SongPlayer.setSaved("spotify:show:$showId", on)
     }
 }

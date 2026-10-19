@@ -81,7 +81,7 @@ class SpotifyWritesTest {
     }
 
     @Test fun `saving an episode uses the listenlater set that savedEpisodes reads`() = runBridge({ JsonNull }) { host, bridge ->
-        val podcasts = SpotifyPodcasts(FakeGql { _, _ -> JsonNull }, bridge)
+        val podcasts = SpotifyPodcasts(FakeGql { _, _ -> JsonNull }, bridge, SpotifyHttp(OkHttpClient(), bridge))
         podcasts.setEpisodeSaved("spotify:episode:e", true)
         podcasts.setEpisodeSaved("spotify:episode:e", false)
         assertEquals(listOf("add", "remove"), host.calls.map { it.method() })

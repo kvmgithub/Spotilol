@@ -1,5 +1,6 @@
 package com.music.spotui.ui.screens
 
+import com.music.spotui.ui.components.pressable
 import androidx.compose.ui.res.stringResource
 
 import android.content.Context
@@ -110,7 +111,10 @@ private fun paletteFor(lyrics: Lyrics?, accent: Color): LyricsPalette {
     lyrics?.colors?.let { return LyricsPalette(Color(it.background), Color(it.text), Color(it.highlight)) }
     // No Spotify colours (fallback source): the artwork colour, like Spotify's own fallback.
     val bg = lerp(accent, Color.Black, 0.15f)
-    val text = if (bg.luminance() > 0.35f) Color.Black.copy(alpha = 0.8f) else Color.Black.copy(alpha = 0.55f)
+    // B23: upcoming lines were black at 55 % — invisible on a dark (AMOLED) card. On a dark
+    // background they are drawn in a slightly dimmed white instead, the sung lines staying
+    // the full highlight colour.
+    val text = if (bg.luminance() > 0.35f) Color.Black.copy(alpha = 0.8f) else Color.White.copy(alpha = 0.72f)
     return LyricsPalette(bg, text, Color.White)
 }
 
@@ -481,10 +485,10 @@ private fun LyricsControls(
                 .size(60.dp)
                 .clip(CircleShape)
                 .background(palette.highlight)
-                .clickable { if (SongPlayer.isPlaying()) SongPlayer.pause() else SongPlayer.play() },
+                .pressable(0.92f) { if (SongPlayer.isPlaying()) SongPlayer.pause() else SongPlayer.play() },
         ) {
-            Icon(
-                painter = painterResource(if (playing) R.drawable.ic_playing else R.drawable.play_svgrepo_com),
+            com.music.spotui.ui.components.PlayPauseIcon(
+                playing = playing,
                 contentDescription = if (playing) stringResource(R.string.content_description_pause_button) else stringResource(R.string.content_description_play_button),
                 tint = palette.background,
                 modifier = Modifier.size(30.dp),

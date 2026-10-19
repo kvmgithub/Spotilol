@@ -3,7 +3,7 @@
 # usage: tools/capture.sh <name>   (stop with: touch tools/captures/<name>.stop)
 set -u
 ADB=${ADB:-$HOME/android-sdk/platform-tools/adb}
-SERIAL=${SERIAL:-adb-R3CX80NDH7F-gtly5q._adb-tls-connect._tcp}
+SERIAL=${SERIAL:-$("$ADB" devices | awk 'NR==2 && $2=="device"{print $1}')}  # first device unless SERIAL is set
 NAME=${1:-session}
 OUT="$(dirname "$0")/captures/$NAME"
 mkdir -p "$OUT"; rm -f "$OUT.stop"

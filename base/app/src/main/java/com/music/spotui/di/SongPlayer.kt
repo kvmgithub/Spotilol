@@ -42,6 +42,8 @@ object SongPlayer {
     private const val TRANSPORT_TIMEOUT_MS = 15_000L
     /** How long a play has to show up in the page's state before it is sent again. */
     private const val PLAY_CHECK_MS = 4_000L
+    /** A resume of an episode that the page did not take is asked for again after that. */
+    private const val EPISODE_RESUME_CHECK_MS = 2_500L
     /** "Next" taps closer than this are sent as one jump. */
     private const val SKIP_BURST_MS = 350L
     /** After a local file starts, engine states this recent still predate the pause. */
@@ -57,6 +59,13 @@ object SongPlayer {
     private val bufferingState = mutableStateOf(false)
     /** Observable startup state: visual lookups wait for the audio transport. */
     val isBuffering: Boolean get() = bufferingState.value
+
+    /**
+     * An ad break is on (T4). The page publishes no track while one plays — the song before it
+     * stays in the state, buffering — so the screens show this instead of that stale song.
+     */
+    private val adState = mutableStateOf(false)
+    val adPlaying: Boolean get() = adState.value
     @Volatile private var durationMs = 0L
     @Volatile private var positionMs = 0L
     @Volatile private var positionAt = 0L
@@ -137,20 +146,23 @@ object SongPlayer {
             com.music.spotui.data.preferences.isLyricsExtraSources(Graph.app)
         restoreLastTrack(state)
         scope.launch { api.player.state.collect { s -> if (acceptsSessionUpdates()) applyState(s) } }
-        // Another device plays (the phone as a remote): the page does not always report its
-        // changes, so the state is read again every few seconds and the notification, the
-        // mini player and the slider follow that device.
+        // Another device plays (the phone as a remote), or the app sits in the background while the
+        // page's own reports go quiet: the state is read again every few seconds so the
+        // notification, the mini player and the slider keep up. Reported: the notification stopped
+        // refreshing in the background — this loop waited for _activeDevice, which only a pull-back
+        // sets, so an app started in the background never ran it.
         scope.launch {
-            androidx.compose.runtime.snapshotFlow { _activeDevice.value }.collectLatest { remote ->
-                if (remote == null) return@collectLatest
-                while (true) {
-                    kotlinx.coroutines.delay(REMOTE_REFRESH_MS)
-                    runCatching { MyspotiRuntime.spotify.player.refresh() }
-                }
+            while (true) {
+                kotlinx.coroutines.delay(REMOTE_REFRESH_MS)
+                if (_activeDevice.value == null && !PlaybackService.isRunning) continue
+                runCatching { MyspotiRuntime.spotify.player.refresh() }
             }
         }
         scope.launch { api.player.queue.collect { q -> if (acceptsSessionUpdates()) applyQueue(q) } }
         scope.launch { api.library.changes.collect { refreshCurrentLiked() } }
+        // T4: the player keeps the ad out of [api.player.state] on purpose (the last song stays
+        // there, buffering); its own flag is collected here so the UI can say an ad is on.
+        scope.launch { MyspotiRuntime.spotify.player.adPlaying.collect(::onAdPlaying) }
         scope.launch {
             MyspotiRuntime.spotify.player.refused.collect {
                 android.widget.Toast.makeText(Graph.app, app.myspoti.engine.R.string.play_refused, android.widget.Toast.LENGTH_LONG).show()
@@ -229,9 +241,9 @@ object SongPlayer {
         intentUri = ""; intentUntil = 0L
         wantPlayingUntil = 0L; wantPausedUntil = 0L
         stateSeen = false
-        playing = false; bufferingState.value = false; durationMs = 0L; positionMs = 0L
+        playing = false; bufferingState.value = false; adState.value = false; durationMs = 0L; positionMs = 0L
         currentTrackId = ""; currentContextUri = ""
-        contextRegistry.clear(); library.clear()
+        contextRegistry.clear(); contextNames.clear(); library.clear()
         synchronized(wantedSaved) { wantedSaved.clear() }
         _queue.value = EngineQueue(); apiQueue = null; _nowPlaying.value = NowPlaying()
         lastTrackPrefs().edit().clear().apply(); savedLast = ""; resumeWhenReady = false
@@ -266,27 +278,40 @@ object SongPlayer {
         )
     }
 
+    /** An ad break starts or ends: the notification, the widget and the screens follow (T4). */
+    private fun onAdPlaying(on: Boolean) {
+        if (adState.value == on) return
+        adState.value = on
+        pushNotification(null, boundState?.likeState?.value ?: false)
+    }
+
     /** Notification, lock screen, Bluetooth and Android Auto. */
     private fun pushNotification(song: SongsModel?, liked: Boolean) {
         val st = boundState
+        // T4: during an ad break the page reports no track (the song before it would sit there,
+        // buffering), so the notification and the widget say an ad is on instead of that song.
+        val ad = adState.value
+        val title = if (ad) Graph.app.getString(app.myspoti.engine.R.string.ad_playing) else song?.title ?: st?.title?.value.orEmpty()
+        val artist = if (ad) "" else song?.singer ?: st?.singer?.value.orEmpty()
+        val cover = if (ad) null else song?.coverUri ?: st?.coverUri?.value
         PlaybackService.update(Graph.app, NowPlayingInfo(
-            id = _nowPlaying.value.uri,
-            title = song?.title ?: st?.title?.value.orEmpty(),
-            artist = song?.singer ?: st?.singer?.value.orEmpty(),
-            album = song?.album ?: st?.album?.value.orEmpty(),
-            coverUrl = song?.coverUri ?: st?.coverUri?.value,
-            durationMs = getDuration(),
-            positionMs = getCurrentPosition(),
-            playing = isPlaying(),
-            buffering = isBuffering,
-            liked = liked,
+            id = if (ad) "spotify:ad" else _nowPlaying.value.uri,
+            title = title,
+            artist = artist,
+            album = if (ad) "" else song?.album ?: st?.album?.value.orEmpty(),
+            coverUrl = cover,
+            durationMs = if (ad) 0L else getDuration(),
+            positionMs = if (ad) 0L else getCurrentPosition(),
+            playing = isPlaying() && !ad,
+            buffering = isBuffering && !ad,
+            liked = !ad && liked,
             shuffle = st?.shuffle?.value == true,
         ))
         com.music.spotui.widget.NowPlayingWidget.show(Graph.app,
-            title = song?.title ?: st?.title?.value.orEmpty(),
-            artist = song?.singer ?: st?.singer?.value.orEmpty(),
-            coverUrl = song?.coverUri ?: st?.coverUri?.value,
-            playing = isPlaying())
+            title = title,
+            artist = artist,
+            coverUrl = cover,
+            playing = isPlaying() && !ad)
     }
 
     /** The autoplay item already paused on, so it is paused once, not on every state. */
@@ -327,7 +352,11 @@ object SongPlayer {
         }
         val trackChanged = uri != _nowPlaying.value.uri
         // Autoplay off: stop once, when the player moves on to a track it picked itself.
-        if (item != null && item.provider == "autoplay" && uri != autoplayHandledUri && !com.music.spotui.data.preferences.AutoplayPref.on) {
+        // Tracks only: this is the music setting (similar songs). An episode the page rolls on
+        // to after the previous one belongs to the show, not to that recommendation autoplay —
+        // pausing it there is how a podcast "stopped by itself" (B11).
+        if (item != null && item.provider == "autoplay" && uri.startsWith(SPOTIFY_TRACK_PREFIX) &&
+            uri != autoplayHandledUri && !com.music.spotui.data.preferences.AutoplayPref.on) {
             autoplayHandledUri = uri
             if (!s.isPaused) pauseSilently()
         }
@@ -345,6 +374,8 @@ object SongPlayer {
         )
         val state = boundState ?: return
         state.shuffle.value = s.shuffle
+        // The page reports a speed other than 1 only for episodes: music stays at 1.
+        _speed.value = s.speed.takeIf { it > 0.0 } ?: 1.0
         _repeatMode.value = s.repeat.ordinal
         state.repeat.value = s.repeat != Repeat.OFF
         if (item == null) {
@@ -453,19 +484,23 @@ object SongPlayer {
      * song until restarted); one still waiting when a newer one comes is dropped.
      */
     /** [pullBack]: playback taken by another device comes back here first (not for a pause). */
-    private fun transport(pullBack: Boolean = true, block: suspend (isLatest: () -> Boolean) -> Unit) {
+    /**
+     * [waitReady]: wait for the page when it is loading. Skips do not once a state was seen:
+     * the player keeps them for after the reload (the song the taps point at plays then).
+     */
+    private fun transport(pullBack: Boolean = true, waitReady: Boolean = true, block: suspend (isLatest: () -> Boolean) -> Unit) {
         val gen = transportGen.incrementAndGet()
         scope.launch {
             transportLock.withLock {
                 if (gen != transportGen.get()) return@withLock
                 // A tap while the page loads (cold start, a reload): sent once it is there,
                 // instead of failing at once with "not ready".
-                if (!api.ready.value && kotlinx.coroutines.withTimeoutOrNull(READY_WAIT_MS) { api.ready.first { it } } == null) {
+                if (waitReady && !api.ready.value && kotlinx.coroutines.withTimeoutOrNull(READY_WAIT_MS) { api.ready.first { it } } == null) {
                     Log.w(TAG, "transport dropped: the player page is not ready")
                     return@withLock
                 }
                 if (gen != transportGen.get()) return@withLock
-                if (pullBack) takeBackPlayback()
+                if (pullBack && api.ready.value) takeBackPlayback()
                 // A cancellation of the caller is never swallowed (it must unwind); only the
                 // transport's own timeout and a real failure are logged here.
                 try {
@@ -500,6 +535,20 @@ object SongPlayer {
     fun registerContext(urls: List<String>, contextUri: String) {
         urls.forEach { contextRegistry[it] = contextUri }
     }
+
+    // Names of the lists playback started from, as the app's own pages name them. Spotify's
+    // state carries a context label, but it comes back blank for some lists, and the player
+    // then showed the album name instead of the playlist's (B26). A context the page does not
+    // name is shown with the name the app played it from.
+    private val contextNames = ConcurrentHashMap<String, String>()
+
+    /** [name] of the list at [contextUri], for the player header and the queue sheet. */
+    fun registerContextName(contextUri: String, name: String) {
+        if (contextUri.isNotBlank() && name.isNotBlank()) contextNames[contextUri] = name
+    }
+
+    /** The app's name for [contextUri], "" when the app never played from it (B26). */
+    fun knownContextName(contextUri: String): String = contextNames[contextUri].orEmpty()
 
     /** Liked Songs plays as its own context: Spotify maps it to the account's liked list. */
     fun registerLikedSongs(urls: List<String>) = registerContext(urls, LIKED_CONTEXT)
@@ -548,7 +597,21 @@ object SongPlayer {
         Haptics.click(); intendPlaying(); playing = true; positionAt = SystemClock.elapsedRealtime()
         // Tapped on the restored mini player while the Web Player is still loading.
         if (!stateSeen) resumeWhenReady = true
+        val uri = _nowPlaying.value.uri
         transport { api.player.resume() }
+        // An episode ignored by a plain resume (the page's element stays paused, which is what
+        // "the podcast stopped and the play button does nothing" was — B11) is asked for again
+        // by its uri, where it was. Music keeps the plain resume: it never showed that.
+        if (!uri.startsWith("spotify:episode:")) return
+        scope.launch {
+            kotlinx.coroutines.delay(EPISODE_RESUME_CHECK_MS)
+            if (!playing || LocalPlayer.active.value) return@launch
+            val s = api.player.state.value
+            if (s?.item?.uri == uri && s.isPaused) {
+                Log.i(TAG, "episode resume not taken: playing $uri again")
+                runCatching { api.player.play(uri, positionMs = getCurrentPosition()) }
+            }
+        }
     }
 
     fun pause() { Haptics.click(); pauseSilently() }
@@ -575,7 +638,7 @@ object SongPlayer {
             burstUpcoming = apiQueue?.let { it.queued + it.nextUp }.orEmpty()
             burstTaps = 1
             pendingSkips = 0
-            transport { api.player.next() }
+            transport(waitReady = !stateSeen) { api.player.next() }
             return
         }
         burstAt = now
@@ -595,9 +658,9 @@ object SongPlayer {
         pendingSkips = 0
         // The song [burstTaps] after the one playing at the first tap.
         val target = burstUpcoming.getOrNull(burstTaps - 1)
-        transport { if (target == null) api.player.next() else api.player.skipTo(target) }
+        transport(waitReady = !stateSeen) { if (target == null) api.player.next() else api.player.skipTo(target) }
     }
-    fun previous() { Haptics.click(); if (LocalPlayer.active.value) { LocalPlayer.previous(); return }; intendPlaying(); transport { api.player.previous() } }
+    fun previous() { Haptics.click(); if (LocalPlayer.active.value) { LocalPlayer.previous(); return }; intendPlaying(); transport(waitReady = !stateSeen) { api.player.previous() } }
 
     /** Tracks shufflePlay plays without a context: the first one, plus up to 49 queued. */
     private const val SHUFFLE_QUEUE_MAX = 50
@@ -605,6 +668,12 @@ object SongPlayer {
     private const val PULL_BACK_SETTLE_MS = 600L
     private const val PULL_BACK_WAIT_MS = 6_000L
     private const val DEVICES_WAIT_MS = 2_000L
+
+    /**
+     * How long the device list read by [takeBackPlayback] is trusted. Long enough that a burst of
+     * taps pays for it once, short enough that a device taking playback in between is noticed.
+     */
+    private const val DEVICES_FRESH_MS = 10_000L
     /** A transport command waits that long for the page to load before it is dropped. */
     private const val READY_WAIT_MS = 30_000L
 
@@ -651,7 +720,34 @@ object SongPlayer {
     fun cycleRepeat() = setRepeatMode((_repeatMode.value + 1) % 3)
 
     /** Podcast playback speed (Spotify refuses it on music). */
-    fun setSpeed(speed: Double) = command { api.player.setSpeed(speed) }
+    fun setSpeed(speed: Double) {
+        _speed.value = speed
+        command { api.player.setSpeed(speed) }
+    }
+
+    private val _speed = mutableStateOf(1.0)
+    /** The speed Spotify reports for what plays (podcasts only); 1.0 for music. */
+    val speed: State<Double> get() = _speed
+
+    /** Lands within the episode when skipping: Spotify refuses a position past the end. */
+    fun skipBy(deltaMs: Long) {
+        val duration = getDuration()
+        val target = (getCurrentPosition() + deltaMs).coerceAtLeast(0L)
+        seekTo(if (duration > 0) target.coerceAtMost(duration - 1_000L) else target)
+    }
+
+    /** "Add to queue" for a podcast episode (its uri, not a track id). */
+    fun addEpisodeToQueue(url: String) {
+        val id = url.removePrefix("episode:").takeIf { url.startsWith("episode:") } ?: return
+        Haptics.confirm()
+        command { api.player.addToQueue(listOf("spotify:episode:$id")) }
+    }
+
+    /**
+     * What plays is a podcast episode: the player shows its own controls (30-second-free
+     * skips, speed, no shuffle), not the music ones.
+     */
+    val isEpisode: Boolean get() = _nowPlaying.value.uri.startsWith("spotify:episode:")
 
     fun lyricsTrack(s: SongsModel) = com.music.spotui.data.api.LyricsApi.Track(
         trackId = s.spotifyTrackId, title = s.title, artist = s.singer, album = s.album,
@@ -894,18 +990,39 @@ object SongPlayer {
      * same account, for instance): Myspoti's play, skip and previous then drove that device,
      * where a free account's commands are refused. The music comes back to this phone first.
      */
+    /** When [takeBackPlayback] last read the device list; 0 = never read (read it now). */
+    @Volatile private var devicesFreshUntil = 0L
+
     private suspend fun takeBackPlayback() {
         // The device list as Spotify has it now: the one kept here is only refreshed on a song
         // change, and after a cold start it does not know a device that took playback before.
+        // But this used to run on EVERY tap, i.e. a server round trip before the song was even
+        // asked for: measured 963 ms from tap to sound against 554 ms for a skip, which takes the
+        // same playback path without this call. The list is read again only once the entry is
+        // older than [DEVICES_FRESH_MS] — a takeover within those seconds is still caught by the
+        // play check (the page does not move, the play is sent again) and by the next read.
+        // Measured (15/10 run): this refresh answers from the page's cache in 8-36 ms, so it is not
+        // what makes a tap slower than a skip (963 vs 554 ms then) — keeping it unconditional keeps
+        // "a device that took playback is pulled back at once" (beta.7 behaviour). The timing stays
+        // in the log because the day it becomes slow, that line says so.
+        devicesFreshUntil = 0L
+        val started = System.currentTimeMillis()
         kotlinx.coroutines.withTimeoutOrNull(DEVICES_WAIT_MS) { runCatching { api.devices.refresh() } }
+        Log.i(TAG, "device list read in ${System.currentTimeMillis() - started} ms")
         val active = api.devices.devices.value.firstOrNull { it.active }
         _activeDevice.value = active?.takeIf { !it.local }?.let { ConnectDevice(it.id, it.name, it.type, false, true) }
         val remote = _activeDevice.value ?: return
         if (remote.id == chosenRemote) return
         Log.i(TAG, "playback taken by ${remote.name}: pulled back here")
+        // A pull-back can land on this phone at 0:00 (reported: "sometimes on Connect the sound
+        // starts over"). The position is remembered across the pull and restored only when the same
+        // item really rolled back — a new play right after this call asks for its own position.
+        val before = api.player.state.value?.let { s -> s.item?.uri?.let { uri -> uri to s.positionAt(System.currentTimeMillis()) } }
         // Bounded: a transfer from a device that went away can leave the page's promise
         // pending for ever, and every later command waiting behind it.
         val pulled = kotlinx.coroutines.withTimeoutOrNull(PULL_BACK_WAIT_MS) { runCatching { api.devices.pullHere() } }
+        // Whatever happened, the list just changed under us: read it again next time.
+        devicesFreshUntil = 0L
         if (pulled?.isSuccess != true) Log.w(TAG, "pull here failed: ${pulled?.exceptionOrNull()?.message ?: "no answer"}")
         // No answer: the page's Connect layer waits on that device and would hold every later
         // command. A new page claims playback for itself at the first command.
@@ -916,6 +1033,18 @@ object SongPlayer {
         _activeDevice.value = null
         PlaybackService.setPlaybackDevice(false, remoteVolume)
         kotlinx.coroutines.delay(PULL_BACK_SETTLE_MS)
+        // Same item but an earlier position: the page restarted it. Put the listener back where they
+        // were. Anything else (a different item, a position that did not move back) is left alone.
+        before?.let { (uri, pos) ->
+            val now = api.player.state.value
+            val at = now?.positionAt(System.currentTimeMillis()) ?: return@let
+            if (now.item?.uri == uri && pos > 3_000 && at < pos - 3_000) {
+                Log.i(TAG, "playback came back at $at ms on the same item: back to $pos ms")
+                runCatching { api.player.seek(pos) }
+            } else {
+                Log.i(TAG, "playback came back at $at ms (item ${now.item?.uri})")
+            }
+        }
     }
 
     /** Move playback to [device] (Spotify Connect transfer). */
@@ -1015,7 +1144,7 @@ object SongPlayer {
         durationMs = item.song.durationMs.toLong()
         pushNotification(item.song, false)
         val target = apiItem(item) ?: return
-        transport { api.player.skipTo(target) }
+        transport(waitReady = !stateSeen) { api.player.skipTo(target) }
     }
 
     /** "Clear queue": drops the tracks the user queued (not the context's next ones). */
@@ -1138,7 +1267,9 @@ object SongPlayer {
         }
     }
 
-    fun isCrossfadeActive(): Boolean = false
+    /** True while a crossfade is fading this song out, or the next one in (see [SpotifyPlayer]). */
+    fun isCrossfadeActive(): Boolean =
+        MyspotiRuntime.isStarted && MyspotiRuntime.spotify.player.isCrossfading()
     fun release() {}
 
     // ── Play-key helpers (url = "spotify:track:<id>|<search text>") ──

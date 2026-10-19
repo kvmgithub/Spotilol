@@ -26,6 +26,17 @@ class StallTest {
     @Test fun `buffering for long`() = assertEquals("buffering", SpotifyPlayer.stallOf(state(0, 0, buffering = true), 20_000, false))
     @Test fun `buffering a moment`() = assertNull(SpotifyPlayer.stallOf(state(0, 0, buffering = true), 5_000, false))
 
+    private val episode = song.copy(kind = ItemKind.EPISODE, uri = "spotify:episode:e", name = "E")
+    private val nextEpisode = episode.copy(uri = "spotify:episode:f", name = "F")
+    private val ad = song.copy(kind = ItemKind.AD, uri = "spotify:ad:x")
+
+    @Test fun `a song at its end moves on to the next song`() = assertEquals(after.uri, SpotifyPlayer.onwardTarget(state(199_500, 0), emptyList()))
+    @Test fun `an episode at its end moves on to the next episode`() =
+        assertEquals(nextEpisode.uri, SpotifyPlayer.onwardTarget(state(199_500, 0, next = nextEpisode).copy(item = episode), emptyList()))
+    @Test fun `the queue is read when the state names no next item`() =
+        assertEquals(nextEpisode.uri, SpotifyPlayer.onwardTarget(state(199_500, 0, next = null).copy(item = episode), listOf(ad, nextEpisode)))
+    @Test fun `an ad is never a target`() = assertNull(SpotifyPlayer.onwardTarget(state(199_500, 0, next = ad), listOf(ad)))
+
     @Test fun `a stuck ad is skipped twice, then the page reloads`() {
         assertEquals("next", SpotifyPlayer.adRecovery(1))
         assertEquals("next", SpotifyPlayer.adRecovery(2))

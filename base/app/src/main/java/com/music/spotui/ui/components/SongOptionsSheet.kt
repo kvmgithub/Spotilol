@@ -38,6 +38,7 @@ import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Block
 import androidx.compose.material.icons.outlined.Bookmark
+import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Speed
 import kotlinx.coroutines.launch
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -63,6 +64,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
 import com.bumptech.glide.integration.compose.ExperimentalGlideComposeApi
+import com.bumptech.glide.integration.compose.CrossFade
 import com.bumptech.glide.integration.compose.GlideImage
 import com.music.spotui.data.entity.SongsModel
 import com.music.spotui.di.SongPlayer
@@ -87,12 +89,18 @@ fun SongOptionsSheet(
     onDismiss: () -> Unit,
     nowPlaying: Boolean = false,
     onOpenQueue: (() -> Unit)? = null,
+    // Removing a track only makes sense where it is listed in a playlist: the screen that
+    // owns that playlist passes this, and handles the write plus its undo (it has the list).
+    onRemoveFromPlaylist: (() -> Unit)? = null,
+    // The playlist the track is shown in, so the "Add to another playlist" picker can hide it.
+    currentPlaylistId: String? = null,
 ) {
     val playerViewModel: com.music.spotui.ui.viewmodel.PlayerViewModel =
         androidx.lifecycle.viewmodel.compose.viewModel()
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val liked = com.music.spotui.di.rememberTrackSaved(song.spotifyTrackId)
     var showSavedIn by remember { mutableStateOf(false) }
+    var showAddTo by remember { mutableStateOf(false) }
     var showSleep by remember { mutableStateOf(false) }
     var showCredits by remember { mutableStateOf(false) }
     var showSpeed by remember { mutableStateOf(false) }
@@ -108,11 +116,19 @@ fun SongOptionsSheet(
         SavedInSheet(song = song, context = context, onDismiss = { showSavedIn = false; onDismiss() })
         return
     }
+    if (showAddTo) {
+        AddToPlaylistSheet(song = song, context = context, onDismiss = { showAddTo = false; onDismiss() }, excludePlaylistId = currentPlaylistId)
+        return
+    }
     if (showSleep) {
         SleepTimerSheet(onDismiss = { showSleep = false; onDismiss() })
         return
     }
     val hasId = song.spotifyTrackId.isNotBlank()
+    // An episode is keyed by its url ("episode:<id>") and has no track id: the Download row
+    // (and only it) follows that key, everything else in this menu stays on the track id.
+    val episodeKey = com.music.spotui.data.offline.episodeKeyOf(song)
+    val downloadKey = episodeKey ?: song.spotifyTrackId
     fun toast(text: String) = Toast.makeText(context, text, Toast.LENGTH_SHORT).show()
 
     ModalBottomSheet(
@@ -126,6 +142,7 @@ fun SongOptionsSheet(
                 modifier = Modifier.fillMaxWidth().padding(16.dp, 0.dp, 16.dp, 16.dp),
             ) {
                 GlideImage(
+                    transition = CrossFade,
                     modifier = Modifier.size(48.dp).clip(RoundedCornerShape(4.dp)),
                     model = song.coverUri,
                     contentScale = ContentScale.Crop,
@@ -151,6 +168,16 @@ fun SongOptionsSheet(
                 onDismiss()
             }
             MenuRow(Icons.AutoMirrored.Filled.PlaylistAdd, stringResource(R.string.context_menu_add_to_playlist), enabled = hasId) { showSavedIn = true }
+            // Copy into another playlist: one tap, one target, said out loud by the toast.
+            MenuRow(Icons.AutoMirrored.Filled.PlaylistAdd, stringResource(R.string.context_menu_add_to_another_playlist), enabled = hasId) { showAddTo = true }
+            // Only where a playlist is on screen (A11): the row disappears at once, the
+            // screen tells the user and offers Undo.
+            if (onRemoveFromPlaylist != null) {
+                MenuRow(Icons.Outlined.Delete, stringResource(R.string.context_menu_remove_from_playlist), enabled = hasId) {
+                    onDismiss()
+                    onRemoveFromPlaylist()
+                }
+            }
             if (!nowPlaying) {
                 MenuRow(Icons.AutoMirrored.Filled.PlaylistPlay, stringResource(R.string.context_menu_play_next), enabled = hasId) {
                     playerViewModel.playNext(song)
@@ -170,24 +197,40 @@ fun SongOptionsSheet(
                     onOpenQueue()
                 }
             }
-            val offline = com.music.spotui.data.offline.OfflineStore.statusOf(song.spotifyTrackId)
-            when (offline) {
-                com.music.spotui.data.offline.OfflineStatus.Done -> MenuRow(
+            val offline = com.music.spotui.data.offline.OfflineStore.statusOf(downloadKey)
+            when {
+                offline == com.music.spotui.data.offline.OfflineStatus.Done -> MenuRow(
                     null, stringResource(R.string.context_menu_undownload),
                     leading = { DownloadBadge(offline, size = 22.dp) },
                 ) {
-                    toast(context.getString(if (com.music.spotui.data.offline.OfflineCollections.removeSong(song.spotifyTrackId)) R.string.toast_undownload else R.string.download_kept_by_list))
+                    // An episode is kept by its own key (no list holds it): it goes straight.
+                    val gone = if (episodeKey != null) {
+                        com.music.spotui.data.offline.PodcastDownloader.remove(downloadKey)
+                        true
+                    } else com.music.spotui.data.offline.OfflineCollections.removeSong(downloadKey)
+                    toast(context.getString(if (gone) R.string.toast_undownload else R.string.download_kept_by_list))
                     onDismiss()
                 }
-                com.music.spotui.data.offline.OfflineStatus.Queued, is com.music.spotui.data.offline.OfflineStatus.Downloading -> MenuRow(
+                offline == com.music.spotui.data.offline.OfflineStatus.Queued ||
+                    offline is com.music.spotui.data.offline.OfflineStatus.Downloading -> MenuRow(
                     null, stringResource(R.string.download_cancel),
                     leading = { DownloadBadge(offline, size = 22.dp) },
                 ) {
-                    com.music.spotui.data.offline.OfflineDownloader.cancel(song.spotifyTrackId)
+                    if (episodeKey != null) com.music.spotui.data.offline.PodcastDownloader.cancel(downloadKey)
+                    else com.music.spotui.data.offline.OfflineDownloader.cancel(downloadKey)
                     onDismiss()
                 }
-                else -> MenuRow(Icons.Outlined.ArrowCircleDown, stringResource(R.string.context_menu_download), enabled = hasId) {
-                    com.music.spotui.ui.components.DownloadAsk.start(context) { q ->
+                // Enabled for episodes too: refused ones keep the error badge, and a tap tries
+                // again (the audio URL is resolved at that moment, so a retry can succeed).
+                else -> MenuRow(
+                    Icons.Outlined.ArrowCircleDown, stringResource(R.string.context_menu_download),
+                    enabled = downloadKey.isNotBlank(),
+                    leading = if (offline != null) ({ DownloadBadge(offline, size = 22.dp) }) else null,
+                ) {
+                    if (episodeKey != null) {
+                        // No quality dialog: it is the publisher's own file, encoded once.
+                        com.music.spotui.data.offline.PodcastDownloader.enqueue(song)
+                    } else com.music.spotui.ui.components.DownloadAsk.start(context) { q ->
                         com.music.spotui.data.offline.OfflineCollections.downloadSong(song, q)
                         com.music.spotui.di.Haptics.confirm()
                         toast(context.getString(R.string.download_notification_downloading))

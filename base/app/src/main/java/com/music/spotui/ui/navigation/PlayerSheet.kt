@@ -41,7 +41,13 @@ fun PlayerOverlay(navController: NavController) {
         BackHandler { PlayerSheet.close() }
         val settled = remember { derivedStateOf { transition.currentState == transition.targetState } }
         CompositionLocalProvider(LocalPageSettled provides settled) {
-            PlayerScreen(navController)
+            // A podcast episode gets the podcast player (±15 s, speed, sleep timer, no shuffle);
+            // everything else keeps the music player.
+            if (com.music.spotui.di.SongPlayer.isEpisode) {
+                com.music.spotui.ui.screens.PodcastPlayerScreen(navController)
+            } else {
+                PlayerScreen(navController)
+            }
         }
     }
 }

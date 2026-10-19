@@ -63,6 +63,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import com.bumptech.glide.integration.compose.ExperimentalGlideComposeApi
+import com.bumptech.glide.integration.compose.CrossFade
 import com.bumptech.glide.integration.compose.GlideImage
 import com.bumptech.glide.integration.compose.placeholder
 import app.myspoti.engine.R
@@ -142,6 +143,15 @@ private fun ArtistOverviewContent(
         )
     }
 
+    // B27: the ⋮ of the action row below used to do nothing (no clickable at all); it now
+    // opens the artist's own menu.
+    var showArtistMenu by remember { mutableStateOf(false) }
+    if (showArtistMenu) com.music.spotui.ui.components.ArtistOptionsSheet(
+        artistId = overview.id,
+        artistName = displayName,
+        onDismiss = { showArtistMenu = false },
+    )
+
     // Follow + liked tracks straight from the user's Spotify library.
     var following by remember(overview.id) { mutableStateOf(false) }
     var saved by remember(overview.id) { mutableStateOf<Set<String>>(emptySet()) }
@@ -193,6 +203,7 @@ private fun ArtistOverviewContent(
                 .height(340.dp)
             ) {
                 GlideImage(
+                    transition = CrossFade,
                     modifier = Modifier.fillMaxSize(),
                     model = overview.headerImage.ifBlank { overview.avatarImage },
                     contentScale = ContentScale.Crop,
@@ -277,6 +288,7 @@ private fun ArtistOverviewContent(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     overview.popularReleases.firstOrNull()?.let { latest ->
                         GlideImage(
+                            transition = CrossFade,
                             model = latest.coverUri,
                             contentDescription = latest.name,
                             contentScale = ContentScale.Crop,
@@ -306,11 +318,15 @@ private fun ArtistOverviewContent(
                         )
                     }
                     Spacer(Modifier.width(16.dp))
+                    // B27: this ⋮ had neither `clickable` nor `onClick` — the artist menu is
+                    // opened with the same pressable feedback as the row's other buttons.
                     Icon(
                         Icons.Default.MoreVert,
                         contentDescription = stringResource(R.string.content_description_context_menu),
                         tint = Color.White.copy(alpha = 0.7f),
-                        modifier = Modifier.size(24.dp),
+                        modifier = Modifier
+                            .pressable(0.96f) { showArtistMenu = true }
+                            .size(24.dp),
                     )
                 }
 
@@ -449,6 +465,7 @@ private fun ArtistOverviewContent(
                     Column {
                         if (overview.avatarImage.isNotBlank()) {
                             GlideImage(
+                                transition = CrossFade,
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .height(200.dp),
@@ -575,6 +592,7 @@ private fun PopularTrackRow(
             modifier = Modifier.width(24.dp),
         )
         GlideImage(
+            transition = CrossFade,
             modifier = Modifier
                 .padding(8.dp, 0.dp, 12.dp, 0.dp)
                 .size(48.dp)
@@ -628,6 +646,7 @@ private fun ReleaseCard(album: AlbumsModel, onClick: () -> Unit) {
             ,
     ) {
         GlideImage(
+            transition = CrossFade,
             modifier = Modifier
                 .size(132.dp)
                 .clip(RoundedCornerShape(6.dp)),
@@ -659,6 +678,7 @@ private fun ReleaseRow(album: AlbumsModel, onClick: () -> Unit) {
             ,
     ) {
         GlideImage(
+            transition = CrossFade,
             modifier = Modifier
                 .size(88.dp)
                 .clip(RoundedCornerShape(4.dp)),
@@ -853,6 +873,7 @@ private fun RelatedArtistCard(artist: ArtistsModel, onClick: () -> Unit) {
             ,
     ) {
         GlideImage(
+            transition = CrossFade,
             modifier = Modifier
                 .size(122.dp)
                 .clip(CircleShape),

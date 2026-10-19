@@ -115,6 +115,13 @@ data class NowPlaying(
     val explicit: Boolean = false,
     /** Where the player took this item from ("context", "queue", "autoplay"...), when it says. */
     val provider: String? = null,
+    /**
+     * The item's media kind as the page reports it ("audio", "video"). A **video** ad never
+     * reports a position or a speed the way an audio one does, so the recovery has to treat it as
+     * playing (see the ad branch of the stall watcher) instead of waiting for a state that never
+     * comes.
+     */
+    val mediaType: String? = null,
 )
 
 data class PlayerRestrictions(

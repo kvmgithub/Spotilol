@@ -205,8 +205,8 @@ fun VideoFullscreenOverlay() {
                             .background(Color.White)
                             .clickable { touch++; if (playing) SongPlayer.pause() else SongPlayer.play() },
                     ) {
-                        Icon(
-                            painterResource(if (playing) R.drawable.ic_playing else R.drawable.play_svgrepo_com),
+                        PlayPauseIcon(
+                            playing = playing,
                             contentDescription = if (playing) stringResource(R.string.content_description_pause_button) else stringResource(R.string.content_description_play_button),
                             tint = Color.Black,
                             modifier = Modifier.size(30.dp),

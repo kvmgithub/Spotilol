@@ -18,6 +18,8 @@ object Graph {
         MyspotiRuntime.start(application, loadPage = !com.music.spotui.data.DataSaver.active)
         // The streaming quality the user chose, set on the player at every page load.
         com.music.spotui.data.preferences.applyStreamingQuality(com.music.spotui.data.preferences.getStreamingQuality(application))
+        // The crossfade length (0 = off), in the player from the first song on.
+        com.music.spotui.data.preferences.applyCrossfade(com.music.spotui.data.preferences.getCrossfadeSeconds(application))
         com.music.spotui.data.local.ListenHistory.init(application)
         // Downloaded songs (private storage), and the downloads left unfinished last time.
         // Supporter thank-yous (accent colour) before any screen draws.
@@ -29,6 +31,8 @@ object Graph {
         com.music.spotui.data.local.LibraryOrder.init(application)
         runCatching { com.music.spotui.data.DataSaverGlide.install(application) }
         com.music.spotui.data.offline.OfflineDownloader.resumePending()
+        // Episodes have their own queue and their own file: resumed the same way.
+        com.music.spotui.data.offline.PodcastDownloader.resumePending()
     }
 
     val api: Api by lazy { Api(app) }

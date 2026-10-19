@@ -25,4 +25,8 @@ dependencies {
     implementation(libs.serialization.json)
     implementation(libs.okhttp)
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")
+
+    testImplementation("junit:junit:4.13.2")
+    // The real org.json in unit tests (android.jar only has stubs).
+    testImplementation("org.json:json:20240303")
 }

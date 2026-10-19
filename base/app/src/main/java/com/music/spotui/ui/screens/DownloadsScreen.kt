@@ -49,6 +49,7 @@ import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
 import app.myspoti.engine.R
 import com.bumptech.glide.integration.compose.ExperimentalGlideComposeApi
+import com.bumptech.glide.integration.compose.CrossFade
 import com.bumptech.glide.integration.compose.GlideImage
 import com.bumptech.glide.integration.compose.placeholder
 import com.music.spotui.data.entity.SongsModel
@@ -70,6 +71,11 @@ fun DownloadsScreen(navController: NavController) {
     // Snapshot reads: the list follows downloads as they finish.
     val tracks = OfflineStore.tracks.values.sortedByDescending { it.addedAt }
     val waiting = OfflineDownloader.requests.values.filter { !OfflineStore.isDownloaded(it.trackId) }
+    // A25: only queued or running songs can be stopped; a failed one has nothing left to cancel.
+    val stoppable = waiting.count {
+        val s = OfflineStore.status[it.trackId]
+        s == OfflineStatus.Queued || s is OfflineStatus.Downloading
+    }
     val np by SongPlayer.nowPlaying
     val playingHere = LocalPlayer.active.value && LocalPlayer.contextName == title
     var menuSong by remember { mutableStateOf<SongsModel?>(null) }
@@ -143,6 +149,24 @@ fun DownloadsScreen(navController: NavController) {
                         .padding(14.dp),
                 )
             }
+            // A25: one tap empties the queue; the songs already downloaded stay untouched.
+            if (stoppable > 0) item(key = "stop_all") {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)
+                        .clip(RoundedCornerShape(8.dp)).background(Color(0xFF2A2A2A))
+                        .pressable(0.98f) { OfflineDownloader.stopAll() }
+                        .padding(horizontal = 14.dp, vertical = 10.dp),
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Text(stringResource(R.string.downloads_stop_all_title), color = Color.White, fontSize = 14.sp)
+                        Text(stringResource(R.string.downloads_stop_all_detail), color = Color(0xFFB3B3B3), fontSize = 12.sp)
+                    }
+                    Spacer(Modifier.width(12.dp))
+                    Icon(Icons.Default.Close, stringResource(R.string.downloads_stop_all_title),
+                        tint = Color.White.copy(alpha = 0.7f), modifier = Modifier.size(20.dp))
+                }
+            }
             // Songs still on their way (or that could not be downloaded).
             items(waiting, key = { "w:" + it.trackId }) { r ->
                 val status = OfflineStore.status[r.trackId]
@@ -154,6 +178,7 @@ fun DownloadsScreen(navController: NavController) {
                         .padding(horizontal = 16.dp, vertical = 8.dp),
                 ) {
                     GlideImage(
+                        transition = CrossFade,
                         model = r.coverUrl, contentDescription = null, contentScale = ContentScale.Crop,
                         loading = placeholder(R.drawable.placeholder), failure = placeholder(R.drawable.placeholder),
                         modifier = Modifier.size(48.dp).clip(RoundedCornerShape(4.dp)),
@@ -183,6 +208,7 @@ fun DownloadsScreen(navController: NavController) {
                     modifier = Modifier.fillMaxWidth().pressable(0.97f) { play(i) }.padding(horizontal = 16.dp, vertical = 8.dp),
                 ) {
                     GlideImage(
+                        transition = CrossFade,
                         model = OfflineStore.coverFile(t) ?: t.coverUrl, contentDescription = null, contentScale = ContentScale.Crop,
                         loading = placeholder(R.drawable.placeholder), failure = placeholder(R.drawable.downloads_cover),
                         modifier = Modifier.size(48.dp).clip(RoundedCornerShape(4.dp)),

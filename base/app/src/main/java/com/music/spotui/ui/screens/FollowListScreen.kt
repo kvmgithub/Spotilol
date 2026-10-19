@@ -40,6 +40,7 @@ import app.myspoti.api.UserRef
 import app.myspoti.engine.R
 import app.myspoti.host.android.MyspotiRuntime
 import com.bumptech.glide.integration.compose.ExperimentalGlideComposeApi
+import com.bumptech.glide.integration.compose.CrossFade
 import com.bumptech.glide.integration.compose.GlideImage
 import com.bumptech.glide.integration.compose.placeholder
 import com.music.spotui.ui.components.pressable
@@ -100,7 +101,8 @@ fun FollowListScreen(navController: NavController, userId: String, followers: Bo
                         .padding(16.dp, 8.dp),
                 ) {
                     GlideImage(
-                        model = u.imageUrl, contentDescription = null, contentScale = ContentScale.Crop,
+                        transition = CrossFade,
+                        model = com.music.spotui.ui.components.spotifyImageUrl(u.imageUrl), contentDescription = null, contentScale = ContentScale.Crop,
                         failure = placeholder(R.drawable.placeholder), loading = placeholder(R.drawable.placeholder),
                         modifier = Modifier.size(52.dp).clip(CircleShape),
                     )

@@ -67,6 +67,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import com.bumptech.glide.integration.compose.ExperimentalGlideComposeApi
+import com.bumptech.glide.integration.compose.CrossFade
 import com.bumptech.glide.integration.compose.GlideImage
 import com.bumptech.glide.integration.compose.placeholder
 import app.myspoti.engine.R
@@ -181,7 +182,19 @@ fun HomeFeedContent(navController: NavController, feed: HomeFeedModel, facet: St
         if (top.isNotEmpty()) ContextViewModel.prefetchSoon(top)
     }
 
+    // Re-tapping the Home tab while on Home scrolls this list back to its top (official
+    // behaviour): an animation over the existing items, so nothing is fetched again.
+    val listState = androidx.compose.foundation.lazy.rememberLazyListState()
+    androidx.compose.runtime.LaunchedEffect(Unit) {
+        com.music.spotui.ui.navigation.TabReselect.home.collect {
+            if (listState.firstVisibleItemIndex != 0 || listState.firstVisibleItemScrollOffset != 0) {
+                listState.animateScrollToItem(0)
+            }
+        }
+    }
+
     LazyColumn(
+        state = listState,
         contentPadding = PaddingValues(bottom = com.music.spotui.ui.components.bottomBarsSpace()),
         modifier = Modifier
             .fillMaxSize()
@@ -248,6 +261,7 @@ private fun HomeHeaderRow(navController: NavController, facet: String, onFacet: 
         ) {
             if (avatarUrl != null) {
                 GlideImage(
+                    transition = CrossFade,
                     model = avatarUrl,
                     contentScale = ContentScale.Crop,
                     contentDescription = stringResource(R.string.recently_played_user_profile),
@@ -262,6 +276,14 @@ private fun HomeHeaderRow(navController: NavController, facet: String, onFacet: 
                 )
             }
         }
+        // B31: a separator between the profile and the options, reported missing from this
+        // header (the sheets already carry one).
+        Box(
+            modifier = Modifier
+                .padding(start = 10.dp)
+                .size(width = 1.dp, height = 22.dp)
+                .background(Color(0xFF3E3E3E)),
+        )
         // Scrolls sideways if the pills don't fit, like Spotify's.
         Row(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -318,6 +340,7 @@ private fun HomeShortcutGrid(navController: NavController, items: List<HomeItem>
                             ,
                     ) {
                         GlideImage(
+                            transition = CrossFade,
                             modifier = Modifier.size(48.dp),
                             contentScale = ContentScale.Crop,
                             model = item.imageUrl,
@@ -378,6 +401,7 @@ private fun HomeFeedCard(item: HomeItem, onClick: () -> Unit) {
             ,
     ) {
         GlideImage(
+            transition = CrossFade,
             modifier = Modifier
                 .size(150.dp)
                 .clip(if (isArtist) CircleShape else RoundedCornerShape(8.dp)),
@@ -428,6 +452,7 @@ private fun ProfileSheet(onOpen: (route: String) -> Unit = {}, onDismiss: () -> 
                 .clickable(enabled = myId != null) { myId?.let { onOpen(com.music.spotui.ui.navigation.profileRoute(it, name)) } }
                 .padding(horizontal = 20.dp, vertical = 8.dp)) {
                 if (avatar != null) GlideImage(
+                    transition = CrossFade,
                     model = avatar, contentDescription = null, contentScale = ContentScale.Crop,
                     modifier = Modifier.size(48.dp).clip(CircleShape),
                 )
@@ -454,6 +479,15 @@ private fun ProfileSheet(onOpen: (route: String) -> Unit = {}, onDismiss: () -> 
             ) {
                 Text(stringResource(R.string.recap_title), color = Color.White, fontSize = 16.sp)
                 Text(stringResource(R.string.recap_detail), color = Color(0xFFB3B3B3), fontSize = 12.sp)
+            }
+            // The account's own listening history, as Spotify keeps it: it belongs beside the
+            // recap (the local counter) because both answer "what did I listen to".
+            androidx.compose.foundation.layout.Column(
+                Modifier.fillMaxWidth().clickable { onOpen(com.music.spotui.ui.navigation.Routes.Recent.route) }
+                    .padding(horizontal = 20.dp, vertical = 10.dp),
+            ) {
+                Text(stringResource(R.string.recents_title), color = Color.White, fontSize = 16.sp)
+                Text(stringResource(R.string.recents_detail), color = Color(0xFFB3B3B3), fontSize = 12.sp)
             }
             // The Spotify account page (plan, privacy, devices), in the app's signed-in browser.
             androidx.compose.foundation.layout.Column(

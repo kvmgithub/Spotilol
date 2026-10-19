@@ -59,6 +59,16 @@ class SpotifyPlayer(private val bridge: Bridge, private val scope: CoroutineScop
      * accounts (DEVICE_DOES_NOT_SUPPORT_COMMAND), leaving the ad audible.
      */
     @Volatile private var adMuted = false
+    /** When [muteForAd] was applied, so a mute outliving the break is lifted (never stuck). */
+    @Volatile private var adMutedAt = 0L
+    /** When the page last reported the ad break (it never reports the end of one). */
+    @Volatile private var adStateAt = 0L
+    /** The page's own ad managers were switched off for this break (see [BridgeHost]). */
+    @Volatile private var adsOffSent = false
+    /** The page's in-stream ad manager was asked to end this break (a lighter lever than a reload). */
+    @Volatile private var adSkipped = false
+    /** How many times the ad mute was sent this break: the media element may appear late. */
+    @Volatile private var adMuteTries = 0
     /** A pause asked through [pause]; it holds until playback is asked for again, never expires. */
     @Volatile private var pausedByUser = false
     /** The order given to the last [play] (context uri to songs), kept for a stall restart. */
@@ -82,6 +92,12 @@ class SpotifyPlayer(private val bridge: Bridge, private val scope: CoroutineScop
     /** Streaming quality ("auto", "low", "normal", "high", "very_high"), kept for every page load. */
     @Volatile var audioQuality: String = "auto"
         private set
+
+    /**
+     * Wakes the watcher before its next tick (an ad has just started). Declared before init:
+     * the watcher starts there, at once on the main dispatcher.
+     */
+    private val wake = kotlinx.coroutines.channels.Channel<Unit>(kotlinx.coroutines.channels.Channel.CONFLATED)
 
     init {
         scope.launch {
@@ -111,7 +127,9 @@ class SpotifyPlayer(private val bridge: Bridge, private val scope: CoroutineScop
                 }
                 val lost = playingAtLoss
                 playingAtLoss = null
-                if (lost != null && !ownReload) scope.launch { runCatching { resumeAfterReload(lost) } }
+                if (!ownReload && (lost != null || liveIntent() != null)) scope.launch {
+                    runCatching { if (lost != null) resumeAfterReload(lost) else { delay(RESTORE_GAP_MS); playIntent() } }
+                }
                 if (audioQuality != "auto") applyAudioQuality()
                 // The page keeps its volume: an app closed during a muted ad must not stay silent.
                 runCatching { if (volume() == 0.0) setVolume(wantedVolume?.takeIf { v -> v > 0.0 } ?: 1.0) }
@@ -173,6 +191,13 @@ class SpotifyPlayer(private val bridge: Bridge, private val scope: CoroutineScop
      * where it was, checked and tried again, unless the user paused or played something since.
      */
     private suspend fun resumeAfterReload(lost: PlayerState) {
+        // Skipped during the reload: that song, not the one that played before it.
+        if (liveIntent() != null) {
+            val seq = stateSeq
+            withTimeoutOrNull(RESTORE_WAIT_MS) { while (stateSeq == seq) delay(100) }
+            playIntent()
+            return
+        }
         val item = lost.item ?: return
         val uri = item.uri
         val at = lost.positionMs
@@ -267,6 +292,8 @@ class SpotifyPlayer(private val bridge: Bridge, private val scope: CoroutineScop
         var adAttempts = 0
         var adReloaded = false
         var frozenReloadAt = 0L
+        /** Consecutive ticks where the page answered nothing (see FROZEN_MISSES). */
+        var frozenMisses = 0
         var tick = 0
         var lastMediaTime = -1.0
         var silentSince = 0L
@@ -274,7 +301,9 @@ class SpotifyPlayer(private val bridge: Bridge, private val scope: CoroutineScop
             // A song plays (or an ad is on): the watcher looks every [WATCH_TICK_MS] to hear a
             // stall in seconds. Nothing plays: there is less to see, so it looks less often.
             val quiet = !_adPlaying.value && _state.value.let { it == null || it.isPaused }
-            delay(if (quiet) WATCH_IDLE_TICK_MS else WATCH_TICK_MS)
+            // An ad starting wakes it at once: its recovery starts AD_PLAYING_SKIP_MS after it.
+            if (withTimeoutOrNull(if (quiet) WATCH_IDLE_TICK_MS else WATCH_TICK_MS) { wake.receive() } != null)
+                delay(AD_PLAYING_SKIP_MS + 50)
             tick++
             if (!bridge.ready.value || ownReload) { key = null; attempts = 0; silentSince = 0L; continue }
             val now = System.currentTimeMillis()
@@ -282,26 +311,83 @@ class SpotifyPlayer(private val bridge: Bridge, private val scope: CoroutineScop
             // at once, the song going on where it was.
             val read = runCatching { readMedia() }
             if (read.isFailure && bridge.ready.value && !bridge.ping() && bridge.ready.value) {
+                // One silent page is not a dead one: a busy main thread (a long render, a reload
+                // still settling, an ad break starting) also holds the bridge for seconds, and
+                // reloading on the first miss turned a short hiccup into a full page reload — the
+                // one the user actually sees. The reload needs two misses in a row
+                // ([FROZEN_MISSES] ticks of WATCH_TICK_MS, so about four seconds of real silence).
+                frozenMisses++
+                if (frozenMisses < FROZEN_MISSES) { key = null; silentSince = 0L; continue }
                 if (now - frozenReloadAt > FROZEN_RELOAD_GAP_MS) {
                     frozenReloadAt = now
-                    bridge.logger?.invoke("page not answering: reloading the player")
+                    frozenMisses = 0
+                    bridge.logger?.invoke("page not answering ($FROZEN_MISSES misses in a row): reloading the player")
                     val playing = lastTrackState?.takeIf { !pausedByUser && !it.isPaused }
                     reloadAndPlayOn(playing?.copy(positionMs = playing.positionAt(now), timestampMs = now), next = false)
                     key = null; attempts = 0; silentSince = 0L
                 }
                 continue
             }
+            // The page answered: it is alive, whatever happened before.
+            frozenMisses = 0
             val media = read.getOrNull()
             lastMedia = media
             val s = _state.value
             preloadNextSong(s, media)
+            tickCrossfade(s, media, now)
             if (tick % VOLUME_CHECK_TICKS == 0) guardVolume(s, media)
             if (_adPlaying.value) {
                 val ad = adState
+                // The break just started: the page's own ad managers are switched off, so the
+                // *next* break never starts (SpotX's adsEnabled patch, done at runtime instead of
+                // by patching the bundle). The bridge repeats it on every state push.
+                if (!adsOffSent) {
+                    adsOffSent = true
+                    runCatching { bridge.call("ads.off") }
+                }
+                // The mute ran once when the break started, but the player's media element lives in
+                // the player's own objects (not the DOM) and can appear late: sending it again here,
+                // bounded, is what keeps an ad from being heard.
+                if (adMuteTries < AD_MUTE_TRIES) {
+                    adMuteTries++
+                    runCatching { bridge.call("media.mute", buildJsonObject { put("on", true) }) }
+                }
+                // The mute outlived the break: the page went quiet without ever publishing the
+                // next song, so nothing clears the ad flag and the phone stays silent for good
+                // (reported as "no sound until the app is restarted"). The sound comes back
+                // anyway, and the state is read again.
+                if (adMutedAt > 0 && now - adMutedAt > AD_MUTE_MAX_MS) {
+                    bridge.logger?.invoke("ad mute older than ${AD_MUTE_MAX_MS / 1000}s: unmuted")
+                    runCatching { unmuteAfterAd() }
+                    if (adStateAt > 0 && now - adStateAt > AD_MUTE_MAX_MS) {
+                        adState = null; adStateAt = 0L
+                        adAttempts = 0; adReloaded = false; adsOffSent = false
+                        _adPlaying.value = false
+                        runCatching { refresh() }
+                    }
+                    key = null; silentSince = 0L
+                    continue
+                }
                 // A refused ad sits at 0:00, buffering; a real one plays to its end.
                 val refused = ad != null && (ad.isBuffering || ad.speed == 0.0) && now - adSince > AD_STUCK_MS
-                val playing = ad != null && !refused && now - adSince > AD_PLAYING_SKIP_MS && !adReloaded
-                if (refused || playing || now - adSince > AD_BREAK_MAX_MS) {
+                // A video ad reports neither a position nor a speed the way an audio one does: it
+                // is taken as playing from the start, so it is got past instead of waited on.
+                val videoAd = ad?.item?.mediaType == "video"
+                val playing = ad != null && !refused && (videoAd || now - adSince > AD_PLAYING_SKIP_MS) && !adReloaded
+                val stuck = refused || playing || now - adSince > AD_BREAK_MAX_MS
+                // The page's in-stream ad manager can end its own break. Asked once per break,
+                // before the skip/reload recovery, because that recovery is what the user sees: a
+                // "Test ad" used to cost a full reload of the page. The recovery below still runs
+                // if the ad is still there on the next turn.
+                if (stuck && !adSkipped) {
+                    adSkipped = true
+                    val lever = runCatching { bridge.call("ads.skip") }.getOrNull()
+                    bridge.logger?.invoke("ad ${ad?.item?.name}: asked the page to end the break ($lever)")
+                    adSince = System.currentTimeMillis()
+                    key = null; silentSince = 0L
+                    continue
+                }
+                if (stuck) {
                     adAttempts++
                     val last = lastTrackState
                     // Playing on can land on the same refused ad again: after a few tries the
@@ -360,6 +446,15 @@ class SpotifyPlayer(private val bridge: Bridge, private val scope: CoroutineScop
      */
     private suspend fun guardVolume(s: PlayerState?, media: Media?) {
         if (s == null || s.isPaused || s.isBuffering || _adPlaying.value || fadeBackTo != null || fadeBack?.isActive == true) return
+        // A crossfade owns the element level until it ends: the guard must not undo the ramp.
+        // Past its deadline, though, it is exactly the lost unmute it exists to catch.
+        if (crossfadeArmed) {
+            if (System.currentTimeMillis() >= crossfadeUntil) {
+                bridge.logger?.invoke("crossfade overdue: volume restored")
+                endCrossfade(restore = true)
+            }
+            return
+        }
         // The unmute after an ad was lost (page busy): the song would play silent.
         if (adMuted) unmuteAfterAd()
         else if (media?.muted == true) {
@@ -392,34 +487,165 @@ class SpotifyPlayer(private val bridge: Bridge, private val scope: CoroutineScop
     }
 
     /** Plays the song after [s] (or [s] again when it is the last one) in its context. */
+    /**
+     * The song the user's skips point at, kept through what the page cannot take a skip in:
+     * an ad break (skips refused, "The operation is not allowed"), a reload ("local player is
+     * disabled", "not ready"). Skips then move this intent instead of reaching the page, and
+     * whatever recovers playback (the ad recovery, a reload, the end of the ad) plays it.
+     * [from]: the song shown when it was set (the page has not moved while it reports it).
+     */
+    private data class Intent(val context: Uri?, val item: NowPlaying, val from: Uri?, val at: Long, val adSeen: Boolean = false)
+    @Volatile private var intent: Intent? = null
+    /** The song and time the intent was last played, so that a slow page is not asked twice. */
+    @Volatile private var intentPlayedAt = 0L
+    @Volatile private var intentPlayedUri: Uri? = null
+    /** The intent is being played after an ad or a reload: skips meanwhile only move it. */
+    @Volatile private var playingIntent = false
+
+    /** The page cannot take a skip now. */
+    private val skipsHeld: Boolean get() = _adPlaying.value || ownReload || playingIntent || !bridge.ready.value
+
+    private fun liveIntent(): Intent? = intent?.takeIf { System.currentTimeMillis() - it.at < INTENT_MAX_MS }
+
+    /** The songs after the last real one, as the page listed them (queued first). */
+    private fun upcoming(): List<NowPlaying> =
+        _queue.value?.let { it.queued + it.nextUp }.orEmpty().filter { it.kind == ItemKind.TRACK || it.kind == ItemKind.EPISODE }
+
+    /**
+     * A skip the page cannot take: the intent moves [by] songs from where it is (or from the
+     * song shown: the first "next" is the song after it, the first "previous" that song again)
+     * and is shown at once.
+     */
+    private fun stepIntent(by: Int) {
+        val base = lastWithSong() ?: return
+        val current = base.item ?: return
+        val seq = listOfNotNull(base.previous) + current + upcoming().ifEmpty { listOfNotNull(base.next) }
+        val baseIdx = if (base.previous != null) 1 else 0
+        val at = liveIntent()?.let { i -> seq.indexOfFirst { it.uri == i.item.uri }.takeIf { it >= 0 } }
+        // No intent yet: "next" lands on the song after the one shown, "previous" on that one.
+        val idx = ((at ?: (baseIdx + if (by > 0) 0 else 1)) + by).coerceIn(0, seq.lastIndex)
+        setIntent(base.contextUri, seq[idx], current.uri)
+    }
+
+    private fun setIntent(context: Uri?, item: NowPlaying, from: Uri?) {
+        val now = System.currentTimeMillis()
+        intent = Intent(context, item, from, now, adSeen = _adPlaying.value || liveIntent()?.adSeen == true)
+        bridge.logger?.invoke("skip held (${if (_adPlaying.value) "ad" else "page reloading"}): ${item.name} goes on next")
+        showIntent()
+    }
+
+    /** The screen shows the song the user is on, waiting, while the page is elsewhere. */
+    private fun showIntent() {
+        val i = liveIntent() ?: return
+        val base = lastWithSong() ?: return
+        val now = System.currentTimeMillis()
+        _state.value = base.copy(item = i.item, positionMs = 0, timestampMs = now, isPaused = false, isBuffering = true)
+    }
+
+    /**
+     * Plays the intent until the page is on it; skips made meanwhile move the intent and the
+     * newest one is played. False when there is none.
+     */
+    private suspend fun playIntent(): Boolean {
+        if (liveIntent() == null || playingIntent) return liveIntent() != null
+        playingIntent = true
+        try {
+            repeat(INTENT_PLAYS) {
+                val i = liveIntent() ?: return true
+                val uri = i.item.uri
+                if (lastTrackState?.item?.uri == uri) { intent = null; return true }
+                val now = System.currentTimeMillis()
+                // Asked for a moment ago (a slow page): not again, wait for it below.
+                if (uri != intentPlayedUri || now - intentPlayedAt >= INTENT_REPLAY_MS) {
+                    intentPlayedUri = uri
+                    intentPlayedAt = now
+                    bridge.logger?.invoke("playing the song the skips pointed at: ${i.item.name}")
+                    val ctx = i.context
+                    runCatching {
+                        if (ctx != null) play(ctx, trackUri = uri, order = lastOrder?.takeIf { it.first == ctx }?.second)
+                        else play(uri)
+                    }.onFailure { bridge.logger?.invoke("intent not played: ${it.message}") }
+                }
+                // The page on it, or the user skipped again (then that song is played).
+                withTimeoutOrNull(INTENT_REPLAY_MS) {
+                    while (lastTrackState?.item?.uri != uri && liveIntent()?.item?.uri == uri) delay(100)
+                }
+                if (lastTrackState?.item?.uri == uri && liveIntent()?.item?.uri == uri) { intent = null; return true }
+            }
+            return true
+        } finally {
+            playingIntent = false
+        }
+    }
+
     private suspend fun playOn(s: PlayerState) {
+        // The user skipped meanwhile: their song, not the one after the last state seen.
+        if (playIntent()) return
         val ctx = s.contextUri
-        val target = s.next?.takeIf { it.kind == ItemKind.TRACK }?.uri
-            ?: _queue.value?.nextUp?.firstOrNull { it.kind == ItemKind.TRACK }?.uri
+        val target = onwardTarget(s, _queue.value?.nextUp.orEmpty())
         when {
             ctx != null && target != null -> play(ctx, trackUri = target, order = lastOrder?.takeIf { it.first == ctx }?.second)
             target != null -> next()
-            ctx != null -> play(ctx, trackUri = s.item?.uri)
+            // Nothing after it: a song is started again (the page's own end-of-context behaviour);
+            // an episode is left finished rather than replayed from the start.
+            ctx != null && s.item?.kind == ItemKind.TRACK -> play(ctx, trackUri = s.item?.uri)
         }
     }
 
     private fun onState(s: PlayerState?) {
         stateSeq++
+        // Another song than the one a crossfade is fading out: the ramp up, at once (the
+        // watcher's next tick would leave the new song's first second at the faded level).
+        if (crossfadeArmed) {
+            val item = s?.item
+            when {
+                // An ad takes the sound over (and is muted on its own): the fade is over.
+                item?.kind == ItemKind.AD -> disarmCrossfade()
+                item != null && item.uri != crossfadeUri -> {
+                    disarmCrossfade()
+                    scope.launch { fadeInCrossfade() }
+                }
+            }
+        }
         if (s?.item?.kind == ItemKind.AD) {
             // Keep showing the last real track, buffering, while the ad plays.
             if (!_adPlaying.value) {
                 adSince = System.currentTimeMillis()
+                adMuteTries = 0
             }
             adState = s
+            adStateAt = System.currentTimeMillis()
+            if (!_adPlaying.value) wake.trySend(Unit)
             _adPlaying.value = true
+            intent = intent?.copy(adSeen = true)
             _state.value = lastTrackState?.copy(isBuffering = true) ?: s.copy(item = null)
+            showIntent()
             return
         }
         _adPlaying.value = false
+        adsOffSent = false
+        adSkipped = false
+        adMuteTries = 0
+        // A real song is playing: the fallback after a refusal (play the list without picking the
+        // song) is armed again for the next command, not held once per five seconds for all of them.
+        refusedRetried = false
         if (s?.item != null) lastSong = s
         else if (lastTrackState?.item != null) lastSongUntil = System.currentTimeMillis()
         lastTrackState = s
         _state.value = s
+        val i = liveIntent() ?: run { intent = null; return }
+        val uri = s?.item?.uri
+        when {
+            uri == i.item.uri -> intent = null
+            // The page has not moved yet (or reports nothing): during an ad or a reload the
+            // screen stays on the intent. On a plain skip it shows what the page plays: a
+            // skip the page lost must not leave the screen on a song that is not heard.
+            uri == null || uri == i.from -> if (i.adSeen || skipsHeld) showIntent()
+            // Somewhere else after an ad or a reload: the user's song is asked for again.
+            i.adSeen || skipsHeld -> { showIntent(); scope.launch { runCatching { if (!skipsHeld) playIntent() } } }
+            // Somewhere else on a plain skip: the page knows its queue best.
+            else -> intent = null
+        }
     }
 
 
@@ -440,15 +666,18 @@ class SpotifyPlayer(private val bridge: Bridge, private val scope: CoroutineScop
      * does not wait for them (a call per step delayed the first sound by one round trip each).
      * [restore] ends on the page player's own volume, as [restoreLevel] does.
      */
-    private suspend fun fade(levels: List<Double>, restore: Boolean = false) {
+    private suspend fun fade(levels: List<Double>, restore: Boolean = false, ms: Long = FADE_STEP_MS) {
         bridge.call("media.fade", buildJsonObject {
             putJsonArray("steps") { levels.forEach { add(kotlinx.serialization.json.JsonPrimitive(it.coerceIn(0.0, 1.0))) } }
-            put("ms", FADE_STEP_MS)
+            put("ms", ms)
             put("restore", restore)
         }, timeoutMs = LEVEL_TIMEOUT_MS, quiet = true)
     }
 
     private suspend fun withFade(block: suspend () -> Unit) {
+        // A crossfade under way owns the level: ended here, so its ramp (or its up-ramp, when the
+        // song changes under it) cannot fight the fade below.
+        endCrossfade(restore = true)
         val s = _state.value
         // Nothing heard (paused, an ad muted): nothing to fade.
         if (s == null || s.isPaused || _adPlaying.value || adMuted) { block(); return }
@@ -483,7 +712,14 @@ class SpotifyPlayer(private val bridge: Bridge, private val scope: CoroutineScop
 
     private suspend fun muteForAd() = runCatching {
         adMuted = true
-        val muted = bridge.call("media.mute", buildJsonObject { put("on", true) })
+        adMutedAt = System.currentTimeMillis()
+        var muted = bridge.call("media.mute", buildJsonObject { put("on", true) })
+        // No media element reached (the page is reloading, or the ad is taking the stream over):
+        // once more before the count is trusted.
+        if (muted.toString().trim('"').toIntOrNull() == 0) {
+            delay(200)
+            muted = bridge.call("media.mute", buildJsonObject { put("on", true) })
+        }
         bridge.logger?.invoke("ad muted ($muted media elements)")
     }
 
@@ -491,9 +727,139 @@ class SpotifyPlayer(private val bridge: Bridge, private val scope: CoroutineScop
         if (!adMuted) return@runCatching
         bridge.call("media.mute", buildJsonObject { put("on", false) })
         adMuted = false
+        adMutedAt = 0L
+        // The song after an ad is preloaded again: the key (current|next) is usually the same as
+        // before the break, so without this the preload of that very song was skipped and the next
+        // skip after an ad was slow.
+        preloadedFor = null
+    }
+
+    /**
+     * Crossfade length in seconds (0 = off). Only a fade is possible: the page plays one media
+     * element, so two songs never overlap. Set by the app from the user's setting, at start and
+     * whenever it changes.
+     */
+    @Volatile var crossfadeSeconds: Int = 0
+        set(value) {
+            val v = value.coerceIn(0, CROSSFADE_MAX_SECONDS)
+            if (field == v) return
+            field = v
+            // Turned off while a ramp runs: the sound comes back at once rather than at the end
+            // of a fade nobody wants any more.
+            if (v == 0) {
+                val was = crossfadeArmed
+                disarmCrossfade()
+                if (was) scope.launch { runCatching { restoreLevel() } }
+            }
+        }
+
+    /** True while a crossfade is fading a song out, or the next one in. */
+    fun isCrossfading(): Boolean = crossfadeArmed
+
+    /**
+     * The page's element level, ramped down over the last seconds of a song: one media element
+     * means the next song cannot start before this one ends, so this is a fade, not an overlap.
+     */
+    @Volatile private var crossfadeArmed = false
+    /** The song the ramp belongs to: the song after it (another uri) ends the fade-out. */
+    @Volatile private var crossfadeUri: String? = null
+    /** When the ramp will have reached its floor; past that the next song must have come. */
+    @Volatile private var crossfadeUntil = 0L
+    /** The fail-safe that puts the level back if the page never moved on. */
+    private var crossfadeJob: kotlinx.coroutines.Job? = null
+
+    private fun disarmCrossfade() {
+        crossfadeArmed = false
+        crossfadeUri = null
+        crossfadeUntil = 0L
+        crossfadeJob?.cancel()
+        crossfadeJob = null
+    }
+
+    /** Ends a crossfade; [restore] puts the element back on the page player's own volume. */
+    private suspend fun endCrossfade(restore: Boolean) {
+        if (!crossfadeArmed) return
+        disarmCrossfade()
+        if (restore) runCatching { restoreLevel() }
+    }
+
+    /**
+     * Called each watch tick: arms the fade-out when the song is inside its last
+     * [crossfadeSeconds]. The ramp ends with the song (the window is what is left of it), so a
+     * late tick only shortens the fade, it never runs past the next song.
+     */
+    private suspend fun tickCrossfade(s: PlayerState?, media: Media?, now: Long) {
+        val secs = crossfadeSeconds
+        // Off, or nothing to fade out of: an armed ramp is lifted (never left down).
+        if (secs <= 0 || s == null || s.isPaused || _adPlaying.value) { endCrossfade(restore = true); return }
+        val item = s.item ?: return
+        if (item.kind == ItemKind.AD || item.durationMs <= 0) return
+        // Another device is playing: this phone's element is not where the sound is, and a ramp
+        // set on it would greet the user at 2% after a transfer back.
+        if (media?.active == false) { endCrossfade(restore = true); return }
+        val window = secs * 1000L
+        val remaining = item.durationMs - s.positionAt(now)
+        if (crossfadeArmed) {
+            // The next song is handled where it is reported (see [onState]). Here: the song was
+            // seeked back out of the window, or the setting was shortened under the ramp.
+            if (item.uri != crossfadeUri || remaining > window) endCrossfade(restore = true)
+            return
+        }
+        if (remaining <= 0 || remaining > window) return
+        // Nothing after it: a fade-out into silence is not a crossfade.
+        if (s.next == null && upcoming().isEmpty()) return
+        val own = (media?.own ?: 1.0).coerceIn(0.0, 1.0)
+        // Silent already (volume at 0): there is nothing to fade.
+        if (own <= 0.001) return
+        armCrossfade(item.uri, remaining, own)
+    }
+
+    private suspend fun armCrossfade(uri: String, remainingMs: Long, own: Double) {
+        val steps = (remainingMs / CROSSFADE_STEP_MS).toInt().coerceIn(2, CROSSFADE_MAX_STEPS)
+        val per = (remainingMs / steps).coerceAtLeast(1L)
+        // A linear ramp in amplitude, ending on CROSSFADE_FLOOR of the page's own level: the last
+        // step lands on the song's end, so the fade is over exactly when the song is.
+        val levels = (1..steps).map { i ->
+            (own * (1.0 - (1.0 - CROSSFADE_FLOOR) * i / steps)).coerceAtLeast(CROSSFADE_SILENT)
+        }
+        crossfadeArmed = true
+        crossfadeUri = uri
+        crossfadeUntil = System.currentTimeMillis() + remainingMs + CROSSFADE_FAILSAFE_MS
+        crossfadeJob?.cancel()
+        // The hard floor: whatever the page does (a stall, a lost state, a reload, a song that
+        // repeats), the sound is back a few seconds after the ramp was due. A volume left down
+        // is the one failure the user cannot work around.
+        crossfadeJob = scope.launch {
+            delay(remainingMs + CROSSFADE_FAILSAFE_MS)
+            if (crossfadeArmed) {
+                bridge.logger?.invoke("crossfade left the sound down ${(remainingMs + CROSSFADE_FAILSAFE_MS) / 1000}s: volume restored")
+                endCrossfade(restore = true)
+            }
+        }
+        bridge.logger?.invoke("crossfade: ${remainingMs / 1000.0}s out on ${_state.value?.item?.name}")
+        // One call: the page runs the whole ramp itself (see [fade]).
+        runCatching { fade(levels, ms = per) }
+            .onFailure { endCrossfade(restore = true) }
+    }
+
+    /** The next song is on: a short ramp back to the user's volume. */
+    private suspend fun fadeInCrossfade() {
+        // Read the element as it is now: the page may have reset its volume with the new track,
+        // and dipping it to the ramp's first step would be heard for nothing.
+        val m = runCatching { readMedia() }.getOrNull()
+        if (m == null || m.level >= m.own * 0.9) {
+            runCatching { restoreLevel() }
+            return
+        }
+        val own = m.own.coerceAtLeast(CROSSFADE_SILENT)
+        // Ends on the page player's own volume, so a volume change during the fade is kept.
+        runCatching { fade(CROSSFADE_IN.map { it * own }, restore = true, ms = CROSSFADE_IN_STEP_MS) }
+            .onFailure { runCatching { restoreLevel() } }
     }
 
     override suspend fun play(contextUri: Uri, trackUri: Uri?, index: Int?, positionMs: Long?, order: List<Uri>?) {
+        // A new song picked (or the intent itself played): any earlier skip is over.
+        if (trackUri == null || trackUri != liveIntent()?.item?.uri) intent = null
         lastOrder = order?.let { contextUri to it }
         lastPlay = Triple(contextUri, trackUri, System.currentTimeMillis())
         refusedRetried = false
@@ -529,15 +895,42 @@ class SpotifyPlayer(private val bridge: Bridge, private val scope: CoroutineScop
         }
     }
 
-    override suspend fun pause() { pausedByUser = true; command("player.pause") }
+    override suspend fun pause() { pausedByUser = true; endCrossfade(restore = true); command("player.pause") }
     override suspend fun resume() { pausedByUser = false; command("player.resume") }
-    override suspend fun seek(positionMs: Long) { command("player.seek", buildJsonObject { put("positionMs", positionMs) }) }
-    override suspend fun next() { pausedByUser = false; withFade { command("player.next") } }
+    override suspend fun seek(positionMs: Long) { endCrossfade(restore = true); command("player.seek", buildJsonObject { put("positionMs", positionMs) }) }
+    override suspend fun next() {
+        pausedByUser = false
+        if (skipsHeld) { stepIntent(1); return }
+        // Remembered: should the page go into an ad break instead, this song comes after it.
+        val base = lastWithSong()
+        val after = base?.next?.takeIf { it.kind == ItemKind.TRACK || it.kind == ItemKind.EPISODE }
+        if (after != null && base.item?.kind != ItemKind.AD) intent = Intent(base.contextUri, after, base.item?.uri, System.currentTimeMillis())
+        runCatching { withFade { command("player.next") } }.onFailure { e ->
+            if (!heldError(e, base?.restrictions?.canSkipNext != false)) throw e
+            stepIntent(1)
+        }
+    }
+
+    /**
+     * The page refused a skip because of an ad or a reload under way, not because the song
+     * forbids it: "not allowed" counts only when the song's own restrictions allow the skip
+     * (the ad itself is often reported seconds later).
+     */
+    private fun heldError(e: Throwable, allowed: Boolean): Boolean {
+        val m = e.message.orEmpty()
+        return skipsHeld || RELOADING.any { it in m } || (allowed && "not allowed" in m)
+    }
+
     override suspend fun previous() {
         pausedByUser = false
+        if (skipsHeld) { stepIntent(-1); return }
+        intent = null
         withFade {
             val s = _state.value
             runCatching { command("player.previous") }.onFailure { e ->
+                // Refused because of an ad or a reload: kept for after it, never a seek (that
+                // restarted the ad).
+                if (heldError(e, s?.restrictions?.canSkipPrevious == true)) { stepIntent(-1); return@onFailure }
                 // Refused by the page (a restriction on the account or the context): the song
                 // starts over, or the one before plays, as the button would have done.
                 val pos = s?.positionAt(System.currentTimeMillis()) ?: 0L
@@ -570,7 +963,19 @@ class SpotifyPlayer(private val bridge: Bridge, private val scope: CoroutineScop
 
     private fun ref(item: NowPlaying) = buildJsonObject { put("uri", item.uri); item.uid?.let { put("uid", it) } }
 
-    override suspend fun skipTo(item: NowPlaying) { pausedByUser = false; withFade { command("queue.skipTo", ref(item)) } }
+    /** The last state with a song: a reloading page reports none for a moment. */
+    private fun lastWithSong(): PlayerState? = lastTrackState?.takeIf { it.item != null } ?: lastSong
+
+    override suspend fun skipTo(item: NowPlaying) {
+        pausedByUser = false
+        val base = lastWithSong()
+        if (skipsHeld) { setIntent(base?.contextUri, item, base?.item?.uri); return }
+        if (base?.item?.kind != ItemKind.AD) intent = Intent(base?.contextUri, item, base?.item?.uri, System.currentTimeMillis())
+        runCatching { withFade { command("queue.skipTo", ref(item)) } }.onFailure { e ->
+            if (!heldError(e, base?.restrictions?.canSkipNext != false)) throw e
+            setIntent(base?.contextUri, item, base?.item?.uri)
+        }
+    }
 
     override suspend fun playNext(uris: List<Uri>) {
         val first = _queue.value?.queued?.firstOrNull()
@@ -626,12 +1031,26 @@ class SpotifyPlayer(private val bridge: Bridge, private val scope: CoroutineScop
     companion object {
         /** A refused ad left current that long: the page will not move on by itself. */
         const val AD_STUCK_MS = 4_000L
+        /**
+         * An ad mute that old is lifted. The page never reports the end of a break, so a lost
+         * unmute used to leave the phone silent until the app was restarted; longer than any ad
+         * break (15-30 s), shorter than a song.
+         */
+        const val AD_MUTE_MAX_MS = 75_000L
         /** A reloaded page reports its restored state within that long. */
         const val RESTORE_WAIT_MS = 6_000L
         /** A page going away reports "nothing plays" that long before it is gone, at most. */
         const val UNLOAD_NULL_MS = 5_000L
         /** Errors of a page not able to take a command yet (see [command]). */
-        val TRANSIENT = listOf("No such device", "not ready", "page reloaded")
+        val TRANSIENT = listOf("No such device", "not ready", "page reloaded", "local player is disabled")
+        /** Refusals of a page being reloaded: a skip is then held (see [Intent]). */
+        val RELOADING = listOf("local player is disabled", "not ready", "page reloaded")
+        /** A held skip is forgotten after that long (an ad break and a reload fit in it). */
+        const val INTENT_MAX_MS = 90_000L
+        /** The intent is asked for at most that often. */
+        const val INTENT_REPLAY_MS = 4_000L
+        /** Plays of the intent at most, after an ad or a reload. */
+        const val INTENT_PLAYS = 3
         const val COMMAND_RETRIES = 3
         const val COMMAND_RETRY_MS = 700L
         const val READY_WAIT_MS = 30_000L
@@ -657,12 +1076,43 @@ class SpotifyPlayer(private val bridge: Bridge, private val scope: CoroutineScop
         const val FADE_STEP_MS = 12L
         /** The sound always comes back after that long, whatever the page does. */
         const val FADE_BACK_MAX_MS = 2_500L
+        /** Crossfade: the setting's range (seconds, 0 = off). */
+        const val CROSSFADE_MAX_SECONDS = 12
+        /**
+         * Where a crossfade's ramp down ends, as a share of the page player's own level. Not 0:
+         * the page keeps a floor on the element (see [FADE_STEPS]), and a media element set to 0
+         * is paused by Chromium.
+         */
+        const val CROSSFADE_FLOOR = 0.02
+        /** The floor the bridge itself keeps on a media element. */
+        const val CROSSFADE_SILENT = 0.001
+        /** One ramp step per that many ms; the page runs them itself (see [fade]). */
+        private const val CROSSFADE_STEP_MS = 100L
+        /** A 12 s ramp at 100 ms a step; more steps would not be heard. */
+        private const val CROSSFADE_MAX_STEPS = 60
+        /**
+         * How long after the ramp was due the level is put back whatever the page did: a song
+         * that stalled, a state lost in a reload, a repeated track. A volume left down is the
+         * failure a user cannot work around.
+         */
+        const val CROSSFADE_FAILSAFE_MS = 6_000L
+        /** The next song's ramp up: short, it is already playing. Ends on the own level. */
+        val CROSSFADE_IN = listOf(0.2, 0.45, 0.7, 0.9)
+        const val CROSSFADE_IN_STEP_MS = 100L
         /** Play commands: the page answers within a few seconds or not at all. */
         const val PLAY_TIMEOUT_MS = 10_000L
         /** A refusal that long after a play belongs to it. */
         const val REFUSED_WINDOW_MS = 5_000L
         /** Never two "frozen page" reloads closer than that. */
         const val FROZEN_RELOAD_GAP_MS = 60_000L
+        /**
+         * Consecutive silent ticks before the page is called dead and reloaded. One miss is not
+         * enough: a busy main thread looks exactly like a frozen page for a couple of seconds, and
+         * the reload that followed was itself the interruption the user complained about.
+         */
+        private const val FROZEN_MISSES = 2
+        /** Extra ad-mute sends during a break (the media element may appear after the break starts). */
+        private const val AD_MUTE_TRIES = 2
         /** The volume is checked every that many ticks. */
         const val VOLUME_CHECK_TICKS = 3
         /** An ad that plays (silent, muted) is got past after that long. */
@@ -686,9 +1136,22 @@ class SpotifyPlayer(private val bridge: Bridge, private val scope: CoroutineScop
          * its end without a new song, when it paused itself at its end with a song after it,
          * or while it buffers too long.
          */
+        /**
+         * What a song or episode stuck at its end moves on to: the next playable item. B11: an
+         * episode counts too; with tracks only, an episode stuck at its end found no target and
+         * was played again from 0:00.
+         */
+        fun onwardTarget(s: PlayerState, nextUp: List<NowPlaying>): String? {
+            val playable = { k: ItemKind -> k == ItemKind.TRACK || k == ItemKind.EPISODE }
+            return s.next?.takeIf { playable(it.kind) }?.uri ?: nextUp.firstOrNull { playable(it.kind) }?.uri
+        }
+
         fun stallOf(s: PlayerState, now: Long, userPaused: Boolean): String? {
             val item = s.item ?: return null
-            if (item.kind != ItemKind.TRACK || item.durationMs <= 0) return null
+            // Episodes stall exactly like songs once their duration is known (a podcast playing
+            // silent with a frozen progress bar is the same bug); only ads are left out, their
+            // recovery is [adRecovery].
+            if (item.kind == ItemKind.AD || item.durationMs <= 0) return null
             if (s.isPaused) {
                 val atEnd = s.positionMs >= item.durationMs - 2_000
                 return if (atEnd && s.next != null && !userPaused) "paused at the end" else null

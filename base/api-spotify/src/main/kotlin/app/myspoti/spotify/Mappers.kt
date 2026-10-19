@@ -136,6 +136,7 @@ internal fun nowPlaying(t: JsonElement?): NowPlaying? {
         durationMs = t.long("durationMs") ?: 0,
         explicit = t.bool("explicit") ?: false,
         provider = t.str("provider"),
+        mediaType = t.str("mediaType"),
     )
 }
 

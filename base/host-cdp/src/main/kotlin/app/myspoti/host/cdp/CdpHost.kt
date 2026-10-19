@@ -92,12 +92,9 @@ class CdpHost private constructor(private val socket: WebSocket, private val lis
                     val requestId = params["requestId"]!!.jsonPrimitive.content
                     val request = params["request"]!!.jsonObject
                     val url = request["url"]!!.jsonPrimitive.content
-                    val method = request["method"]?.jsonPrimitive?.content ?: "GET"
-                    val post = request["postData"]?.jsonPrimitive?.content
-                    val reply = if (post != null && AdBlock.isDeviceRegistration(method, url)) {
-                        val body = java.util.Base64.getEncoder().encodeToString(AdBlock.withoutAdFormats(post).toByteArray())
-                        buildJsonObject { put("id", ids.incrementAndGet()); put("method", "Fetch.continueRequest"); putJsonObject("params") { put("requestId", requestId); put("postData", body) } }
-                    } else if (AdBlock.isBlocked(url)) {
+                    // The device registration goes through as the Web Player sends it (see
+                    // AdBlock.withDeviceName): the desktop host keeps the browser's own name.
+                    val reply = if (AdBlock.isBlocked(url)) {
                         buildJsonObject { put("id", ids.incrementAndGet()); put("method", "Fetch.failRequest"); putJsonObject("params") { put("requestId", requestId); put("errorReason", "BlockedByClient") } }
                     } else {
                         buildJsonObject { put("id", ids.incrementAndGet()); put("method", "Fetch.continueRequest"); putJsonObject("params") { put("requestId", requestId) } }

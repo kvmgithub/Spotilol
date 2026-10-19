@@ -14,6 +14,7 @@ import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
 import android.webkit.WebSettings
 import android.webkit.WebView
+import android.webkit.RenderProcessGoneDetail
 import android.webkit.WebViewClient
 import app.myspoti.spotify.bridge.AdBlock
 import app.myspoti.spotify.bridge.BridgeHost
@@ -34,7 +35,7 @@ import java.io.ByteArrayInputStream
  * - [loginRequired] turns true on Spotify's login pages: the UI then shows [view] so the
  *   user signs in on Spotify's own page.
  */
-class WebPlayerHost(context: Context) : BridgeHost {
+class WebPlayerHost(private val context: Context) : BridgeHost {
     private val main = Handler(Looper.getMainLooper())
 
     // DROP_OLDEST: tryEmit under a main-thread stall must not drop the newest
@@ -55,38 +56,68 @@ class WebPlayerHost(context: Context) : BridgeHost {
     /** Fires when a Web Player page load starts: the old page and its bridge are gone. */
     var onPageStarting: (() -> Unit)? = null
 
+    /** Debug builds: extra logging (a proxy that fails, a device name rewritten…) — and CDP. */
+    private val debuggable = context.applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE != 0
+
+    /**
+     * This install's browser identity, drawn once (see [Fingerprint]) and handed to the API as
+     * well: the page and the app's own calls must present the *same* browser, or the difference
+     * between them is itself the tell.
+     */
+    internal val fingerprint = Fingerprint.of(context)
+    val userAgent: String get() = fingerprint.userAgent
+
     init {
         // Debug builds only: lets desktop tools (chrome://inspect, CDP) look at the page.
-        val debuggable = context.applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE != 0
         if (debuggable) WebView.setWebContentsDebuggingEnabled(true)
     }
 
     private lateinit var relay: ControlRelay
 
+    /** Fetches the audio files itself: the last request the WebView would stamp with its package. */
+    private val media = MediaProxy(MediaProxy.client()) { relay.identityPair() }
+
     @SuppressLint("SetJavaScriptEnabled")
-    val view: WebView = WebView(context.applicationContext).apply {
+    var view: WebView = createView()
+
+    /**
+     * Builds the page view. Called once at startup, and again after a renderer crash: a WebView
+     * whose renderer died can never be reused, and Android kills the process if one is used after
+     * [onRenderProcessGone] returns false (see [rebuild]).
+     */
+    @SuppressLint("SetJavaScriptEnabled")
+    private fun createView(): WebView = WebView(context.applicationContext).apply {
         settings.apply {
             javaScriptEnabled = true
             domStorageEnabled = true
             mediaPlaybackRequiresUserGesture = false
-            userAgentString = DESKTOP_UA
+            userAgentString = fingerprint.userAgent
             cacheMode = WebSettings.LOAD_DEFAULT
             loadWithOverviewMode = true
             useWideViewPort = true
         }
+        // The WebView stamps every request the page makes with "X-Requested-With: <our package>".
+        // No browser does that, and it is measured on the wire ([tools/cdp.py] --trace --headers):
+        // it rode on the audio files themselves and on Spotify's telemetry, so a single rule on
+        // Spotify's side would flag every Myspoti install. The androidx API was made to allow that
+        // header for a few origins; an empty allowlist is what suppresses it everywhere.
+        if (androidx.webkit.WebViewFeature.isFeatureSupported(androidx.webkit.WebViewFeature.REQUESTED_WITH_HEADER_ALLOW_LIST)) {
+            androidx.webkit.WebSettingsCompat.setRequestedWithHeaderOriginAllowList(settings, emptySet())
+            Logbook.log("x-requested-with: off for every origin")
+        } else {
+            Logbook.log("x-requested-with: cannot be turned off on this WebView")
+        }
         // Client hints must agree with the desktop user agent: by default the WebView announces
         // "Android WebView" / mobile in Sec-CH-UA headers and navigator.userAgentData.
         if (androidx.webkit.WebViewFeature.isFeatureSupported(androidx.webkit.WebViewFeature.USER_AGENT_METADATA)) {
-            val brands = listOf(
-                androidx.webkit.UserAgentMetadata.BrandVersion.Builder().setBrand("Chromium").setMajorVersion("155").setFullVersion("155.0.0.0").build(),
-                androidx.webkit.UserAgentMetadata.BrandVersion.Builder().setBrand("Google Chrome").setMajorVersion("155").setFullVersion("155.0.0.0").build(),
-                androidx.webkit.UserAgentMetadata.BrandVersion.Builder().setBrand("Not?A_Brand").setMajorVersion("24").setFullVersion("24.0.0.0").build(),
-            )
+            val brands = fingerprint.brands.map {
+                androidx.webkit.UserAgentMetadata.BrandVersion.Builder().setBrand(it.name).setMajorVersion(it.major).setFullVersion(it.fullVersion).build()
+            }
             androidx.webkit.WebSettingsCompat.setUserAgentMetadata(settings, androidx.webkit.UserAgentMetadata.Builder()
                 .setBrandVersionList(brands)
-                .setFullVersion("155.0.0.0")
+                .setFullVersion(fingerprint.fullVersion)
                 .setPlatform("Linux")
-                .setPlatformVersion("6.8.0")
+                .setPlatformVersion(fingerprint.kernel)
                 .setArchitecture("x86")
                 .setBitness(64)
                 .setMobile(false)
@@ -97,7 +128,7 @@ class WebPlayerHost(context: Context) : BridgeHost {
         // The page plays the audio: its renderer keeps its priority when the screen is off.
         setRendererPriorityPolicy(WebView.RENDERER_PRIORITY_IMPORTANT, false)
         // Playback control requests leave from the app, without the WebView's X-Requested-With.
-        relay = ControlRelay(this).also { it.install() }
+        relay = ControlRelay(this, fingerprint).also { it.install() }
         val webView = this
         CookieManager.getInstance().apply {
             setAcceptCookie(true)
@@ -108,26 +139,46 @@ class WebPlayerHost(context: Context) : BridgeHost {
             override fun onConsoleMessage(message: android.webkit.ConsoleMessage): Boolean {
                 if (message.messageLevel() == android.webkit.ConsoleMessage.MessageLevel.ERROR ||
                     message.messageLevel() == android.webkit.ConsoleMessage.MessageLevel.WARNING)
-                    android.util.Log.d(LOG, "console ${message.messageLevel()}: ${message.message().take(300)}")
+                    Logbook.log("console ${message.messageLevel()}: ${message.message().take(300)}")
                 return true
             }
 
             override fun onPermissionRequest(request: PermissionRequest) {
-                android.util.Log.d(LOG, "permission request: ${request.resources.joinToString()}")
+                Logbook.log("permission request: ${request.resources.joinToString()}")
                 val allowed = request.resources.filter { it == PermissionRequest.RESOURCE_PROTECTED_MEDIA_ID }
                 if (allowed.isNotEmpty()) request.grant(allowed.toTypedArray()) else request.deny()
             }
         }
         webViewClient = object : WebViewClient() {
             override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? {
-                if (!AdBlock.isBlocked(request.url.toString())) return null
-                android.util.Log.d(LOG, "blocked ad request ${request.url.toString().take(120)}")
-                // Refused like a blocked request: the player reports a failed ad and moves on.
-                return WebResourceResponse("text/plain", "utf-8", 403, "Blocked", emptyMap(), ByteArrayInputStream(ByteArray(0)))
+                val url = request.url.toString()
+                if (AdBlock.isBlocked(url)) {
+                    Logbook.log("blocked ad request ${url.take(120)}")
+                    // Refused like a blocked request: the player reports a failed ad and moves on.
+                    return WebResourceResponse("text/plain", "utf-8", 403, "Blocked", emptyMap(), ByteArrayInputStream(ByteArray(0)))
+                }
+                // The sign-in flow lives on accounts.spotify.com: logging its steps is what turns
+                // "the login is stuck" into the exact request that failed (with the status from
+                // onReceivedHttpError below). Reported as B37 and unprovable without this trail.
+                if (url.startsWith("https://accounts.spotify.com/")) {
+                    loginSteps++
+                    Logbook.log("login step #$loginSteps ${request.method} ${url.substringAfter("accounts.spotify.com").substringBefore('?').take(90)}")
+                }
+                // The music itself: fetched here, so the WebView's own package-name header never
+                // travels with it (see MediaProxy).
+                if (media.handles(url)) {
+                    val proxied = media.fetch(request)
+                    if (proxied != null) {
+                        if (debuggable) Logbook.log("audio proxied ${url.substringAfterLast('/').take(12)}…")
+                        return proxied
+                    }
+                    Logbook.log("audio proxy failed, the WebView fetches it: ${url.take(110)}")
+                }
+                return null
             }
 
             override fun onPageStarted(view: WebView, url: String, favicon: Bitmap?) {
-                android.util.Log.d(LOG, "page start ${url.take(120)}")
+                Logbook.log("page start ${url.take(120)}")
                 pageStarts++
                 _url.value = url
                 _loginRequired.value = isLoginPage(url)
@@ -136,16 +187,16 @@ class WebPlayerHost(context: Context) : BridgeHost {
 
             override fun onReceivedError(view: WebView, request: WebResourceRequest, error: android.webkit.WebResourceError) {
                 if (request.url.host?.contains("spotify") == true)
-                    android.util.Log.d(LOG, "load error ${error.errorCode} ${error.description} ${request.url.toString().take(120)}")
+                    Logbook.log("load error ${error.errorCode} ${error.description} ${request.url.toString().take(120)}")
             }
 
             override fun onReceivedHttpError(view: WebView, request: WebResourceRequest, response: WebResourceResponse) {
                 if (request.url.host?.contains("spotify") == true)
-                    android.util.Log.d(LOG, "http ${response.statusCode} ${request.method} ${request.url.toString().substringBefore('?').take(120)}")
+                    Logbook.log("http ${response.statusCode} ${request.method} ${request.url.toString().substringBefore('?').take(120)}")
             }
 
             override fun onPageFinished(view: WebView, url: String) {
-                android.util.Log.d(LOG, "page finished ${url.take(120)}")
+                Logbook.log("page finished ${url.take(120)}")
                 _url.value = url
                 _loginRequired.value = isLoginPage(url)
                 if (url.startsWith(PLAYER_URL)) onPageLoaded?.invoke()
@@ -159,7 +210,46 @@ class WebPlayerHost(context: Context) : BridgeHost {
                     .any { host == it || host.endsWith(".$it") }
                 return !allowed
             }
+
+            /**
+             * The renderer died (the reported "the app crashed", "playback stops until the player
+             * is restarted"). A WebView whose renderer is gone can never be reused, and Android
+             * kills the whole process if one is still used after this returns false: the page is
+             * rebuilt on a new WebView, and true says "handled, do not kill the app".
+             */
+            override fun onRenderProcessGone(view: WebView, detail: RenderProcessGoneDetail): Boolean {
+                Logbook.log("renderer gone (crashed=${detail.didCrash()}): rebuilding the page")
+                rebuild()
+                return true
+            }
         }
+    }
+
+    /** The container the page is attached to, so a rebuilt page goes back to the same place. */
+    private var container: ViewGroup? = null
+
+    /** Whether the page was shown full screen at the last [attach] (login). */
+    private var lastVisible = false
+
+    /**
+     * Replaces the page after its renderer died: the dead WebView is destroyed rather than reused,
+     * the new one takes its place in the same container, and the page loads again. Without this
+     * the app kept a dead page — a blank screen with the sound gone — until it was restarted.
+     */
+    private fun rebuild() = main.post {
+        val wasLoaded = loadAsked
+        val box = container
+        box?.let { runCatching { it.removeView(view) } }
+        runCatching { view.stopLoading() }
+        runCatching { view.destroy() }
+        view = createView()
+        pageStarts = 0
+        _url.value = ""
+        // attach() loads the page itself when a load is pending; the pending load is asked again
+        // just after, once, so a rebuilt page is loaded exactly once.
+        loadAsked = false
+        box?.let { attach(it, lastVisible) }
+        if (wasLoaded) load() else view.loadUrl("about:blank")
     }
 
     private fun isLoginPage(url: String?) =
@@ -174,6 +264,9 @@ class WebPlayerHost(context: Context) : BridgeHost {
 
     /** Page starts since the last [load]; the load watchdog looks at it. */
     private var pageStarts = 0
+
+    /** Sign-in requests seen (accounts.spotify.com): a trail for a login that goes nowhere. */
+    private var loginSteps = 0
     /** [load] was called and no [unload] since (data saver keeps the page off). */
     private var loadAsked = false
 
@@ -185,7 +278,7 @@ class WebPlayerHost(context: Context) : BridgeHost {
     private fun watchLoad(url: String, attempt: Int) {
         main.postDelayed({
             if (pageStarts > 0 || !loadAsked || attempt > LOAD_RETRIES) return@postDelayed
-            android.util.Log.d(LOG, "page never started: loading again (attempt $attempt)")
+            Logbook.log("page never started: loading again (attempt $attempt)")
             if (attempt > 1) view.stopLoading()
             view.loadUrl(url)
             watchLoad(url, attempt + 1)
@@ -224,6 +317,8 @@ class WebPlayerHost(context: Context) : BridgeHost {
      * non-interactive view in [container] while the player is hidden.
      */
     fun attach(container: ViewGroup, visible: Boolean) = main.post {
+        this.container = container
+        lastVisible = visible
         // Re-added each time: addView converts the params to the container's own type
         // (assigning plain ViewGroup.LayoutParams to a FrameLayout child crashes on measure).
         (view.parent as? ViewGroup)?.removeView(view)
@@ -253,7 +348,5 @@ class WebPlayerHost(context: Context) : BridgeHost {
         private const val LOAD_WATCH_MS = 4_000L
         private const val LOAD_RETRIES = 4
         const val LOGIN_URL = "https://accounts.spotify.com/login?continue=https%3A%2F%2Fopen.spotify.com%2F"
-        const val DESKTOP_UA =
-            "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/155.0.0.0 Safari/537.36"
     }
 }

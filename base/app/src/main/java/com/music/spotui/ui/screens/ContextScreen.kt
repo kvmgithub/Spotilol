@@ -65,8 +65,10 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import com.bumptech.glide.integration.compose.ExperimentalGlideComposeApi
+import com.bumptech.glide.integration.compose.CrossFade
 import com.bumptech.glide.integration.compose.GlideImage
 import com.music.spotui.data.api.Api
+import com.music.spotui.data.api.EditablePlaylists
 import com.music.spotui.data.api.Response
 import com.music.spotui.data.entity.ContextPageModel
 import com.music.spotui.data.entity.SongsModel
@@ -155,6 +157,8 @@ class ContextViewModel(
     val page: StateFlow<Response<ContextPageModel>> = _page
     val savedUris = mutableStateOf<Set<String>>(emptySet())
     val contextSaved = mutableStateOf(false)
+    /** The page is a playlist the user may change: only there can a track be removed. */
+    val editableContext = mutableStateOf(false)
     private var key: String? = null
     private var savedChecked = 0
 
@@ -230,6 +234,11 @@ class ContextViewModel(
         val saved = SongPlayer.libraryContains(uris)
         savedUris.value = saved
         contextSaved.value = p.uri in saved
+        // A11: Spotify refuses an edit to a list the user cannot change, so the entry is only
+        // offered where it would work (own and collaborative playlists, as Spotify itself).
+        if (p.type == "playlist") editableContext.value = withContext(Dispatchers.IO) {
+            runCatching { EditablePlaylists.load().any { it.id == p.uri.substringAfterLast(':') } }.getOrDefault(false)
+        }
     }
 
     fun toggleContextSaved(p: ContextPageModel) {
@@ -237,6 +246,19 @@ class ContextViewModel(
         com.music.spotui.di.Haptics.toggle(on)
         contextSaved.value = on
         SongPlayer.setSaved(p.uri, on)
+    }
+
+    /**
+     * The track left this page's playlist: its row goes at once, so the list answers the tap
+     * without waiting for Spotify (the write reads every page of the playlist first). A
+     * failure puts the page back from the server.
+     */
+    fun dropTrack(song: SongsModel) {
+        val k = key ?: return
+        val current = (_page.value as? Response.Success)?.data ?: return
+        val updated = Response.Success(current.copy(tracks = current.tracks.filterNot { it.id == song.id }))
+        _page.value = updated
+        recent[k] = updated
     }
 
     /**
@@ -261,6 +283,9 @@ class ContextViewModel(
             return
         }
         state.updateQueue(p.tracks)
+        // B26: keep the list's own name — the player header falls back to it when Spotify's
+        // context label comes back blank (it then showed the album's name).
+        SongPlayer.registerContextName(p.uri, p.name)
         if (p.type == "liked" || p.type == "liked-artist") SongPlayer.registerLikedSongs(p.tracks.map { it.url })
         // Sorted by the user: Spotify plays the list in that order, not the playlist's. An
         // artist's liked songs are a part of Liked Songs: always given, so only they play.
@@ -317,6 +342,37 @@ private fun ContextContent(navController: NavController, vm: ContextViewModel, p
     var sort by remember(p.uri) { mutableStateOf(TrackOrder.load(ctx, p.uri)) }
     var askRemoveDownloads by remember { mutableStateOf(false) }
     var playlistMenu by remember { mutableStateOf(false) }
+    // A11: confirmations (and their Undo) float above the list, not inside a menu that closes.
+    val snackbar = remember { androidx.compose.material3.SnackbarHostState() }
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
+
+    // A11: the row goes at once, then the removal is written to Spotify. The snackbar keeps
+    // the mistake reversible: Undo adds the track back and the page is read again.
+    fun removeFromThisPlaylist(song: SongsModel) {
+        val playlistId = p.uri.substringAfterLast(':')
+        vm.dropTrack(song)
+        com.music.spotui.data.api.SpotifySync.removeTrackFromPlaylist(context, playlistId, song.spotifyTrackId) { ok ->
+            if (!ok) {
+                vm.reload()
+                android.widget.Toast.makeText(context, context.getString(R.string.playlist_change_refused), android.widget.Toast.LENGTH_SHORT).show()
+            } else scope.launch {
+                val chosen = snackbar.showSnackbar(
+                    message = context.getString(R.string.removed_from, p.name),
+                    actionLabel = context.getString(R.string.undo),
+                    withDismissAction = false,
+                    // Long: the write has just gone through, the mistake deserves time to be undone.
+                    duration = androidx.compose.material3.SnackbarDuration.Long,
+                )
+                if (chosen == androidx.compose.material3.SnackbarResult.ActionPerformed) {
+                    com.music.spotui.data.api.SpotifySync.addTrackToPlaylist(context, playlistId, song.spotifyTrackId) { back ->
+                        if (back) vm.reload()
+                        else android.widget.Toast.makeText(context, context.getString(R.string.playlist_change_refused), android.widget.Toast.LENGTH_SHORT).show()
+                    }
+                }
+            }
+        }
+    }
+
     if (playlistMenu) com.music.spotui.ui.components.PlaylistOptionsSheet(
         page = p,
         onDismiss = { playlistMenu = false },
@@ -343,11 +399,17 @@ private fun ContextContent(navController: NavController, vm: ContextViewModel, p
         },
     )
     menuSong?.let { sel ->
+        val inPlaylist = p.type == "playlist"
+        val canRemove = inPlaylist && vm.editableContext.value
         com.music.spotui.ui.components.SongOptionsSheet(
             song = sel,
             navController = navController,
             context = context,
             onDismiss = { menuSong = null },
+            // The removal entry only exists on a playlist page the user may change: nowhere else
+            // is there a list to take the track out of.
+            onRemoveFromPlaylist = if (canRemove) ({ removeFromThisPlaylist(sel) }) else null,
+            currentPlaylistId = if (inPlaylist) p.uri.substringAfterLast(':') else null,
         )
     }
 
@@ -402,6 +464,7 @@ private fun ContextContent(navController: NavController, vm: ContextViewModel, p
                 Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxWidth()) {
                     if (p.type == "liked" || p.type == "liked-artist") LikedCover(Modifier.fillMaxWidth(0.66f).aspectRatio(1f).shadow(16.dp, RoundedCornerShape(4.dp))) else
                     GlideImage(
+                        transition = CrossFade,
                         model = p.coverUri,
                         contentDescription = "",
                         contentScale = ContentScale.Crop,
@@ -433,6 +496,7 @@ private fun ContextContent(navController: NavController, vm: ContextViewModel, p
                         ) {
                             if (p.ownerAvatar.isNotBlank()) {
                                 GlideImage(
+                                    transition = CrossFade,
                                     model = p.ownerAvatar,
                                     contentDescription = "",
                                     contentScale = ContentScale.Crop,
@@ -463,6 +527,7 @@ private fun ContextContent(navController: NavController, vm: ContextViewModel, p
                 ) {
                     if (p.type != "liked") {
                         GlideImage(
+                            transition = CrossFade,
                             model = p.coverUri,
                             contentDescription = "",
                             contentScale = ContentScale.Crop,
@@ -602,8 +667,22 @@ private fun ContextContent(navController: NavController, vm: ContextViewModel, p
         item { Spacer(Modifier.height(com.music.spotui.ui.components.bottomBarsSpace())) }
     }
     com.music.spotui.ui.components.FastScrollbar(listState, Modifier.align(Alignment.CenterEnd))
+    androidx.compose.material3.SnackbarHost(
+        hostState = snackbar,
+        modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = com.music.spotui.ui.components.bottomBarsSpace()),
+    ) { data ->
+        androidx.compose.material3.Snackbar(
+            snackbarData = data,
+            containerColor = Color(0xFF282828),
+            contentColor = Color.White,
+            actionContentColor = SpotifyGreen,
+        )
+    }
     }
 }
+
+/** How long a greyed track is given to start before the app says why it did not. */
+private const val UNAVAILABLE_CHECK_MS = 4_000L
 
 @OptIn(ExperimentalGlideComposeApi::class)
 @Composable
@@ -616,17 +695,38 @@ private fun TrackRow(
     onClick: () -> Unit,
     onMore: () -> Unit,
 ) {
+    // A greyed row is still tried (see the click): the tap is followed by a check, not a refusal.
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
+    val appContext = androidx.compose.ui.platform.LocalContext.current
     Row(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.Start,
         modifier = Modifier
             .fillMaxWidth()
             .then(if (song.playable) Modifier else Modifier.alpha(0.4f))
-            .clickable(onClick = onClick)
+            .clickable {
+                onClick()
+                // Spotify's playability flag is per market and can be wrong (testers heard greyed
+                // "region" tracks play in the official app), so a greyed row is still tried. If the
+                // player has not moved to it a few seconds later, the reason is said — a tap that
+                // appears to do nothing is what makes the app look broken.
+                if (!song.playable) scope.launch {
+                    kotlinx.coroutines.delay(UNAVAILABLE_CHECK_MS)
+                    val playing = SongPlayer.nowPlaying.value.uri
+                    if (song.spotifyTrackId.isNotBlank() && !playing.endsWith(song.spotifyTrackId)) {
+                        android.widget.Toast.makeText(
+                            appContext,
+                            app.myspoti.engine.R.string.track_unavailable_region,
+                            android.widget.Toast.LENGTH_LONG,
+                        ).show()
+                    }
+                }
+            }
             .padding(horizontal = 16.dp, vertical = 8.dp)
     ) {
         if (showCover) {
             GlideImage(
+                transition = CrossFade,
                 model = song.coverUri,
                 contentDescription = "",
                 contentScale = ContentScale.Crop,
@@ -854,7 +954,7 @@ private fun SimilarAlbums(navController: NavController, firstTrackId: String, al
                 Column(Modifier.width(140.dp).pressable(0.96f) {
                     navController.navigate(com.music.spotui.ui.navigation.albumRoute(a.name, artists, a.uri.substringAfterLast(':')))
                 }) {
-                    GlideImage(model = a.images.maxByOrNull { it.width ?: 0 }?.url, contentDescription = null, contentScale = ContentScale.Crop,
+                    GlideImage(transition = CrossFade, model = a.images.maxByOrNull { it.width ?: 0 }?.url, contentDescription = null, contentScale = ContentScale.Crop,
                         modifier = Modifier.size(140.dp).clip(RoundedCornerShape(4.dp)))
                     Text(a.name, color = Color.White, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 6.dp))
                     Text(artists, color = Color(0xFFB3B3B3), fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)

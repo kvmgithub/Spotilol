@@ -166,6 +166,15 @@ fun MyNavHost(
             com.music.spotui.ui.screens.RecapScreen(navHostController)
         }
 
+        // Spotify's own list for the account (every device), not this phone's counter.
+        page(Routes.Recent.route) {
+            LaunchedEffect(playerState) {
+                bottomBarState.value = true
+                bottomBarPlayerState.value = playerState != ""
+            }
+            com.music.spotui.ui.screens.RecentlyPlayedScreen(navHostController)
+        }
+
         page(Routes.Liked.route){
             LaunchedEffect(playerState) {
                 bottomBarState.value = true
@@ -287,6 +296,19 @@ fun MyNavHost(
             val sId = navBackStackEntry.arguments?.getString("sId")
             val name = navBackStackEntry.arguments?.getString("name").orEmpty()
             sId?.let { ShowScreen(navHostController, showId = it, showName = name) }
+        }
+
+        page(
+            "${Routes.Episode.route}/{eId}?name={name}",
+            arguments = listOf(navArgument("name") { defaultValue = "" }),
+        ) { navBackStackEntry ->
+            LaunchedEffect(playerState) {
+                bottomBarState.value = true
+                bottomBarPlayerState.value = playerState != ""
+            }
+            val eId = navBackStackEntry.arguments?.getString("eId")
+            val name = navBackStackEntry.arguments?.getString("name").orEmpty()
+            eId?.let { com.music.spotui.ui.screens.EpisodeScreen(navHostController, episodeId = it, fallbackName = name) }
         }
 
         page(

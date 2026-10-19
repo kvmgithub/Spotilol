@@ -6,11 +6,18 @@ import android.os.Bundle
 import android.support.v4.media.MediaBrowserCompat.MediaItem
 import android.support.v4.media.MediaDescriptionCompat
 import app.myspoti.engine.R
+import app.myspoti.host.android.MyspotiRuntime
 import com.music.spotui.data.api.Response
 import com.music.spotui.data.entity.ContextPageModel
 import com.music.spotui.data.entity.SongsModel
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withTimeoutOrNull
+
+/**
+ * The hidden player did not come up in time (cold start, no network). The browse answer is
+ * an empty folder then — MediaBrowserCompat has no error reply — and the log says why.
+ */
+class AudioNotReady(what: String) : IllegalStateException("player not ready: $what")
 
 /**
  * Android Auto / media browser tree, built from the app's own data (not the web page):
@@ -23,40 +30,52 @@ import kotlinx.coroutines.withTimeoutOrNull
 object AutoBrowser {
     const val ROOT = "root"
     private const val TIMEOUT_MS = 15_000L
+    /** Cold start: the car binds before the hidden Web Player is up; browse waits this long. */
+    private const val READY_WAIT_MS = 25_000L
 
     // Contexts recently listed, so a tap plays with the right queue.
     private val pages = java.util.concurrent.ConcurrentHashMap<String, ContextPageModel>()
 
-    suspend fun children(context: Context, parentId: String): List<MediaItem> = when {
-        parentId == ROOT -> listOf(
+    /**
+     * Browse for [parentId]. The root is static and answers at once, so the car draws its
+     * four folders while the page loads; every other node needs the session, and waits for
+     * it instead of returning an empty list, which Android Auto keeps as the folder's
+     * content until it unsubscribes (issue #41, cold start).
+     */
+    suspend fun children(context: Context, parentId: String): List<MediaItem> {
+        if (parentId == ROOT) return listOf(
             browsable("liked", context.getString(R.string.collection_liked_songs_title), null, grid = false),
             browsable("playlists", context.getString(R.string.aa_playlists), null, grid = false),
             browsable("albums", context.getString(R.string.aa_albums), null, grid = false),
             browsable("artists", context.getString(R.string.aa_artists), null, grid = false),
         )
-        parentId == "playlists" || parentId == "albums" -> {
-            val wantPlaylists = parentId == "playlists"
-            val entries = (firstResult { Graph.api.getLibrary() } ?: emptyList())
-                .filter { it.isPlaylist == wantPlaylists && it.spotifyId != com.music.spotui.data.api.Api.HomeCache.LIKED_SONGS_ID }
-            entries.map { e ->
-                browsable(if (wantPlaylists) "pl:${e.spotifyId}" else "al:${e.spotifyId}", e.name, e.coverUri, subtitle = e.subtitle)
+        if (!awaitPlayer()) throw AudioNotReady("browse $parentId")
+        return when {
+            parentId == "playlists" || parentId == "albums" -> {
+                val wantPlaylists = parentId == "playlists"
+                val entries = (firstResult { Graph.api.getLibrary() } ?: emptyList())
+                    .filter { it.isPlaylist == wantPlaylists && it.spotifyId != com.music.spotui.data.api.Api.HomeCache.LIKED_SONGS_ID }
+                entries.map { e ->
+                    browsable(if (wantPlaylists) "pl:${e.spotifyId}" else "al:${e.spotifyId}", e.name, e.coverUri, subtitle = e.subtitle)
+                }
             }
+            parentId == "artists" -> Graph.api.getFollowedArtists().filter { it.id.isNotBlank() }.map { a ->
+                browsable("ar:${a.id}|${a.name}", a.name, a.coverUri)
+            }
+            parentId == "liked" -> tracksOf(firstResult { Graph.api.getLikedPage() })
+            parentId.startsWith("pl:") -> tracksOf(firstResult { Graph.api.getPlaylistPage(parentId.removePrefix("pl:")) })
+            parentId.startsWith("al:") -> tracksOf(firstResult { Graph.api.getAlbumPage(parentId.removePrefix("al:")) })
+            parentId.startsWith("ar:") -> {
+                val (id, name) = parentId.removePrefix("ar:").split("|", limit = 2).let { it[0] to it.getOrElse(1) { "" } }
+                val overview = firstResult { Graph.api.getArtistOverview(name, id) }
+                overview?.topTracks?.map { playable("spotify:artist:$id", it.song) }.orEmpty()
+            }
+            else -> emptyList()
         }
-        parentId == "artists" -> Graph.api.getFollowedArtists().filter { it.id.isNotBlank() }.map { a ->
-            browsable("ar:${a.id}|${a.name}", a.name, a.coverUri)
-        }
-        parentId == "liked" -> tracksOf(firstResult { Graph.api.getLikedPage() })
-        parentId.startsWith("pl:") -> tracksOf(firstResult { Graph.api.getPlaylistPage(parentId.removePrefix("pl:")) })
-        parentId.startsWith("al:") -> tracksOf(firstResult { Graph.api.getAlbumPage(parentId.removePrefix("al:")) })
-        parentId.startsWith("ar:") -> {
-            val (id, name) = parentId.removePrefix("ar:").split("|", limit = 2).let { it[0] to it.getOrElse(1) { "" } }
-            val overview = firstResult { Graph.api.getArtistOverview(name, id) }
-            overview?.topTracks?.map { playable("spotify:artist:$id", it.song) }.orEmpty()
-        }
-        else -> emptyList()
     }
 
     suspend fun search(query: String): List<MediaItem> {
+        if (!awaitPlayer()) throw AudioNotReady("search")
         val r = firstResult { Graph.api.searchEverything(query) } ?: return emptyList()
         return r.songs.take(20).map { playable("", it) } +
             r.albums.filter { it.spotifyId.isNotBlank() }.take(8).map { browsable("al:${it.spotifyId}", it.name, it.coverUri, subtitle = it.artists) }
@@ -64,10 +83,21 @@ object AutoBrowser {
 
     /** Voice search ("play X on Myspoti"): the best matching track. */
     suspend fun playFromSearch(query: String): Boolean {
+        // A cold start asks before the page is up: waiting gives the answer, returning at
+        // once would tell the driver nothing matched.
+        if (!awaitPlayer()) {
+            android.util.Log.w("Myspoti", "voice search dropped: the player page is not ready")
+            return false
+        }
         val song = (firstResult { Graph.api.searchEverything(query) })?.songs?.firstOrNull() ?: return false
         play("t||${song.url}")
         return true
     }
+
+    /** [MyspotiRuntime.api.ready], waited for (bounded) — the page loads after the car connects. */
+    private suspend fun awaitPlayer(): Boolean =
+        MyspotiRuntime.api.ready.value ||
+            withTimeoutOrNull(READY_WAIT_MS) { MyspotiRuntime.api.ready.first { it } } != null
 
     fun play(mediaId: String) {
         val parts = mediaId.split("|", limit = 3)

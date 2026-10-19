@@ -2,6 +2,12 @@
 
 Every change, release by release. The short version is in [CHANGELOG.md](../CHANGELOG.md), which the app and the GitHub releases show.
 
+## Unreleased
+
+- **Skip intent**: next / previous / "skip to" made while the page cannot take them (an ad is current: "The operation is not allowed"; a reload: "local player is disabled", "not ready") move an intent instead of reaching the page; the screen shows that song, waiting. Whatever recovers playback (the ad recovery, any reload, the end of the ad) plays the intent, not the song after the last state seen; skips made meanwhile move it and the newest wins. A plain next is remembered too: if the page goes into an ad break instead, that song is asked for again after it. "Previous" refused during an ad is held, never turned into a seek (which restarted the ad).
+- **Ad breaks**: the watcher wakes as soon as an ad starts (its recovery starts after 1 s, no longer up to a 2 s tick later).
+- **Tests**: `tools/playback_test.py` fakes an ad in the page (`ad_taps`, `ad_previous`) and reloads it under taps (`reload_taps`), and checks that the app's media session shows the song that plays.
+
 ## 2.0.0-beta.8
 
 - **SpotiFLAC**: when it is not verified (or the verification lapsed), Downloads and any download open the verification first, then the songs download; its page is full screen (Retry and Skip were hidden under the mini player); sessions follow SpotiFLAC Mobile's rules (renewed once, in their last hour, and a download refused because another one just renewed it is sent again), so many downloads at once no longer end the verification; you are told when it must be done again.

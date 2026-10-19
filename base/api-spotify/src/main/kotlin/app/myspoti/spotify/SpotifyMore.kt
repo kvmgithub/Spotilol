@@ -10,6 +10,7 @@ import app.myspoti.api.Credits
 import app.myspoti.api.Device
 import app.myspoti.api.Devices
 import app.myspoti.api.Episode
+import app.myspoti.api.EpisodeAudio
 import app.myspoti.api.FriendActivity
 import app.myspoti.api.HistoryEntry
 import app.myspoti.api.Home
@@ -53,6 +54,22 @@ import java.net.URLEncoder
 import java.util.TimeZone
 
 private fun idOf(uri: Uri) = uri.substringAfterLast(':')
+
+/**
+ * A soundfinder response read into [EpisodeAudio]. Only `passthroughUrl` is usable: `url[]`
+ * is the Widevine-encrypted copy, so it is never returned. "MANDATORY" wants the publisher
+ * file as much as "ALLOWED" (the Web Player's format mapping is inconsistent there), so only
+ * "NONE" means there is no clear file.
+ */
+internal fun episodeAudio(json: JsonElement): EpisodeAudio {
+    val pass = json.str("passthrough")?.uppercase().orEmpty()
+    val passUrl = json.str("passthroughUrl")?.takeIf { it.isNotBlank() }
+    return EpisodeAudio(
+        url = passUrl?.takeIf { pass != "NONE" },
+        passthrough = pass.ifBlank { "NONE" },
+        format = json.str("format").orEmpty(),
+    )
+}
 
 /** Promotions and ads (HomePromotionShelf, sponsored cards…): never shown as content. */
 internal fun isPromotion(typename: String?): Boolean =
@@ -117,12 +134,25 @@ class SpotifyHome(private val gql: Gql) : Home {
     }
 }
 
-class SpotifyPodcasts(private val gql: Gql, private val bridge: Bridge) : Podcasts {
+class SpotifyPodcasts(private val gql: Gql, private val bridge: Bridge, private val http: SpotifyHttp) : Podcasts {
     private suspend fun showUnion(uri: Uri) = gql.query("queryShowMetadataV2", vars(
         "uri" to uri, "includeContentCapabilityTrait" to true, "includeEpisodeContentRatingsV2" to true,
     )).entity("data.podcastUnionV2", "queryShowMetadataV2")
 
     override suspend fun show(uri: Uri): Show = show(showUnion(uri)) ?: throw GqlException("queryShowMetadataV2", "bad show")
+
+    /**
+     * The audio of one episode, from the Web Player's soundfinder endpoint. The key system is
+     * part of the path and is mandatory (anything else answers 400). The endpoint is `unauth`
+     * (probed without a token), but going through [SpotifyHttp] keeps the cookie and token
+     * story the same as every other call, and the host allow-list applies.
+     */
+    override suspend fun audioUrl(uri: Uri): EpisodeAudio {
+        val id = idOf(uri)
+        val json = http.getJson("https://spclient.wg.spotify.com/soundfinder/v1/unauth/episode/$id/com.widevine.alpha")
+            ?: return EpisodeAudio(null, "NONE", "") // 404: no audio for this episode
+        return episodeAudio(json)
+    }
 
     override suspend fun episodes(uri: Uri, offset: Int, limit: Int): Page<Episode> {
         val e = gql.query("queryPodcastEpisodes", vars("uri" to uri, "offset" to offset, "limit" to limit, "includeEpisodeContentRatingsV2" to true))

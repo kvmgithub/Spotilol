@@ -4,10 +4,15 @@ import androidx.compose.ui.res.stringResource
 import app.myspoti.engine.R
 
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
-import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.scrollBy
+import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.background
 import androidx.compose.material.icons.filled.DragHandle
 import androidx.compose.material.icons.filled.Delete
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import androidx.compose.runtime.collectAsState
 import androidx.compose.material.icons.filled.RemoveCircleOutline
@@ -62,7 +67,9 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -74,6 +81,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.bumptech.glide.integration.compose.ExperimentalGlideComposeApi
+import com.bumptech.glide.integration.compose.CrossFade
 import com.bumptech.glide.integration.compose.GlideImage
 import com.music.spotui.data.entity.SongsModel
 import com.music.spotui.di.Graph
@@ -413,6 +421,10 @@ fun QueueSheet(contextName: String, onDismiss: () -> Unit) {
     var editing by remember { mutableStateOf(false) }
     if (showTimer) SleepTimerSheet { showTimer = false }
 
+    // The queue rows are all ONE LazyColumn item, so a drag can only scroll the sheet
+    // through this state.
+    val listState = rememberLazyListState()
+
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
@@ -434,7 +446,7 @@ fun QueueSheet(contextName: String, onDismiss: () -> Unit) {
                 }
                 PillButton(if (editing) "OK" else stringResource(R.string.curation_actions_edit_button_title)) { editing = !editing }
             }
-            LazyColumn(modifier = Modifier.weight(1f)) {
+            LazyColumn(state = listState, modifier = Modifier.weight(1f)) {
                 q.current?.let { cur ->
                     item(key = "current") {
                         QueueSheetRow(cur, current = true, trailing = {
@@ -455,7 +467,7 @@ fun QueueSheet(contextName: String, onDismiss: () -> Unit) {
                         }, onClick = {})
                     }
                 }
-                item(key = "queue") { QueueList(q, contextName, editing) }
+                item(key = "queue") { QueueList(q, contextName, editing, listState) }
             }
             Row(
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
@@ -490,6 +502,48 @@ private fun PillButton(label: String, onClick: () -> Unit) {
 
 private val QueueHeaderHeight = 48.dp
 
+/** Strip at each end of the list where a drag starts scrolling it. */
+private val QueueEdgeZone = 72.dp
+
+/** Scroll distance per frame at the very edge; it fades to 0 at the zone's inner border. */
+private val QueueEdgeMaxStep = 14.dp
+
+/**
+ * Pixels to scroll this frame for a drag whose row centre is at [pointerY] (viewport
+ * space): negative near the top edge, positive near the bottom, 0 in the middle. The
+ * speed ramps up as the row gets closer to the edge, so a song crosses a long queue fast.
+ */
+internal fun queueEdgeScrollStep(
+    pointerY: Float,
+    viewportTop: Float,
+    viewportBottom: Float,
+    edgePx: Float,
+    maxStepPx: Float,
+): Float {
+    if (viewportBottom <= viewportTop || edgePx <= 0f) return 0f
+    val up = ((viewportTop + edgePx) - pointerY) / edgePx
+    if (up > 0f) return -maxStepPx * up.coerceIn(0f, 1f)
+    val down = (pointerY - (viewportBottom - edgePx)) / edgePx
+    return if (down > 0f) maxStepPx * down.coerceIn(0f, 1f) else 0f
+}
+
+/**
+ * Top of the queue block in viewport pixels (negative once scrolled past the top).
+ * The sheet's list holds the current track (optional) and the queue block, so
+ * [queueContentTop] is that first item's height; [firstVisibleIndex] / [firstVisibleScrollOffset]
+ * are [LazyListState]'s own numbers, which keeps this in step with the scroll.
+ */
+internal fun queueTopInViewport(
+    totalItems: Int,
+    firstVisibleIndex: Int,
+    firstVisibleScrollOffset: Int,
+    queueContentTop: Float,
+): Float {
+    if (totalItems == 0) return 0f
+    val firstItemTop = if (firstVisibleIndex > 0 && totalItems > 1) queueContentTop else 0f
+    return queueContentTop - (firstItemTop + firstVisibleScrollOffset)
+}
+
 private sealed class QEntry {
     data class Header(val queuedSection: Boolean) : QEntry()
     data class Row(val item: SongPlayer.QueueItem, val queued: Boolean) : QEntry()
@@ -501,17 +555,26 @@ private sealed class QEntry {
  * the queue (official behaviour). Drag handle on every row; swipe right removes.
  */
 @Composable
-private fun QueueList(q: SongPlayer.EngineQueue, contextName: String, editing: Boolean) {
+private fun QueueList(
+    q: SongPlayer.EngineQueue,
+    contextName: String,
+    editing: Boolean,
+    listState: LazyListState,
+) {
     val haptic = androidx.compose.ui.platform.LocalHapticFeedback.current
     val density = androidx.compose.ui.platform.LocalDensity.current
+    val scope = rememberCoroutineScope()
     val rowPx = with(density) { QueueRowHeight.toPx() }
     val headerPx = with(density) { QueueHeaderHeight.toPx() }
+    val edgePx = with(density) { QueueEdgeZone.toPx() }
+    val maxStepPx = with(density) { QueueEdgeMaxStep.toPx() }
 
     var queued by remember(q.queued) { mutableStateOf(q.queued) }
     var nextUp by remember(q.nextUp) { mutableStateOf(q.nextUp) }
     var dragging by remember { mutableStateOf<SongPlayer.QueueItem?>(null) }
     var dragOffset by remember { mutableStateOf(0f) }
     var lastSlot by remember { mutableStateOf(-1) }
+    var autoScrollJob by remember { mutableStateOf<Job?>(null) }
 
     val entries = buildList {
         if (queued.isNotEmpty()) add(QEntry.Header(true))
@@ -527,6 +590,70 @@ private fun QueueList(q: SongPlayer.EngineQueue, contextName: String, editing: B
         var acc = 0f
         entries.forEachIndexed { i, e -> acc += height(e); if (y < acc) return i }
         return entries.lastIndex
+    }
+
+    /**
+     * Top of the queue block in viewport coordinates (negative once scrolled past the
+     * top). Computing it from the scroll state instead of measuring the composable
+     * guarantees it matches the scroll the drag itself is doing.
+     */
+    fun queueBlockTop(): Float {
+        val total = listState.layoutInfo.totalItemsCount
+        return queueTopInViewport(
+            totalItems = total,
+            firstVisibleIndex = listState.firstVisibleItemIndex,
+            firstVisibleScrollOffset = listState.firstVisibleItemScrollOffset,
+            queueContentTop = if (total > 1) rowPx else 0f,
+        )
+    }
+
+    /** Pixels to scroll this frame: negative near the top edge, positive near the bottom. */
+    fun edgeScrollStep(pointerY: Float): Float {
+        val info = listState.layoutInfo
+        return queueEdgeScrollStep(
+            pointerY,
+            info.viewportStartOffset.toFloat(),
+            info.viewportEndOffset.toFloat(),
+            edgePx,
+            maxStepPx,
+        )
+    }
+
+    /** Recomputes the hovered entry after the list moved; ticks only when it changes. */
+    fun syncHoveredSlot(itemIndex: Int) {
+        val slot = entryAt(topOf(itemIndex) + dragOffset + rowPx / 2)
+        if (slot != lastSlot) {
+            lastSlot = slot
+            haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.SegmentTick)
+        }
+    }
+
+    /** Scrolls the list once per frame while the dragged row stays in an edge zone. */
+    fun startAutoScroll(itemIndex: Int) {
+        autoScrollJob?.cancel()
+        autoScrollJob = scope.launch {
+            while (isActive) {
+                val top = queueBlockTop()
+                val pointerY = top + topOf(itemIndex) + dragOffset + rowPx / 2
+                val step = edgeScrollStep(pointerY)
+                if (step != 0f) {
+                    val moved = listState.scrollBy(step)
+                    if (moved != 0f) {
+                        // The rows live in list CONTENT space: the content slid under a
+                        // still finger, so the drag has to slide by the same amount or
+                        // the row escapes the finger and the hovered slot stops matching.
+                        dragOffset += moved
+                        syncHoveredSlot(itemIndex)
+                    }
+                }
+                withFrameNanos { }
+            }
+        }
+    }
+
+    fun stopAutoScroll() {
+        autoScrollJob?.cancel()
+        autoScrollJob = null
     }
 
     fun drop(item: SongPlayer.QueueItem, fromQueued: Boolean, centerY: Float) {
@@ -626,22 +753,23 @@ private fun QueueList(q: SongPlayer.EngineQueue, contextName: String, editing: B
                                                 onDragStart = {
                                                     dragging = item; dragOffset = 0f; lastSlot = index
                                                     haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
+                                                    startAutoScroll(index)
                                                 },
                                                 onDragEnd = {
+                                                    stopAutoScroll()
                                                     val center = topOf(entries.indexOf(e)) + dragOffset + rowPx / 2
                                                     drop(item, e.queued, center)
                                                     haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.GestureEnd)
                                                     dragging = null; dragOffset = 0f
                                                 },
-                                                onDragCancel = { dragging = null; dragOffset = 0f },
+                                                onDragCancel = {
+                                                    stopAutoScroll()
+                                                    dragging = null; dragOffset = 0f
+                                                },
                                             ) { change, amount ->
                                                 change.consume()
                                                 dragOffset += amount.y
-                                                val slot = entryAt(topOf(entries.indexOf(e)) + dragOffset + rowPx / 2)
-                                                if (slot != lastSlot) {
-                                                    lastSlot = slot
-                                                    haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.SegmentTick)
-                                                }
+                                                syncHoveredSlot(index)
                                             }
                                         },
                                 )
@@ -739,6 +867,7 @@ private fun QueueSheetRow(
     ) {
         leading()
         GlideImage(
+            transition = CrossFade,
             model = song.coverUri, contentDescription = "", contentScale = ContentScale.Crop,
             modifier = Modifier.size(48.dp).clip(RoundedCornerShape(4.dp)),
         )

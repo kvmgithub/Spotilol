@@ -214,6 +214,12 @@
   // Not heard, yet not "muted audio" to Chromium (see 'media.mute').
   const SILENT = 0.001;
 
+  // A fade is a list of setTimeout steps: a second fade, a plain volume set or a mute must
+  // cancel the pending ones, or they would override it seconds later (the up-ramp of a
+  // crossfade undone by the tail of its own down-ramp, a restored volume pulled down again).
+  let fadeTimers = [];
+  const cancelFade = () => { fadeTimers.forEach(clearTimeout); fadeTimers = []; };
+
   // "Is this page Spotify Connect's active device": a full device-list round trip, so it is
   // read at most once every ACTIVE_CACHE_MS and reused (a transfer happens minutes apart).
   const ACTIVE_CACHE_MS = 6000;
@@ -242,8 +248,55 @@
     return services;
   };
 
+  // --- ads ------------------------------------------------------------------
+  // The page's own ad managers drive the audio ads and their mute. SpotX patches the bundled
+  // web player to force `adsEnabled` off; the very same managers are reachable at runtime through
+  // the service registry, so they are turned off here instead of patching a bundle we do not ship.
+  //
+  // `disable` alone is not enough: the page re-arms its managers at every ad opportunity (a
+  // "Test ad" still came through on a free account, 19/10 02:29). `enable`/`disable` sit on the
+  // prototype and `enabled` is a plain field, so the instance is shadowed here: after this, the
+  // page cannot arm an ad again for the life of the page.
+  let adsLatched = false;
+  const adsOff = () => {
+    if (!services) return 'not ready';
+    if (adsLatched) return 'already off';
+    let audio = null;
+    try { audio = services.resolve('AdManagers').audio; } catch (e) { return 'unresolved'; }
+    if (!audio) return 'no ad manager';
+    const done = [];
+    for (const [label, mgr] of [['audio', audio], ['inStream', audio.inStreamApi]]) {
+      if (!mgr) continue;
+      try {
+        if (typeof mgr.disable === 'function') { mgr.disable(); done.push(label); }
+        // The page's own `enable` is replaced on the instance: it can only ever answer "not on".
+        if (typeof mgr.enable === 'function') {
+          Object.defineProperty(mgr, 'enable', { value: () => false, writable: true, configurable: true });
+        }
+        if ('enabled' in mgr) mgr.enabled = false;
+      } catch (e) { /* already off */ }
+    }
+    return done.length ? (adsLatched = true, done.join(',')) : 'nothing to disable';
+  };
+
+  /**
+   * Ends the ad the in-stream ad manager owns, its own way (a skip of the ad break, not of the
+   * song). The app asks for this before it falls back to reloading the page, which is what a
+   * "Test ad" used to cost: a visible reload of the whole player.
+   */
+  const adsSkip = () => {
+    if (!services) return 'not ready';
+    try {
+      const api = services.resolve('AdManagers').audio.inStreamApi;
+      if (api && typeof api.skipToNext === 'function') { api.skipToNext(); return 'inStream.skipToNext'; }
+    } catch (e) { return 'failed: ' + e; }
+    return 'no lever';
+  };
+
   const commands = {
     'bridge.version': () => VERSION,
+    'ads.off': () => adsOff(),
+    'ads.skip': () => adsSkip(),
 
     'player.state': () => mapState(need().player.getState()),
     'player.queue': () => mapQueue(need().player.getQueue()),
@@ -320,6 +373,7 @@
     // new song, a restart, a seek) muted or at volume 0, and the song after the ad stayed
     // paused. A volume of SILENT is not heard and keeps playback going.
     'media.mute': async a => {
+      cancelFade();
       window.__mspMuted = !!a.on;
       const player = await localPlayer().catch(() => null);
       const els = new Set([...(window.__mspMedia || []), ...document.querySelectorAll('audio, video'), ...await playerMedia()]);
@@ -352,6 +406,7 @@
       const player = await localPlayer();
       const el = player && player._player;
       if (!(el instanceof HTMLMediaElement)) return null;
+      cancelFade();
       // Never 0: see 'media.mute'.
       el.volume = a.restore ? ownLevel(player) : Math.min(1, Math.max(SILENT, Number(a.level) || 0));
       return el.volume;
@@ -367,8 +422,11 @@
       const steps = (Array.isArray(a.steps) ? a.steps : []).map(Number);
       const per = Math.max(1, Number(a.ms) || 12);
       const set = v => { el.volume = Math.min(1, Math.max(SILENT, v)); };
-      steps.forEach((v, i) => setTimeout(() => set(v), i * per));
-      if (a.restore) setTimeout(() => { el.volume = ownLevel(player); }, steps.length * per);
+      // A ramp replaces the one before it (a crossfade's up-ramp must not be pulled back down
+      // by steps still pending from its down-ramp).
+      cancelFade();
+      fadeTimers = steps.map((v, i) => setTimeout(() => set(v), i * per));
+      if (a.restore) fadeTimers.push(setTimeout(() => { el.volume = ownLevel(player); }, steps.length * per));
       return true;
     },
 
@@ -454,6 +512,8 @@
   const pushState = () => {
     if (!services) return;
     const state = mapState(services.player.getState());
+    // An ad is on: the page's ad managers are turned off again (it re-arms them per break).
+    if (state && state.track && state.track.kind === 'ad') { try { adsOff(); } catch (e) { /* no service */ } }
     const json = JSON.stringify(state);
     if (json === lastState) return;
     lastState = json;
@@ -468,6 +528,8 @@
     const events = services.player.getEvents();
     events.addListener('update', pushState);
     events.addListener('queue_update', pushQueue);
+    // Ads off from the first moment: a break queued before the bridge attached never starts.
+    try { adsOff(); } catch (e) { /* no service yet */ }
   };
 
   // --- boot -----------------------------------------------------------------
@@ -494,7 +556,7 @@
     pushState();
   };
 
-  window.Myspoti = { version: VERSION, call, announce, methods: Object.keys(commands) };
+  window.Myspoti = { version: VERSION, call, announce, adsOff, adsSkip, methods: Object.keys(commands) };
 
   // The page's own UI is never seen. On the home page a song change redraws ~7000 nodes and
   // ~190 images, which held the main thread for ~1 s and delayed the next song's sound; the

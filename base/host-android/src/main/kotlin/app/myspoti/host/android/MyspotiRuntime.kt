@@ -30,8 +30,8 @@ object MyspotiRuntime {
         if (isStarted) return
         val updater = app.myspoti.spotify.gql.GqlOpsUpdater(okhttp3.OkHttpClient(), java.io.File(context.filesDir, "spotify/gql-ops.json"))
         host = WebPlayerHost(context)
-        spotify = SpotifyApi(host, scope, language = Locale.getDefault().language, ops = updater.load())
-        spotify.bridge.logger = { line -> android.util.Log.d(WebPlayerHost.LOG, line) }
+        spotify = SpotifyApi(host, scope, language = Locale.getDefault().language, ops = updater.load(), deviceId = clientDeviceId(context), userAgent = host.userAgent)
+        spotify.bridge.logger = { line -> Logbook.log(line) }
         host.onPageLoaded = { scope.launch { spotify.onPageLoaded() } }
         host.onPageStarting = { spotify.onPageStarting() }
         spotify.player.reloadHost = { host.reload() }
@@ -42,11 +42,18 @@ object MyspotiRuntime {
             while (true) {
                 kotlinx.coroutines.delay(10_000)
                 val s = spotify.player.state.value
-                val line = "status ready=${spotify.ready.value} login=${host.loginRequired.value} " +
+                // "login" alone said nothing (it only meant "the page is on a login URL"): a bug
+                // report needs the session itself — a token that is anonymous means no account.
+                val session = when {
+                    host.loginRequired.value -> "login-page"
+                    runCatching { isSignedIn() }.getOrDefault(false) -> "signed-in"
+                    else -> "anonymous"
+                }
+                val line = "status ready=${spotify.ready.value} session=$session " +
                     "track=${s?.item?.name} paused=${s?.isPaused} buffering=${s?.isBuffering} url=${host.url.value.take(60)}"
                 if (line != last) {
                     last = line
-                    android.util.Log.d(WebPlayerHost.LOG, line)
+                    Logbook.log(line)
                 }
             }
         }
@@ -61,7 +68,33 @@ object MyspotiRuntime {
     /** True when the Web Player holds a signed-in user's token (not an anonymous one). */
     suspend fun isSignedIn(): Boolean = spotify.isSignedIn()
 
+    /**
+     * Waits for a signed-in session (a non-anonymous token) up to [timeoutMs]. The login flow is
+     * bounded by this: the page returning to open.spotify.com is not a session, and waiting on
+     * it for ever is what left the spinner running (see MainActivity.watchLoginReturn).
+     */
+    suspend fun awaitSignedIn(timeoutMs: Long): Boolean {
+        val deadline = System.currentTimeMillis() + timeoutMs
+        while (System.currentTimeMillis() < deadline) {
+            if (runCatching { isSignedIn() }.getOrDefault(false)) return true
+            kotlinx.coroutines.delay(500)
+        }
+        return runCatching { isSignedIn() }.getOrDefault(false)
+    }
+
     /** Data saver: frees the page; [resume] loads it again. */
     fun suspendPlayer() = host.unload()
     fun resume() = host.load()
+
+    /**
+     * The client's device id, kept across launches: a client token is issued per (client, device)
+     * pair, and a fresh id at every start made the app look like a brand-new client each time.
+     */
+    private fun clientDeviceId(context: Context): String {
+        val file = java.io.File(context.filesDir, "spotify/device-id")
+        runCatching { file.readText().trim() }.getOrNull()?.takeIf { it.isNotEmpty() }?.let { return it }
+        val id = java.util.UUID.randomUUID().toString()
+        runCatching { file.parentFile?.mkdirs(); file.writeText(id) }
+        return id
+    }
 }

@@ -76,7 +76,9 @@ object OfflineCollections {
 
     /** Download a song on its own. */
     fun downloadSong(song: SongsModel, quality: com.music.spotui.data.preferences.DownloadQuality? = null) {
-        if (song.spotifyTrackId.isBlank()) return
+        // Episodes have no track id and their own downloader (PodcastDownloader): sending one
+        // here would only be dropped, or worse, hit the lossless path.
+        if (song.spotifyTrackId.isBlank() || episodeKeyOf(song) != null) return
         synchronized(lock) { singles += song.spotifyTrackId }
         save()
         OfflineDownloader.enqueue(listOf(song), quality)
@@ -96,7 +98,9 @@ object OfflineCollections {
 
     /** Download a list as a whole, and keep it in step from now on. */
     fun download(page: ContextPageModel, quality: com.music.spotui.data.preferences.DownloadQuality? = null) {
-        val ids = page.tracks.map { it.spotifyTrackId }.filter { it.isNotBlank() }.toSet()
+        // An episode in a list is not a lossless track: it stays out of the collection, and the
+        // list download never enqueues it (its own menu row is the way to download an episode).
+        val ids = page.tracks.map { it.spotifyTrackId }.filter { it.isNotBlank() && !isEpisodeKey(it) }.toSet()
         collections[page.uri] = OfflineCollection(page.uri, page.type, page.name, ids, System.currentTimeMillis(), quality?.name.orEmpty())
         save()
         OfflineDownloader.enqueue(page.tracks, quality)
@@ -122,14 +126,16 @@ object OfflineCollections {
     fun sync(page: ContextPageModel) {
         val c = collections[page.uri] ?: return
         if (!page.complete) return
-        val songs = page.tracks.filter { it.spotifyTrackId.isNotBlank() }
+        // Episodes are never part of a downloaded list: they have their own queue and their
+        // downloaded copies are kept by their own key, not by the list that shows them.
+        val songs = page.tracks.filter { it.spotifyTrackId.isNotBlank() && !isEpisodeKey(it.spotifyTrackId) }
         val ids = songs.map { it.spotifyTrackId }.toSet()
         val gone = c.trackIds - ids
         collections[page.uri] = c.copy(name = page.name, trackIds = ids, syncedAt = System.currentTimeMillis())
         save()
         val missing = songs.filter { !OfflineStore.isDownloaded(it.spotifyTrackId) && OfflineStore.status[it.spotifyTrackId] == null }
         if (missing.isNotEmpty()) OfflineDownloader.enqueue(missing, com.music.spotui.data.preferences.DownloadQuality.saved(c.quality), auto = true)
-        gone.filterNot { isKept(it) }.forEach { OfflineDownloader.remove(it) }
+        gone.filterNot { isKept(it) || isEpisodeKey(it) }.forEach { OfflineDownloader.remove(it) }
         if (missing.isNotEmpty() || gone.isNotEmpty()) Log.i(TAG, "${page.name}: +${missing.size} -${gone.size}")
     }
 

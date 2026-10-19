@@ -4,7 +4,7 @@ Recherche du 16/10/2026, sources : spotbye/SpotiFLAC v7.2.2 (desktop, Go+Wails, 
 spotiflacapp/SpotiFLAC-Mobile (Flutter+Rust, MIT), Spotui v1.6 (clone GPL-3 vendored `/tmp/spotui-vendor`),
 vérifications réseau live des endpoints le jour même.
 
-## Décisions Dani
+## Décisions
 - SpotiFLAC pour tous les téléchargements, **pas de YouTube** (plus de source YT).
 - Sans match FLAC → **indisponible** (comportement actuel conservé).
 - Qualité (16/24) = préférence utilisateur : onboarding + paramètre (comme les réglages data saver).
@@ -43,7 +43,7 @@ vérifications réseau live des endpoints le jour même.
   par ISRC (AudioAlign, score ≥ 0,5) rejette le même enregistrement qu'aujourd'hui.
 - **DASH-BTS multi-segments** (les manifestes `{url:[...]}`) : soit single-file seulement
   (choix Spotui v1.6), soit porter le remux `downloadDashFlacToFile` (fLaC + STREAMINFO + payloads
-  mdat, sans ffmpeg) pour débloquer HI_RES 24-bit — recommandé puisque Dani veut la qualité.
+  mdat, sans ffmpeg) pour débloquer HI_RES 24-bit — recommandé puisque la qualité est voulue.
 - **Erreurs** (protocole officiel) : 429/502/504 → retry ×3 Retry-After clamp(1,300 s) ; 401
   SESSION_INVALID → effacer la session + re-bootstrap ; 428 VERIFY_REQUIRED → relancer la WebView ;
   403 → 1 essai avec session rafraîchie. Status API `spotbye.qzz.io/api/status` (fail-open).

@@ -15,6 +15,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.currentCoroutineContext
@@ -169,13 +170,17 @@ object OfflineDownloader {
             return
         }
         val q = quality?.let { com.music.spotui.data.preferences.DownloadQuality.saved(it.name) }?.name.orEmpty()
-        enqueueAll(songs.filter { it.spotifyTrackId.isNotBlank() }.map { Request.of(it).copy(quality = q) })
+        // Episodes go to PodcastDownloader: their id is no track id, so the lossless lookup
+        // would 404 (or worse, match an unrelated recording by title).
+        enqueueAll(songs.filter { it.spotifyTrackId.isNotBlank() && !isEpisodeKey(it.spotifyTrackId) }.map { Request.of(it).copy(quality = q) })
     }
 
     private fun enqueueAll(list: List<Request>) {
         val added = synchronized(pending) {
             list.filter { r ->
-                !OfflineStore.isDownloaded(r.trackId) && pending.putIfAbsent(r.trackId, r) == null
+                // Last guard before the lossless path, whatever the caller (resume, retry, list).
+                !isEpisodeKey(r.trackId) &&
+                    !OfflineStore.isDownloaded(r.trackId) && pending.putIfAbsent(r.trackId, r) == null
             }.also { if (it.isNotEmpty()) savePending() }
         }
         if (added.isEmpty()) return
@@ -192,6 +197,24 @@ object OfflineDownloader {
         running.remove(trackId)?.cancel()
         OfflineStore.status.remove(trackId)
         requests.remove(trackId)
+    }
+
+    /**
+     * Stops every running and queued download and empties the queue. Unlike [removeAll], it
+     * deletes nothing: finished songs stay in [OfflineStore.tracks] and in the index, and a
+     * cancelled download only drops its own partial file in the temp folder.
+     */
+    fun stopAll() {
+        // The queue survives a restart through pending.json: clearing it here is what makes the
+        // stop stick, instead of the downloads resuming at the next launch.
+        val ids = synchronized(pending) { pending.keys.toList().also { pending.clear(); savePending() } }
+        // Running jobs may not all be in `pending` any more; cancel them by their own handle.
+        running.values.forEach { it.cancel() }
+        running.clear()
+        // Snapshot state: the badges and the list are read from the UI, so write them there.
+        scope.launch(Dispatchers.Main) {
+            ids.forEach { OfflineStore.status.remove(it); requests.remove(it) }
+        }
     }
 
     /** Tries a failed song again. */
@@ -326,18 +349,22 @@ object OfflineDownloader {
                 out = File(OfflineStore.audioDir, "${r.trackId}.flac")
                 if (!audioTmp.renameTo(out)) throw IOException("could not move the file")
             }
-            // Kept encrypted: the file only plays in Myspoti, on this phone.
-            runInterruptible(Dispatchers.IO) { OfflineCrypto.encryptInPlace(Graph.app, out) }
-            val cover = runCatching {
-                val c = File(OfflineStore.coverDir, "${r.trackId}.jpg")
-                httpGet(meta.coverUrl, c); c.name
-            }.getOrDefault("")
-            return OfflineTrack(
-                trackId = r.trackId, title = meta.title, artist = meta.artist, album = meta.album,
-                albumId = meta.albumId, durationMs = meta.durationMs, coverUrl = meta.coverUrl,
-                file = out.name, cover = cover, source = file.provider, verified = file.verified,
-                bytes = out.length(), addedAt = System.currentTimeMillis(),
-            )
+            // The audio is complete on disk from here on: "stop all" must not interrupt this last
+            // part, or the file would stay out of the index and be swept as a stray at startup.
+            return withContext(NonCancellable) {
+                // Kept encrypted: the file only plays in Myspoti, on this phone.
+                runInterruptible(Dispatchers.IO) { OfflineCrypto.encryptInPlace(Graph.app, out) }
+                val cover = runCatching {
+                    val c = File(OfflineStore.coverDir, "${r.trackId}.jpg")
+                    httpGet(meta.coverUrl, c); c.name
+                }.getOrDefault("")
+                OfflineTrack(
+                    trackId = r.trackId, title = meta.title, artist = meta.artist, album = meta.album,
+                    albumId = meta.albumId, durationMs = meta.durationMs, coverUrl = meta.coverUrl,
+                    file = out.name, cover = cover, source = file.provider, verified = file.verified,
+                    bytes = out.length(), addedAt = System.currentTimeMillis(),
+                )
+            }
         } finally {
             audioTmp.delete(); previewTmp.delete()
         }
@@ -477,7 +504,12 @@ object OfflineDownloader {
         }
     }
 
-    private fun rangedDownload(url: String, out: File, knownTotal: Long): Boolean {
+    /**
+     * The byte range loop, shared with [PodcastDownloader]: a publisher's MP3 is fetched the
+     * same way (follows the 302s to podtrac/radiofrance/simplecast, restarts from zero when a
+     * server ignores Range, retries each chunk three times).
+     */
+    internal fun rangedDownload(url: String, out: File, knownTotal: Long): Boolean {
         val chunk = 4L * 1024 * 1024 // 4 MB: the stream gets its turn between two chunks
         var total = knownTotal
         java.io.RandomAccessFile(out, "rw").use { output ->

@@ -34,9 +34,13 @@ class SpotifyApi(
     http: OkHttpClient = OkHttpClient(),
     language: String = "en",
     val ops: GqlOps = GqlOps.bundled(),
+    /** The client's device id, kept across launches by the host (see SpotifyHttp.deviceId). */
+    deviceId: String? = null,
+    /** The browser this install presents to Spotify (see [SpotifyHttp.browserUserAgent]); null keeps the constant. */
+    userAgent: String? = null,
 ) : MyspotiApi {
     val bridge = Bridge(host, scope)
-    val http = SpotifyHttp(http, bridge, language)
+    val http = SpotifyHttp(http, bridge, language, userAgent, deviceId ?: java.util.UUID.randomUUID().toString())
     @Volatile private var currentOps: GqlOps = ops
     /** The operation table in use; [updateOps] swaps it when Spotify ships a new build. */
     val opsInUse: GqlOps get() = currentOps
@@ -53,11 +57,12 @@ class SpotifyApi(
     override val library = SpotifyLibrary(bridge, gql)
     override val playlists = SpotifyPlaylists(gql, bridge, this.http)
     override val home = SpotifyHome(gql)
-    override val podcasts = SpotifyPodcasts(gql, bridge)
+    override val podcasts = SpotifyPodcasts(gql, bridge, this.http)
     override val users = SpotifyUsers(gql, bridge, this.http)
     override val extras = SpotifyTrackExtras(gql, bridge, this.http)
     override val devices = SpotifyDevices(bridge)
     override val jam = SpotifyJam(bridge)
+    override val recents = SpotifyRecents(gql)
 
     /** Escape hatch to the 179 GraphQL operations and 89 page services, for what is not typed yet. */
     val raw = Raw()

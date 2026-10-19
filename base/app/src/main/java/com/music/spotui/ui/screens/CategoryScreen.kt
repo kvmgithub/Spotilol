@@ -42,6 +42,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import com.bumptech.glide.integration.compose.ExperimentalGlideComposeApi
+import com.bumptech.glide.integration.compose.CrossFade
 import com.bumptech.glide.integration.compose.GlideImage
 import com.bumptech.glide.integration.compose.placeholder
 import app.myspoti.engine.R
@@ -121,6 +122,7 @@ private fun CategoryGrid(entries: List<LibraryEntry>, navController: NavControll
                     
             ) {
                 GlideImage(
+                    transition = CrossFade,
                     modifier = Modifier
                         .fillMaxWidth()
                         .aspectRatio(1f)

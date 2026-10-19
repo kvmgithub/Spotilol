@@ -55,6 +55,7 @@ import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.navigation.NavController
 import app.myspoti.engine.R
 import com.bumptech.glide.integration.compose.ExperimentalGlideComposeApi
+import com.bumptech.glide.integration.compose.CrossFade
 import com.bumptech.glide.integration.compose.GlideImage
 import com.bumptech.glide.integration.compose.placeholder
 import com.music.spotui.data.local.LocalMusic
@@ -165,6 +166,7 @@ fun LocalFilesScreen(navController: NavController) {
                             .padding(horizontal = 16.dp, vertical = 8.dp),
                     ) {
                         GlideImage(
+                            transition = CrossFade,
                             model = t.artUri, contentDescription = null, contentScale = ContentScale.Crop,
                             loading = placeholder(R.drawable.placeholder), failure = placeholder(R.drawable.local_files_cover),
                             modifier = Modifier.size(48.dp).clip(RoundedCornerShape(4.dp)),

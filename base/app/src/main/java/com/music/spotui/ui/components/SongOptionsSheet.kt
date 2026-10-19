@@ -31,13 +31,13 @@ import androidx.compose.material.icons.filled.Album
 import androidx.compose.material.icons.filled.Bedtime
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.outlined.AddCircleOutline
-import androidx.compose.material.icons.outlined.ArrowCircleDown
 import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.Radio
 import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Block
 import androidx.compose.material.icons.outlined.Bookmark
+import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Speed
 import kotlinx.coroutines.launch
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -63,6 +63,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
 import com.bumptech.glide.integration.compose.ExperimentalGlideComposeApi
+import com.bumptech.glide.integration.compose.CrossFade
 import com.bumptech.glide.integration.compose.GlideImage
 import com.music.spotui.data.entity.SongsModel
 import com.music.spotui.di.SongPlayer
@@ -87,12 +88,18 @@ fun SongOptionsSheet(
     onDismiss: () -> Unit,
     nowPlaying: Boolean = false,
     onOpenQueue: (() -> Unit)? = null,
+    // Removing a track only makes sense where it is listed in a playlist: the screen that
+    // owns that playlist passes this, and handles the write plus its undo (it has the list).
+    onRemoveFromPlaylist: (() -> Unit)? = null,
+    // The playlist the track is shown in, so the "Add to another playlist" picker can hide it.
+    currentPlaylistId: String? = null,
 ) {
     val playerViewModel: com.music.spotui.ui.viewmodel.PlayerViewModel =
         androidx.lifecycle.viewmodel.compose.viewModel()
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val liked = com.music.spotui.di.rememberTrackSaved(song.spotifyTrackId)
     var showSavedIn by remember { mutableStateOf(false) }
+    var showAddTo by remember { mutableStateOf(false) }
     var showSleep by remember { mutableStateOf(false) }
     var showCredits by remember { mutableStateOf(false) }
     var showSpeed by remember { mutableStateOf(false) }
@@ -108,11 +115,17 @@ fun SongOptionsSheet(
         SavedInSheet(song = song, context = context, onDismiss = { showSavedIn = false; onDismiss() })
         return
     }
+    if (showAddTo) {
+        AddToPlaylistSheet(song = song, context = context, onDismiss = { showAddTo = false; onDismiss() }, excludePlaylistId = currentPlaylistId)
+        return
+    }
     if (showSleep) {
         SleepTimerSheet(onDismiss = { showSleep = false; onDismiss() })
         return
     }
     val hasId = song.spotifyTrackId.isNotBlank()
+    // An episode is keyed by its url ("episode:<id>") and has no track id: the Download row
+    // (and only it) follows that key, everything else in this menu stays on the track id.
     fun toast(text: String) = Toast.makeText(context, text, Toast.LENGTH_SHORT).show()
 
     ModalBottomSheet(
@@ -126,6 +139,7 @@ fun SongOptionsSheet(
                 modifier = Modifier.fillMaxWidth().padding(16.dp, 0.dp, 16.dp, 16.dp),
             ) {
                 GlideImage(
+                    transition = CrossFade,
                     modifier = Modifier.size(48.dp).clip(RoundedCornerShape(4.dp)),
                     model = song.coverUri,
                     contentScale = ContentScale.Crop,
@@ -151,6 +165,16 @@ fun SongOptionsSheet(
                 onDismiss()
             }
             MenuRow(Icons.AutoMirrored.Filled.PlaylistAdd, stringResource(R.string.context_menu_add_to_playlist), enabled = hasId) { showSavedIn = true }
+            // Copy into another playlist: one tap, one target, said out loud by the toast.
+            MenuRow(Icons.AutoMirrored.Filled.PlaylistAdd, stringResource(R.string.context_menu_add_to_another_playlist), enabled = hasId) { showAddTo = true }
+            // Only where a playlist is on screen (A11): the row disappears at once, the
+            // screen tells the user and offers Undo.
+            if (onRemoveFromPlaylist != null) {
+                MenuRow(Icons.Outlined.Delete, stringResource(R.string.context_menu_remove_from_playlist), enabled = hasId) {
+                    onDismiss()
+                    onRemoveFromPlaylist()
+                }
+            }
             if (!nowPlaying) {
                 MenuRow(Icons.AutoMirrored.Filled.PlaylistPlay, stringResource(R.string.context_menu_play_next), enabled = hasId) {
                     playerViewModel.playNext(song)

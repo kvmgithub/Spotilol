@@ -2,7 +2,7 @@
 
 Myspoti's native Android interface with Spotilol Lite's feature and security scope. This branch (`myspoti-ui`) is separate from Spotilol Lite on `main`; both apps install side by side.
 
-Base: [kota-zo/myspoti](https://github.com/kota-zo/myspoti) 2.0.0-beta.8 (`5b247b3`, GPL-3.0). Playback still runs in Spotify's Web Player in a hidden WebView (Widevine); search, library, artist, album and playlist screens are native.
+Base: [kota-zo/myspoti](https://github.com/kota-zo/myspoti) 2.0.0-beta.9 (`f25ddfe`, GPL-3.0), merged from the vendor branch `myspoti-upstream`. Playback still runs in Spotify's Web Player in a hidden WebView (Widevine); search, library, artist, album and playlist screens are native.
 
 ## Install
 
@@ -20,6 +20,8 @@ Removed:
 - Third-party lyrics (LRCLIB, NetEase, Genius) and Google lyric translation; Spotify's own lyrics stay
 - In-app updater (`REQUEST_INSTALL_PACKAGES`), donation prompts, home screen widget
 - Google Play services code scanner for Jam QR codes (it brought ML Kit and Google's data transport logging); joining a Jam by invite link stays
+- Podcast episode downloads (beta.9), the in-app update settings and the diagnostic-report export row (the redacted log view covers it)
+- The phone's own device name in Spotify's device lists (beta.9 sends it; this variant keeps the Web Player's name)
 
 Added from Spotilol:
 
@@ -29,10 +31,12 @@ Added from Spotilol:
 
 Kept from Myspoti: native screens, library tools, Spotify Connect and Jam, local Recap, sleep timer, Canvas, local files, streaming quality, data and energy saver.
 
+From beta.9: the page's ad managers switched off at runtime (the device registration is no longer altered), X-Requested-With suppressed, renderer-crash recovery, per-install browser identity that follows the WebView version, a kept client device id, relayed requests with the page's own browser headers, login that waits for a real token, crossfade, Recents, show/episode pages and the podcast player, playlist add/remove, and the UI fixes.
+
 ## Security rules
 
 - The page reaches the app only through web message listeners for exactly `https://open.spotify.com`, main frame only. There is no `addJavascriptInterface` fallback; WebViews without listener and document-start support fail closed.
-- The control relay repeats only `connect-state`/`track-playback` requests to exact `*-spclient.spotify.com`/`spclient.wg.spotify.com` hosts, with bounded requests and responses, a total deadline, no redirects and no cookies; answers go to the sending document's reply proxy.
+- The control relay repeats only `connect-state`/`track-playback` requests to exact `*-spclient.spotify.com`/`spclient.wg.spotify.com` hosts, with bounded requests and responses, a total deadline and no redirects. Cookies go out only when the page's own fetch asks for them (`credentials: 'include'`), Set-Cookie is never stored or returned; answers go to the sending document's reply proxy.
 - Direct API, client-token, GraphQL-operation and cover requests use strict HTTPS hosts, no redirects and bounded bodies.
 - Main-frame navigation is limited to exact HTTPS Spotify and sign-in hosts; Widevine is granted to the player origin only.
 - Restored profile cookies are limited to Spotify origins, carry `Secure`, and the auth cookie keeps `HttpOnly`.

@@ -51,7 +51,7 @@ jobs:
           code = 1000 + int(os.environ['GITHUB_RUN_NUMBER'])
           with open(os.environ['GITHUB_ENV'], 'a') as out:
               out.write(f'APK_KEYSTORE={key}\nAPK_KEY_PASSWORD={password}\nAPK_KEY_ALIAS=release\n')
-              out.write(f'APK_VERSION_CODE={code}\nAPK_VERSION_NAME=0.1.{code}\n')
+              out.write(f'APK_VERSION_CODE={code}\nAPK_VERSION_NAME=0.2.{code}\n')
           PY
       - name: Unit tests and signed release
         run: |

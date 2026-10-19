@@ -27,6 +27,16 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
+/** Logcat tag, the host's own: playback and session land in one stream (`adb logcat -s Myspoti`). */
+private const val LOG = "Myspoti"
+
+/**
+ * How long the player page is given to prove the session (a non-anonymous token) once it comes back.
+ * The sign-in page stays in front while this runs — the address alone is never taken for a session —
+ * and only a real token hands the screen to the player (see [MainActivity.watchLoginReturn]).
+ */
+private const val SESSION_WAIT_MS = 6_000L
+
 /**
  * The app's only screen host: the Compose UI, with the Web Player page attached behind it.
  * The page comes to the front only to sign in, on Spotify's own login pages.
@@ -37,6 +47,8 @@ class MainActivity : AppCompatActivity() {
     private var showingLogin by mutableStateOf(false)
     /** Back from Spotify's login, waiting for the session: a native loading screen, not the web page. */
     private var connecting by mutableStateOf(false)
+    /** A pending wait for the session to prove itself after the login page came back. */
+    private var loginWait: kotlinx.coroutines.Job? = null
     /** The one-time setup screen (permissions, battery) after signing in. */
     private var setupNeeded by mutableStateOf(false)
 
@@ -94,6 +106,10 @@ class MainActivity : AppCompatActivity() {
     override fun onStart() {
         super.onStart()
         com.music.spotui.di.SongPlayer.inForeground = true
+        // Asked for over adb (TestControlReceiver's "screenon"): One UI ignores the huge
+        // `screen_off_timeout`, so a long unattended run holds the screen on from in here.
+        if (prefs.getBoolean("keep_screen_on", false)) window.addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        else window.clearFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
     }
 
     override fun onStop() {
@@ -139,15 +155,60 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    /** Spotify sent the user back to the player: hide the page now, the session follows. */
+    /**
+     * Spotify sent the user back to the player: the page is hidden now, the session follows.
+     *
+     * The address is not a session. The page comes back to open.spotify.com while its token is
+     * still anonymous when the login never finished (the e-mail step that hangs — the reported
+     * "stuck on the e-mail screen"), and hiding the page on that alone left a spinner that never
+     * stopped. The return is bounded: no token after [SESSION_WAIT_MS], the login page comes back.
+     */
     private fun watchLoginReturn() {
         lifecycleScope.launch {
             MyspotiRuntime.host.url.collect { url ->
                 val backOnPlayer = app.myspoti.spotify.security.WebPolicy.isPlayerPage(url)
-                if (showingLogin && backOnPlayer) {
-                    hideLogin()
-                    if (!signedIn) connecting = true
+                if (!(showingLogin && backOnPlayer)) return@collect
+                // The address is not a session — and it comes back to open.spotify.com as soon as the
+                // user leaves the app to read the sign-in e-mail. Hiding the page here showed an
+                // anonymous player: an app that looked signed in with nothing playable (reported).
+                // The login page therefore stays in FRONT until a real token exists.
+                loginWait?.cancel()
+                loginWait = launch {
+                    var waited = 0L
+                    while (waited < SESSION_WAIT_MS) {
+                        if (runCatching { MyspotiRuntime.isSignedIn() }.getOrDefault(false)) {
+                            android.util.Log.d(LOG, "session established: player shown")
+                            hideLogin()
+                            return@launch
+                        }
+                        // The countdown only runs while the user is looking at the app: away to read
+                        // the e-mail, the sign-in page must not be reset under them.
+                        if (lifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.RESUMED)) waited += 500
+                        kotlinx.coroutines.delay(500)
+                    }
+                    android.util.Log.d(LOG, "no session ${SESSION_WAIT_MS / 1000}s after the player came back: sign-in page restored")
+                    // The page may now be the anonymous player: send it back to the e-mail step so the
+                    // user is not left where nothing plays.
+                    if (!showingLogin) showLogin() else MyspotiRuntime.host.openLogin()
                 }
+            }
+        }
+    }
+
+    /**
+     * Back from the e-mail app: the session may have been established while away, or the page may
+     * have reloaded into the anonymous player. Only the token decides — never the address.
+     */
+    override fun onResume() {
+        super.onResume()
+        if (!showingLogin) return
+        lifecycleScope.launch {
+            if (MyspotiRuntime.awaitSignedIn(1_500)) {
+                android.util.Log.d(LOG, "back with a session: player shown")
+                hideLogin()
+            } else if (MyspotiRuntime.host.url.value.let { it.startsWith("https://open.spotify.com") && !it.contains("/login") }) {
+                android.util.Log.d(LOG, "back without a session: sign-in page restored")
+                MyspotiRuntime.host.openLogin()
             }
         }
     }
@@ -182,6 +243,17 @@ class MainActivity : AppCompatActivity() {
                             }
                             connecting = false
                             if (showingLogin) hideLogin()
+                        } else if (signedIn || connecting) {
+                            // The pref said "signed in", the token says anonymous: only the token
+                            // counts. This is what left the app on its full UI (or on Spotify's
+                            // anonymous page) with nothing playable — reported after leaving the app
+                            // to read the sign-in e-mail, where the session never completed.
+                            // Also a saved profile whose session no longer holds (Spotilol profiles).
+                            android.util.Log.d(LOG, "anonymous token while the app thought it was signed in: back to the sign-in page")
+                            prefs.edit().putBoolean("LoggedIn", false).apply()
+                            signedIn = false
+                            connecting = false
+                            showLogin()
                         }
                     }
                 }

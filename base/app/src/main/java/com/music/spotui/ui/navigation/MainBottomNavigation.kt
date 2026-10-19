@@ -19,20 +19,25 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.material3.Icon
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
-import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavHostController
@@ -42,6 +47,38 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emptyFlow
 
 import androidx.compose.foundation.layout.navigationBarsPadding
+
+/**
+ * What re-tapping the tab you are already on does in the official app: Home and Library
+ * scroll their list back to the top without reloading anything, Search focuses its field.
+ * The bar only sees the tap; the list state and the text field live inside the screens,
+ * so the tap is published here and each screen collects its own event.
+ */
+object TabReselect {
+    // replay = 0 + a one-slot buffer: a tap is never held back, and a tap that lands while
+    // the screen is not composed is simply dropped rather than replayed on the next visit.
+    private val _home = kotlinx.coroutines.flow.MutableSharedFlow<Unit>(
+        extraBufferCapacity = 1, onBufferOverflow = kotlinx.coroutines.channels.BufferOverflow.DROP_OLDEST,
+    )
+    private val _library = kotlinx.coroutines.flow.MutableSharedFlow<Unit>(
+        extraBufferCapacity = 1, onBufferOverflow = kotlinx.coroutines.channels.BufferOverflow.DROP_OLDEST,
+    )
+    private val _search = kotlinx.coroutines.flow.MutableSharedFlow<Unit>(
+        extraBufferCapacity = 1, onBufferOverflow = kotlinx.coroutines.channels.BufferOverflow.DROP_OLDEST,
+    )
+
+    val home: kotlinx.coroutines.flow.SharedFlow<Unit> = _home
+    val library: kotlinx.coroutines.flow.SharedFlow<Unit> = _library
+    val search: kotlinx.coroutines.flow.SharedFlow<Unit> = _search
+
+    fun emit(route: String) {
+        when (route) {
+            Routes.Home.route -> _home.tryEmit(Unit)
+            Routes.Library.route -> _library.tryEmit(Unit)
+            Routes.Search.route -> _search.tryEmit(Unit)
+        }
+    }
+}
 
 class NoRippleInteractionSource : MutableInteractionSource {
 
@@ -80,7 +117,14 @@ fun MainBottomNavigation(navController: NavHostController, bottomBarState: Mutab
                     // Settings, Display: the fade over the list (the default), or solid black (from #15).
                     .then(
                         if (com.music.spotui.data.preferences.SolidNavBar.on) Modifier.background(Color.Black)
-                        else Modifier.background(Brush.verticalGradient(colors = listOf(Color.Transparent, Color.Black), startY = 0f))
+                        // Like the official bar: clear above the mini player, near-opaque by the tab icons,
+                        // so covers scrolling underneath never compete with the labels.
+                        else Modifier.background(Brush.verticalGradient(
+                            0f to Color.Transparent,
+                            0.3f to Color.Black.copy(alpha = 0.7f),
+                            0.6f to Color.Black.copy(alpha = 0.92f),
+                            1f to Color.Black,
+                        ))
                     )
             ) {
 
@@ -98,47 +142,36 @@ fun MainBottomNavigation(navController: NavHostController, bottomBarState: Mutab
 
 
                     Spacer(modifier = Modifier.height(4.dp))
-                    NavigationBar(
-                        modifier = Modifier
-                            .height(60.dp)
-                            .padding(30.dp, 0.dp)
-                            .fillMaxWidth(),
-                        containerColor = Color.Transparent,
-                        windowInsets = androidx.compose.foundation.layout.WindowInsets(0, 0, 0, 0)
-                    ) {
-                        val navStack by navController.currentBackStackEntryAsState()
-                        val currentRoute = navStack?.destination?.route
-                        // The tab the user is in, even on one of its sub-pages (album, artist…).
-                        var selectedTab by androidx.compose.runtime.saveable.rememberSaveable { androidx.compose.runtime.mutableStateOf(Routes.Home.route) }
-                        if (currentRoute in navItems.map { it.route }) selectedTab = currentRoute!!
+                    val navStack by navController.currentBackStackEntryAsState()
+                    val currentRoute = navStack?.destination?.route
+                    // The tab the user is in, even on one of its sub-pages (album, artist…).
+                    var selectedTab by androidx.compose.runtime.saveable.rememberSaveable { androidx.compose.runtime.mutableStateOf(Routes.Home.route) }
+                    if (currentRoute in navItems.map { it.route }) selectedTab = currentRoute!!
 
+                    // Official bar proportions: a 58 dp strip (the gesture inset is added by
+                    // navigationBarsPadding above), three equal thirds edge to edge, so the
+                    // tabs spread over the full width instead of clustering in the middle.
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(NavBarHeight),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
                         navItems.forEach { item ->
-                            NavigationBarItem(
+                            NavBarTab(
+                                iconRes = item.icon,
+                                label = if (item.labelRes != 0) stringResource(item.labelRes) else item.label,
                                 selected = selectedTab == item.route,
-                                icon = {
-                                    Icon(
-                                        painter = painterResource(
-                                            id = item.icon
-                                        ), contentDescription = "home"
-                                    )
-                                },
-                                label = {
-                                    if (currentRoute == item.route) {
-                                        Text(color = Color.White, text = if (item.labelRes != 0) stringResource(item.labelRes) else item.label, fontSize = 11.sp)
-                                    } else {
-                                        Text(
-                                            color = Color.Gray,
-                                            text = if (item.labelRes != 0) stringResource(item.labelRes) else item.label,
-                                            fontSize = 11.sp
-                                        )
-                                    }
-                                },
                                 onClick = {
                                     // Standard bottom-tab navigation: each tab keeps its
                                     // state (no reload, scroll kept) when you come back.
                                     if (item.route == selectedTab) {
-                                        // Same tab again: back to its root page (Spotify behaviour).
-                                        if (currentRoute != item.route && !navController.popBackStack(item.route, inclusive = false)) {
+                                        if (currentRoute == item.route) {
+                                            // Already on the tab's own page: nothing to reload, only
+                                            // the re-tap shortcut (scroll to top, or focus search).
+                                            TabReselect.emit(item.route)
+                                        } else if (!navController.popBackStack(item.route, inclusive = false)) {
+                                            // On one of its sub-pages: back to its root page first.
                                             navController.navigate(item.route) { launchSingleTop = true }
                                         }
                                     } else {
@@ -152,15 +185,7 @@ fun MainBottomNavigation(navController: NavHostController, bottomBarState: Mutab
                                         }
                                     }
                                 },
-                                alwaysShowLabel = true,
-                                interactionSource = NoRippleInteractionSource(),
-                                colors = NavigationBarItemDefaults.colors(
-                                    selectedIconColor = Color.White,
-                                    unselectedIconColor = Color.Gray,
-                                    indicatorColor = Color.Transparent
-                                )
                             )
-
                         }
                     }
 
@@ -173,4 +198,60 @@ fun MainBottomNavigation(navController: NavHostController, bottomBarState: Mutab
             }
         }
     )
+}
+
+// Official app metrics. Material3's NavigationBarItem measures its icon slot at a
+// fixed 24 dp, so a 28 dp Icon there was clipped back down: the bar is drawn by hand.
+private val NavBarHeight = 58.dp
+private val NavIconSize = 28.dp
+
+/**
+ * One tab of the bottom bar: a 28 dp glyph above an 11 sp medium label, the two
+ * centred as a single block inside an equal third of the bar's width.
+ */
+@Composable
+private fun RowScope.NavBarTab(
+    iconRes: Int,
+    label: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+) {
+    // Spotify's idle grey, lighter than Color.Gray which read as "disabled".
+    val tint = if (selected) Color.White else Color(0xFFB3B3B3)
+    Box(
+        modifier = Modifier
+            .weight(1f)
+            .fillMaxHeight()
+            // No ripple: the bar is a plain strip of tabs, and the tint is the feedback.
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                onClickLabel = label,
+                onClick = onClick,
+            ),
+        contentAlignment = Alignment.Center,
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center,
+        ) {
+            Icon(
+                painter = painterResource(id = iconRes),
+                // The label right below already names the tab for TalkBack.
+                contentDescription = null,
+                tint = tint,
+                modifier = Modifier.size(NavIconSize),
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = label,
+                color = tint,
+                fontSize = 11.sp,
+                lineHeight = 12.sp,
+                fontWeight = FontWeight.Medium,
+                letterSpacing = 0.2.sp,
+                maxLines = 1,
+            )
+        }
+    }
 }

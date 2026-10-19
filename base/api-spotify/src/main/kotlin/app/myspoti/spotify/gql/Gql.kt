@@ -70,6 +70,18 @@ class SpotifyHttp(
     private val http: OkHttpClient,
     private val bridge: Bridge,
     private val language: String = "en",
+    /**
+     * The browser this app presents to Spotify, drawn once per install by the host
+     * (`Fingerprint`). Handing every install the same user agent made the whole user base one
+     * profile; null keeps the previous constant.
+     */
+    private val browserUserAgent: String? = null,
+    /**
+     * The id this client announces when it mints its client token. It used to be a fresh UUID at
+     * every launch, so Spotify saw a brand-new client every start (a new client token each time,
+     * one more device). The host passes an id kept across restarts; null keeps the old behaviour.
+     */
+    private val deviceId: String = java.util.UUID.randomUUID().toString(),
 ) {
     private data class WebToken(val access: String, val expiresAtMs: Long, val clientId: String, val appVersion: String, val anonymous: Boolean)
     private data class ClientToken(val value: String, val expiresAtMs: Long)
@@ -77,7 +89,6 @@ class SpotifyHttp(
     private val lock = Mutex()
     private var web: WebToken? = null
     private var client: ClientToken? = null
-    private val deviceId = UUID.randomUUID().toString()
 
     /** Drops the cached web token (it belongs to one account); the client token is kept. */
     suspend fun forgetWebToken() = lock.withLock { web = null }
@@ -114,7 +125,7 @@ class SpotifyHttp(
             .header("accept-language", language)
             .header("origin", "https://open.spotify.com")
             .header("referer", "https://open.spotify.com/")
-            .header("user-agent", USER_AGENT)
+            .header("user-agent", browserUserAgent ?: USER_AGENT)
         // Bytes keep the content type exactly as given (OkHttp appends a charset to String bodies,
         // which some Spotify endpoints reject with 400).
         builder.method(method, body?.toByteArray()?.toRequestBody(contentType.toMediaType()) ?: if (method == "GET" || method == "DELETE") null else ByteArray(0).toRequestBody(null))
@@ -159,7 +170,7 @@ class SpotifyHttp(
             // Bytes, not a String: OkHttp would append "; charset=utf-8", which this endpoint rejects with 400.
             .post(body.toString().toByteArray().toRequestBody("application/json".toMediaType()))
             .header("accept", "application/json")
-            .header("user-agent", USER_AGENT)
+            .header("user-agent", browserUserAgent ?: USER_AGENT)
             .build()
         val (code, text) = withContext(Dispatchers.IO) { http.newCall(request).execute().use { it.code to app.myspoti.spotify.security.BoundedHttp.text(it.body) } }
         val granted = runCatching { Bridge.json.parseToJsonElement(text).jsonObject["granted_token"]?.jsonObject }.getOrNull()

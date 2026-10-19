@@ -80,6 +80,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import com.bumptech.glide.integration.compose.ExperimentalGlideComposeApi
+import com.bumptech.glide.integration.compose.CrossFade
 import com.bumptech.glide.integration.compose.GlideImage
 import com.music.spotui.data.api.Api
 import com.music.spotui.data.api.Response
@@ -155,7 +156,14 @@ fun LibraryScreen(navController: NavController) {
                 fontWeight = FontWeight.Bold,
                 color = Color.White,
                 fontSize = 22.sp,
-                modifier = Modifier.weight(1f),
+                // The title itself scrolls the list to its top in the official app
+                // ("Appuyez pour faire défiler jusqu'en haut de la liste").
+                modifier = Modifier
+                    .weight(1f)
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null,
+                    ) { com.music.spotui.ui.navigation.TabReselect.emit(Routes.Library.route) },
             )
             var creating by remember { mutableStateOf(false) }
             if (creating) LibraryCreateSheet(navController, onDismiss = { creating = false }, onLibraryChanged = { libraryViewModel.load() })
@@ -275,7 +283,9 @@ fun LibraryScreen(navController: NavController) {
                 // Downloads are removed in Spotilol UI: the "Downloaded" folder never appears.
                 val hasDownloads = false
                 val likedName = stringResource(R.string.collection_liked_songs_title)
-                // Liked Songs, Local Files and Downloaded stay on top; the rest follows the chosen sort.
+                // Liked Songs, Local Files and Downloaded stay on top; the rest follows the
+                // chosen sort. "Récents" is not here: it lives on the profile panel, as in the
+                // official app (it is the account's history, not a library folder).
                 val rootPinned = ((entries as? Response.Success)?.data ?: emptyList())
                     .indexOfFirst { it.spotifyId == Api.HomeCache.LIKED_SONGS_ID } + 2 + (if (hasDownloads) 1 else 0)
                 val allEntries = ((entries as? Response.Success)?.data ?: emptyList()).map {
@@ -325,6 +335,7 @@ fun LibraryScreen(navController: NavController) {
 @Composable
 private fun AccountAvatar(url: String, size: androidx.compose.ui.unit.Dp) {
     GlideImage(
+        transition = CrossFade,
         modifier = Modifier.size(size).clip(CircleShape),
         model = url,
         contentScale = ContentScale.Crop,
@@ -353,6 +364,15 @@ fun SumUpLibraryScreen(
         return
     }
     val listState = androidx.compose.foundation.lazy.rememberLazyListState()
+    // Re-tap on the Library tab (or on the "Bibliothèque" title): animated scroll back to
+    // the top of the rows already loaded, exactly like the official app.
+    androidx.compose.runtime.LaunchedEffect(Unit) {
+        com.music.spotui.ui.navigation.TabReselect.library.collect {
+            if (listState.firstVisibleItemIndex != 0 || listState.firstVisibleItemScrollOffset != 0) {
+                listState.animateScrollToItem(0)
+            }
+        }
+    }
     val haptic = androidx.compose.ui.platform.LocalHapticFeedback.current
     val density = androidx.compose.ui.platform.LocalDensity.current
     // The rows as shown, moved live under the finger; saved when the finger lifts.
@@ -496,6 +516,7 @@ fun SumUpLibraryScreen(
                         
                 ) {
                     GlideImage(
+                        transition = CrossFade,
                         modifier = Modifier
                             .size(55.dp)
                             .clip(CircleShape),
@@ -527,7 +548,7 @@ fun LibraryEntryCover(entry: LibraryEntry, modifier: Modifier) {
     }
     // Vector drawables are drawn directly (Glide left them blank).
     if (drawn != 0) androidx.compose.foundation.Image(painterResource(drawn), contentDescription = null, modifier = modifier)
-    else GlideImage(model = entry.coverUri, contentScale = ContentScale.Crop, contentDescription = "", modifier = modifier)
+    else GlideImage(transition = CrossFade, model = entry.coverUri, contentScale = ContentScale.Crop, contentDescription = "", modifier = modifier)
 }
 
 /** Library ids of the phone's own playlists (see LocalPlaylists). */
@@ -573,6 +594,14 @@ fun LibraryGridScreen(
         return
     }
     val gridState = androidx.compose.foundation.lazy.grid.rememberLazyGridState()
+    // Same re-tap shortcut as the list view: the grid animates back to its first tile.
+    androidx.compose.runtime.LaunchedEffect(Unit) {
+        com.music.spotui.ui.navigation.TabReselect.library.collect {
+            if (gridState.firstVisibleItemIndex != 0 || gridState.firstVisibleItemScrollOffset != 0) {
+                gridState.animateScrollToItem(0)
+            }
+        }
+    }
     val haptic = androidx.compose.ui.platform.LocalHapticFeedback.current
     val density = androidx.compose.ui.platform.LocalDensity.current
     // Same as the list view, in two dimensions: the tile follows the finger and takes
@@ -705,6 +734,7 @@ fun LibraryGridScreen(
                     modifier = Modifier.pressable(0.96f) { navController.navigate(artistRoute(artist.name, artist.id)) }
                 ) {
                     GlideImage(
+                        transition = CrossFade,
                         modifier = Modifier
                             .fillMaxWidth()
                             .aspectRatio(1f)

@@ -31,6 +31,12 @@ class AppRepository constructor(private val api: Api = Graph.api) {
 
     suspend fun provideShow(showId: String) = api.getShow(showId)
 
+    /** Show (or book) page: header plus episodes / chapters in one flow. */
+    suspend fun provideShowPage(showId: String) = api.getShowPage(showId)
+
+    /** One episode by raw id, for the episode page. */
+    suspend fun provideEpisode(episodeId: String) = api.getEpisode(episodeId)
+
     suspend fun provideLibrary() = api.getLibraryRoot()
     suspend fun provideLibraryFolder(uri: String) = api.getLibraryFolder(uri)
 

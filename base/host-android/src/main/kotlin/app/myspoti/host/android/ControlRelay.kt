@@ -24,37 +24,65 @@ import java.util.concurrent.TimeUnit
  * Sends the Web Player's playback control requests (Spotify Connect commands, transfers,
  * device and track-playback state) from the app instead of the WebView.
  *
- * Every WebView request carries "X-Requested-With: <package>", and an app can no longer turn
- * that off. Spotify acknowledges Connect commands that carry it but never delivers them to the
- * player, so nothing plays. The page's `fetch` is wrapped at document start; matching requests
- * go through `MyspotiNet.postMessage` and are repeated with OkHttp using the page's headers.
+ * Every WebView request carries "X-Requested-With: <package>". Spotify acknowledges Connect
+ * commands that carry it but never delivers them to the player, so nothing plays. The page's
+ * `fetch` is wrapped at document start; matching requests go through `MyspotiNet.postMessage`
+ * and are repeated with OkHttp using the page's headers.
  *
  * Spotilol's native transport rules apply: exact HTTPS spclient hosts and paths
  * ([WebPolicy.isRelayTarget]), bounded requests and responses, a total call deadline, no
- * redirects, no cookies either way, and the answer goes back through the sending document's
- * reply proxy, never to whatever page is current.
+ * redirects, Set-Cookie never stored nor returned, and the answer goes back through the sending
+ * document's reply proxy, never to whatever page is current.
+ *
+ * From Myspoti 2.0.0-beta.9: the relayed request presents the same browser as the page (its
+ * user agent, client hints and languages, plus Chromium's Sec-Fetch headers). Cookies are sent
+ * only when the page's own fetch asked for them (`credentials: 'include'`), exactly as Chromium
+ * would; the device registration keeps the Web Player's own name.
  */
-internal class ControlRelay(private val view: WebView) {
+internal class ControlRelay(private val view: WebView, private val fingerprint: Fingerprint) {
     private val main = Handler(Looper.getMainLooper())
     private val http: OkHttpClient = BoundedHttp.client(callTimeoutSeconds = 20).newBuilder()
         .readTimeout(15, TimeUnit.SECONDS)
         .build()
 
+    /** The identity the page presents (user agent, client hints, languages); null until it says. */
+    @Volatile private var identity: Map<String, String>? = null
+
+    private val fallbackLanguage: String by lazy {
+        Fingerprint.acceptLanguage(android.os.LocaleList.getDefault().toLanguageTags().split(','))
+    }
+
     fun install() {
         view.exposeToPlayer("MyspotiNet", MAX_REQUEST_BYTES, ::onMessage)
         androidx.webkit.WebViewCompat.addDocumentStartJavaScript(view, SCRIPT, setOf(WebPolicy.PLAYER_ORIGIN))
-        android.util.Log.d(WebPlayerHost.LOG, "control relay installed")
+        Logbook.log("control relay installed")
     }
 
-    /** `{id, url, method, headers, body}` from the page's wrapped `fetch`. */
+    /** `{id, url, method, headers, body, credentials}` from the page's wrapped `fetch`, or its identity. */
     private fun onMessage(json: String, reply: JavaScriptReplyProxy) {
         val m = runCatching { JSONObject(json) }.getOrNull() ?: return
+        if (m.optString("type") == "identity") {
+            identity = readIdentity(m.optJSONObject("value"))
+            Logbook.log("page identity: ${identity?.get("userAgent")?.take(160)}")
+            return
+        }
         val id = m.optInt("id", -1).takeIf { it >= 0 } ?: return
         val request = runCatching { build(m) }.getOrElse {
-            android.util.Log.d(WebPlayerHost.LOG, "relay #$id rejected: ${it.message}")
+            Logbook.log("relay #$id rejected: ${it.message}")
             return answer(reply, id, 0, "{}", "")
         }
         send(id, request, reply)
+    }
+
+    /** The page's identity, bounded and limited to printable header-safe values. */
+    private fun readIdentity(o: JSONObject?): Map<String, String>? {
+        o ?: return null
+        val out = HashMap<String, String>()
+        for (key in listOf("userAgent", "brands", "mobile", "platform", "acceptLanguage")) {
+            val v = o.optString(key)
+            if (v.isNotEmpty() && v.length <= 512 && v.all { it.code in 0x20..0x7e }) out[key] = v
+        }
+        return out.takeIf { it.isNotEmpty() }
     }
 
     /** The validated OkHttp request, or an exception naming the rule it broke. */
@@ -76,17 +104,30 @@ internal class ControlRelay(private val view: WebView) {
             require(headerBytes <= MAX_HEADER_BYTES) { "headers too large" }
             headers.add(key, value)
         }
-        headers["User-Agent"] = WebPlayerHost.DESKTOP_UA
+        val page = identity
+        fun fromPage(name: String, fallback: String) = page?.get(name) ?: fallback
+        headers["User-Agent"] = fromPage("userAgent", fingerprint.userAgent)
         headers["Origin"] = WebPolicy.PLAYER_ORIGIN
         headers["Referer"] = "${WebPolicy.PLAYER_ORIGIN}/"
+        // What Chromium adds by itself to the page's cross-origin fetch (JS cannot set these).
+        headers["Sec-Fetch-Site"] = "same-site"
+        headers["Sec-Fetch-Mode"] = "cors"
+        headers["Sec-Fetch-Dest"] = "empty"
+        headers["Accept-Language"] = fromPage("acceptLanguage", fallbackLanguage)
+        headers["sec-ch-ua"] = fromPage("brands", fingerprint.secChUa)
+        headers["sec-ch-ua-mobile"] = fromPage("mobile", "?0")
+        headers["sec-ch-ua-platform"] = "\"${fromPage("platform", "Linux")}\""
+        // Cookies only where the browser itself would send them: a fetch with credentials
+        // 'include'. Read for this exact URL from the WebView's store; nothing is ever written back.
+        if (m.optString("credentials") == "include") {
+            android.webkit.CookieManager.getInstance().getCookie(url)?.takeIf { it.isNotBlank() }?.let { headers["Cookie"] = it }
+        }
         val body = if (m.isNull("body")) null else m.optString("body")
         require((body?.length ?: 0) <= MAX_REQUEST_BYTES) { "body too large" }
-        // The player's registration leaves out the ad formats (see AdBlock).
-        val sent = if (body != null && AdBlock.isDeviceRegistration(method, url)) AdBlock.withoutAdFormats(body) else body
         // Bytes, not a String body: OkHttp would append "; charset=utf-8" to the content type.
         val payload = when (method) {
-            "GET", "HEAD" -> { require(sent.isNullOrEmpty()) { "body on $method" }; null }
-            else -> (sent ?: "").toByteArray().toRequestBody(null)
+            "GET", "HEAD" -> { require(body.isNullOrEmpty()) { "body on $method" }; null }
+            else -> (body ?: "").toByteArray().toRequestBody(null)
         }
         return Request.Builder().url(url).headers(headers.build()).method(method, payload).build()
     }
@@ -97,7 +138,7 @@ internal class ControlRelay(private val view: WebView) {
         http.newCall(request).enqueue(object : Callback {
             override fun onFailure(call: Call, e: IOException) {
                 MyspotiRuntime.network.failed()
-                android.util.Log.d(WebPlayerHost.LOG, "relay $label failed: ${e.javaClass.simpleName}")
+                Logbook.log("relay $label failed: ${e.javaClass.simpleName}")
                 answer(reply, id, 0, "{}", "")
             }
 
@@ -105,11 +146,11 @@ internal class ControlRelay(private val view: WebView) {
                 MyspotiRuntime.network.succeeded()
                 response.use {
                     if (it.isRedirect || it.code in 300..399) {
-                        android.util.Log.d(WebPlayerHost.LOG, "relay $label redirect ${it.code} rejected")
+                        Logbook.log("relay $label redirect ${it.code} rejected")
                         return answer(reply, id, 0, "{}", "")
                     }
                     val text = runCatching { BoundedHttp.text(it.body, MAX_RESPONSE_BYTES) }.getOrElse { e ->
-                        android.util.Log.d(WebPlayerHost.LOG, "relay $label response rejected: ${e.message}")
+                        Logbook.log("relay $label response rejected: ${e.message}")
                         return answer(reply, id, 0, "{}", "")
                     }
                     val out = JSONObject()
@@ -117,8 +158,8 @@ internal class ControlRelay(private val view: WebView) {
                         if (!name.equals("Set-Cookie", true) && !name.equals("Set-Cookie2", true)) out.put(name, it.header(name))
                     }
                     val net = android.os.SystemClock.uptimeMillis() - asked
-                    android.util.Log.d(WebPlayerHost.LOG, "relay $label -> ${it.code} in $net ms")
-                    if (it.code >= 400) android.util.Log.d(WebPlayerHost.LOG, "relay error body: ${LogRedactor.redact(text.take(400))}")
+                    Logbook.log("relay $label -> ${it.code} in $net ms")
+                    if (it.code >= 400) Logbook.log("relay error body: ${LogRedactor.redact(text.take(400))}")
                     answer(reply, id, it.code, out.toString(), text)
                 }
             }
@@ -140,7 +181,7 @@ internal class ControlRelay(private val view: WebView) {
         private val METHODS = setOf("GET", "HEAD", "POST", "PUT", "PATCH", "DELETE")
         private val BLOCKED_HEADERS = setOf(
             "cookie", "cookie2", "host", "origin", "referer", "connection", "content-length", "transfer-encoding",
-            "te", "trailer", "upgrade", "accept-encoding", "user-agent", "x-requested-with",
+            "te", "trailer", "upgrade", "accept-encoding", "user-agent", "x-requested-with", "accept-language",
         )
 
         /** Wraps window.fetch for the relayed routes; answers arrive on MyspotiNet's message events. */
@@ -148,6 +189,19 @@ internal class ControlRelay(private val view: WebView) {
             (() => {
               if (window.__mspNetInstalled || !window.MyspotiNet) return;
               window.__mspNetInstalled = true;
+              const net = window.MyspotiNet;
+              // The identity this page presents, so relayed requests present the same browser.
+              try {
+                const d = navigator.userAgentData || {};
+                const langs = (navigator.languages && navigator.languages.length) ? navigator.languages : [navigator.language];
+                net.postMessage(JSON.stringify({ type: 'identity', value: {
+                  userAgent: navigator.userAgent,
+                  brands: (d.brands || []).map(b => '"' + b.brand + '";v="' + b.version + '"').join(', '),
+                  mobile: d.mobile === true ? '?1' : '?0',
+                  platform: d.platform || 'Linux',
+                  acceptLanguage: langs.map((l, i) => i === 0 ? l : l + ';q=0.' + Math.max(1, 10 - i)).join(','),
+                }}));
+              } catch (e) { /* the host keeps its fallback identity */ }
               // The player's media elements, often never added to the document: the bridge
               // silences them during an ad ("media.mute"); one started then starts silent.
               // Silent is a tiny volume, never muted: Chromium pauses muted media of a hidden page.
@@ -162,7 +216,6 @@ internal class ControlRelay(private val view: WebView) {
               const relayed = /^https:\/\/(spclient\.wg|[a-z0-9]+-spclient)\.spotify\.com\/(connect-state|track-playback)\/v1\//;
               const pending = new Map();
               let seq = 0;
-              const net = window.MyspotiNet;
               net.addEventListener('message', (event) => {
                 let m;
                 try { m = JSON.parse(event.data); } catch (e) { return; }
@@ -188,10 +241,11 @@ internal class ControlRelay(private val view: WebView) {
                 const headers = {};
                 new Headers((init && init.headers) || {}).forEach((v, k) => { headers[k] = v; });
                 const method = ((init && init.method) || 'GET').toUpperCase();
+                const credentials = (init && init.credentials) || 'same-origin';
                 return new Promise((resolve, reject) => {
                   const id = ++seq;
                   pending.set(id, { resolve, reject, url });
-                  net.postMessage(JSON.stringify({ id, url, method, headers, body: body == null ? null : body }));
+                  net.postMessage(JSON.stringify({ id, url, method, headers, body: body == null ? null : body, credentials }));
                 });
               };
             })();

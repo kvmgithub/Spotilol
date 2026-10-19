@@ -68,6 +68,7 @@ import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
 import app.myspoti.engine.R
 import com.bumptech.glide.integration.compose.ExperimentalGlideComposeApi
+import com.bumptech.glide.integration.compose.CrossFade
 import com.bumptech.glide.integration.compose.GlideImage
 import com.bumptech.glide.integration.compose.placeholder
 import com.music.spotui.data.api.LibraryFolders
@@ -269,6 +270,7 @@ private fun LocalItemRow(item: LocalItem, current: Boolean, onClick: () -> Unit)
         modifier = Modifier.fillMaxWidth().pressable(0.97f, onClick = onClick).padding(horizontal = 16.dp, vertical = 8.dp),
     ) {
         GlideImage(
+            transition = CrossFade,
             model = item.artUri, contentDescription = null, contentScale = ContentScale.Crop,
             loading = placeholder(R.drawable.placeholder), failure = placeholder(R.drawable.local_files_cover),
             modifier = Modifier.size(48.dp).clip(RoundedCornerShape(4.dp)),
@@ -404,7 +406,7 @@ private fun PickRow(name: String, detail: String, cover: String?, onClick: () ->
         modifier = Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 20.dp, vertical = 8.dp),
     ) {
         if (cover == null) Image(painterResource(R.drawable.local_files_cover), null, modifier = Modifier.size(48.dp).clip(RoundedCornerShape(4.dp)))
-        else GlideImage(model = cover, contentDescription = null, contentScale = ContentScale.Crop,
+        else GlideImage(transition = CrossFade, model = cover, contentDescription = null, contentScale = ContentScale.Crop,
             loading = placeholder(R.drawable.placeholder), failure = placeholder(R.drawable.placeholder),
             modifier = Modifier.size(48.dp).clip(RoundedCornerShape(4.dp)))
         Column(Modifier.padding(start = 12.dp)) {

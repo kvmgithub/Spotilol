@@ -72,6 +72,7 @@ fun SettingsScreen(navController: NavController) {
                 checked = com.music.spotui.data.preferences.AutoplayPref.on,
                 onChecked = { com.music.spotui.data.preferences.AutoplayPref.set(ctx, it) },
             )
+            CrossfadeRow()
             Divider()
 
             Section(R.string.spotilol_section_accounts)
@@ -195,6 +196,42 @@ private fun AccentRow() {
                         .clip(CircleShape).background(a.color)
                         .then(if (selected) Modifier.border(3.dp, Color.White, CircleShape) else Modifier)
                         .clickable { com.music.spotui.data.api.SupportReminder.setAccent(ctx, a) },
+                )
+            }
+        }
+    }
+}
+
+/**
+ * "Crossfade": the length of the fade at the end of a song. The label says what it is: the two
+ * songs never overlap (the page plays one media element), so this is a fade, not a true
+ * crossfade. The default is 0: off, as before.
+ */
+@Composable
+private fun CrossfadeRow() {
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    val pref = com.music.spotui.data.preferences.CrossfadePref
+    androidx.compose.foundation.layout.Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 10.dp)) {
+        Text(stringResource(R.string.settings_crossfade_title), color = Color.White, fontSize = 16.sp)
+        Text(
+            stringResource(R.string.settings_crossfade_detail),
+            color = Color(0xFFB3B3B3), fontSize = 12.sp,
+            modifier = Modifier.padding(top = 2.dp),
+        )
+        Row(
+            horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp),
+            modifier = Modifier.padding(top = 10.dp),
+        ) {
+            for (v in listOf(0, 3, 6, 9, 12)) {
+                val selected = pref.seconds == v
+                Text(
+                    if (v == 0) stringResource(R.string.settings_crossfade_off)
+                    else stringResource(R.string.settings_crossfade_seconds, v),
+                    color = if (selected) Color.Black else Color.White, fontSize = 14.sp,
+                    modifier = Modifier.clip(androidx.compose.foundation.shape.RoundedCornerShape(50))
+                        .background(if (selected) com.music.spotui.ui.theme.AppAccent else Color(0xFF2A2A2A))
+                        .clickable { pref.set(ctx, v) }
+                        .padding(horizontal = 14.dp, vertical = 8.dp),
                 )
             }
         }

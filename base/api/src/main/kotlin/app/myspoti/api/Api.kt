@@ -16,6 +16,8 @@ interface MyspotiApi {
     val extras: TrackExtras
     val devices: Devices
     val jam: Jam
+    /** The account's "Recently played", as Spotify's own list has it. */
+    val recents: Recents
 
     /** False until the playback engine is ready to take commands. */
     val ready: StateFlow<Boolean>
@@ -166,6 +168,14 @@ interface Home {
 
 interface Podcasts {
     suspend fun show(uri: Uri): Show
+    /**
+     * The episode's audio, resolved right before a download (the links are signed and expire).
+     *
+     * Spotify serves its own copy only as a Widevine-encrypted MP4; the clear file we can play
+     * offline is the publisher's own upload ("passthrough"). It does not exist for
+     * Spotify-exclusive shows, which report [EpisodeAudio.passthrough] = "NONE".
+     */
+    suspend fun audioUrl(uri: Uri): EpisodeAudio
     suspend fun episodes(uri: Uri, offset: Int = 0, limit: Int = 50): Page<Episode>
     suspend fun episode(uri: Uri): Episode
     suspend fun audiobook(uri: Uri): Audiobook
@@ -227,4 +237,13 @@ interface Jam {
     suspend fun removeMember(userUri: Uri)
     suspend fun setQueueOnly(on: Boolean)
     suspend fun setParticipantVolumeControl(on: Boolean)
+}
+
+interface Recents {
+    /**
+     * What the account played lately, newest first, as the Web Player lists it: context rows
+     * (playlists, albums, artists, shows) followed by the plays they collected, with the group
+     * keys the page regroups them by (see [groupRecents]).
+     */
+    suspend fun recentEntries(offset: Int = 0, limit: Int = 50): Page<RecentEntry>
 }

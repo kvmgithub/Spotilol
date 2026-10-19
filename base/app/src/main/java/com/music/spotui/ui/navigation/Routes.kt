@@ -19,6 +19,7 @@ sealed class Routes(
     object ArtistReleases : Routes(0, "ArtistReleases", "artistreleases")
     object Playlist : Routes(0, "Playlist", "playlist")
     object Show : Routes(0, "Show", "show")
+    object Episode : Routes(0, "Episode", "episode")
     object Queue : Routes(0, "Queue", "queue")
     object Liked : Routes(0, "Liked", "liked")
     object LocalFiles : Routes(0, "LocalFiles", "localfiles")
@@ -28,6 +29,7 @@ sealed class Routes(
     object NewReleases : Routes(0, "NewReleases", "newreleases")
     object Episodes : Routes(0, "Episodes", "episodes")
     object Recap : Routes(0, "Recap", "recap")
+    object Recent : Routes(0, "Recent", "recent")
     object Settings : Routes(0, "Settings", "settings")
     object Profile : Routes(0, "Profile", "profile")
 }
@@ -59,6 +61,10 @@ fun localPlaylistRoute(id: String): String = "${Routes.LocalPlaylist.route}/${an
 /** Builds a podcast-show route carrying the Spotify show id (and a display name). */
 fun showRoute(id: String, name: String = ""): String =
     "${Routes.Show.route}/${android.net.Uri.encode(id)}?name=${android.net.Uri.encode(name)}"
+
+/** A podcast episode (or a book chapter), by raw Spotify id. */
+fun episodeRoute(id: String, name: String = ""): String =
+    "${Routes.Episode.route}/${android.net.Uri.encode(id)}?name=${android.net.Uri.encode(name)}"
 
 /**
  * Builds an artist route. When the exact Spotify artist id is known it is

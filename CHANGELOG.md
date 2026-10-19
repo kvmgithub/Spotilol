@@ -1,5 +1,13 @@
 # Changelog
 
+## Spotilol UI 0.2 — 2026-10-20
+
+Merged Myspoti 2.0.0-beta.9 (`f25ddfe`) within Spotilol's scope.
+
+- Taken: page ad managers switched off at runtime and the device registration left unaltered (the ad-format stripping was the suspected cause of `402 COMMAND_FAILED` on free accounts); X-Requested-With suppressed; renderer crash rebuilds the page; per-install browser identity following the WebView; persistent client device id; relayed requests with the page's own browser headers; login waits for a real token; crossfade; Recents; show/episode pages and podcast player; playlist add/remove; artist menu; image, lyrics, navigation-bar and motion fixes.
+- Adapted: relayed requests carry cookies only when the page's fetch uses `credentials: 'include'`; Set-Cookie stays stripped; engine log lines (Logbook) go through the shared redactor.
+- Left out: podcast downloads, device name in Spotify's device lists, update settings and checks, diagnostic-report export row, the disabled audio proxy.
+
 ## Spotilol UI 0.1 — 2026-10-19
 
 First variant build on Myspoti 2.0.0-beta.8 (`5b247b3`): package `com.project.lol.fork.ui`, next to Spotilol Lite.
@@ -15,6 +23,51 @@ Automated checks (JVM tests, signed release build) pass in CI; real-device testi
 # Upstream Myspoti history
 
 Full detail: [docs/CHANGELOG-full.md](docs/CHANGELOG-full.md).
+
+## 2.0.0-beta.9
+
+- **Fast skips during an ad or a reload**: the song your taps point to plays once the ad or the reload is over, and the screen shows that same song (the sound and the screen no longer drift apart); "previous" during an ad no longer restarts the ad.
+- **Ad breaks are stopped at the source**: the player page's own ad managers (audio and in-stream) are switched off from the app, and again each time an ad shows up, instead of patching the web player's own files (the way SpotX does it, done here at runtime so an update of the page cannot break it). The device also no longer tells Spotify it cannot read mp3 (`file_urls_mp3`) — the registration some free accounts were refused for (`402 COMMAND_FAILED`).
+- **No more silence until a restart**: an ad mute whose unmute was lost (the page never reports the end of a break) is lifted after 75 s, the mute is only trusted once it reached the media elements, and a podcast stalling is caught like a song.
+- **The login page can no longer spin for ever**: the app does not wait on the address alone any more; no signed-in token 25 s after the player page came back, and the login page is shown again so it can be tried.
+- **The page rebuilds itself after a renderer crash** (the reported "the app crashed", "no sound until the player is restarted") instead of leaving a dead page behind.
+- **One client identity across launches**: the client token's device id is kept, so Spotify no longer sees a new client at every start.
+- **Your phone tells Spotify its own name**: the device registration now carries the phone's name (the one Android knows), so the other devices' list shows it instead of a generic one, and the registration is again exactly what the real web player sends (no ad-format difference left to single it out).
+- **Every install looks like its own browser**: the browser version and the system it claims are drawn once per install instead of being the same string on every phone. A single rule could have covered every Myspoti at once; it now covers one client, like a real browser would.
+- **A login that goes nowhere leaves a trail**: each sign-in step reaches the log (`login step #n POST /login/v3/…`) with the status of anything Spotify refuses, instead of ending on a spinner with nothing to look at.
+- **A report you can send us**: Settings → **Export a diagnostic report** writes the app's recent log (the player page, the relay, the ads, the refusals) and the device details to a file and opens the share sheet — the log needed `adb` until now, so a report of a refusal or a login that fails was impossible to hand over.
+- **Covers and profile pictures that never loaded are fixed**: the profile endpoints hand out `spotify:image:…` identifiers rather than a picture's address, and the image loader was given that identifier as it was. Public playlists of a user and their profile picture now show their covers.
+- **Upcoming lyrics are readable on a dark card**: they were drawn in black at 55 % of opacity, so invisible on the AMOLED card; they now follow the card's own background.
+- **During an ad the screen says so** instead of leaving the previous song stuck on "buffering", and the player header keeps the playlist's own name when Spotify's label comes back empty; the artist page has its own options menu again and the separator reported missing from the profile header is back.
+- **No more light band under the app**: the navigation bar was left to the system (a white strip with dark icons under an always-dark UI) — it now blends in.
+- **Crossfade, for real this time**: the player had a stub that always answered "no crossfade" and the setting had been removed, so the slider testers were looking for did nothing. Settings → Playback now offers Off / 3 / 6 / 9 / 12 s: the current song fades out over its last seconds and the next one fades in — one player, one stream, so the two never overlap, and the label says so. Two independent fail-safes put the volume back, and no exit path can leave the sound down.
+- **Scrolling the player no longer opens the lyrics**: any upward drag used to count as the swipe shortcut; it now takes a deliberate flick, judged on release.
+- **A Connect switch no longer restarts the song**: when another device had taken playback and Myspoti takes it back, the position is remembered and restored if the page rolled back to the start.
+- **The notification keeps up in the background**: the refresh loop waited for a device that had taken playback, which only a pull-back sets — so an app started in the background never refreshed it. It now runs whenever the service is up.
+- **Local Files lists what other players list**: the query only took what Android's index calls music of 30 s or more, so a phone full of recordings or downloads showed "your audio files will appear here" while another player listed them (reported: 29 tracks). Everything over 20 s now counts, minus Ringtones/Notifications/Alarms/Android — 59 files listed on the test phone where 77 exist.
+- **Remove a song from a playlist, and add it to another**: a playlist you can edit now offers « Remove from this playlist » in the song's own menu (with Undo), and « Add to another playlist » opens a picker of your playlists with a search field.
+- **Stop all downloads**: one action cancels everything running or waiting **without deleting a single file** (« Remove all downloads » is still the separate, destructive one).
+- **Updates on your terms**: a setting turns the automatic check off (it stays on by default) and « Check for updates now » is right there.
+- **The mini player names your headphones**: Bluetooth icon and device name (or « Headphones » for wired) when the sound does not come from the phone.
+- **Android Auto works from a cold start**: the car's tree is there at once and a browse or a play waits for the player instead of failing while it loads.
+- **The player keeps its colour on AMOLED**: the tint from the cover's colour used to disappear in AMOLED mode; it is now there in both, as asked.
+- **A song Spotify marks unavailable is still tried**, and if it really cannot play the app says « Not available in your region » instead of leaving a tap that does nothing.
+
+- **Podcasts download without SpotiFLAC and play like in the stock app**: an episode now downloads with a free account — the file is the **publisher's own plain MP3** (`passthroughUrl`, resolved right before each attempt), fetched in chunks with resume, checked (type, header, size), encrypted and kept in the offline store under `episode:<id>`. Spotify exclusives (`passthrough = NONE`, Widevine-encrypted) are **refused with a clear message**, DRM is never attempted. A queue of its own, one worker, resumed at start-up.
+- **Show and episode pages**: a header with the cover and its gradient, publisher/authors/narrators, rating, **Follow**, Episodes/Chapters and About tabs, newest/oldest sort, episode rows with "11 min left" and a "played" mark; the episode page has its actions (✓, download, share, ⋮, Play) and **"Mark as played / unplayed"**, written to the account's collection (so it follows you). An audiobook page is no longer empty: chapters plus authors and narrators.
+- **A podcast player of its own**: −15 s / +15 s, speed 1 → 3×, a clock that toggles elapsed/remaining, sleep timer, no shuffle or repeat. Two causes of episodes stopping in the background are fixed: the autoplay guard paused episodes, and a resume the page ignored was never asked again.
+- **The stock app's gestures**: tapping the active tab again scrolls **Home** and **Your Library** (list and grid) back to the top without reloading, tapping **Search** again focuses the field; tapping the **cover** in the player switches to an **immersive full screen** (controls folded into a strip), undone by another tap — the quick swipe to the lyrics still works.
+- **Recents, as in the official app**: the entry leaves Your Library for the profile panel, under "Your recap". The page has a "Recents" header with back, **Music / Podcasts** pills, dated sections (Today, Yesterday, then the date) and rows **grouped by container** — "4 tracks played • EP • …", "9 tracks played • Playlist", "12 tracks added • Playlist" for Liked Songs (heart badge), an artist with their round picture, a Blend — 56 dp covers, a round chevron to **unfold** the container's tracks, a tap on the row to open it. The counts come from the page itself (groups, content type, "added" vs "played"), not a guess, and match the stock app's on the same account.
+
+- **A bottom bar that looks like Spotify's**: the icons were declared bigger but a Material component clipped them to 24 dp, the tabs sat in the middle of the bar instead of spreading evenly, and the selected label could turn grey under a white icon. The bar now uses three equal tabs across the full width, 28 dp icons, 11 sp medium labels, Spotify's idle grey, and the selected tint on both icon and label — on top of the system gesture bar.
+- **Signing in no longer lies**: Spotify's e-mail step sends the page back to open.spotify.com, and the app took that address for a session — so leaving it to read the mail ended on an anonymous player with nothing playable. The sign-in page now stays in front until a real token exists, the short grace only counts while the app is on screen, coming back re-reads the token, and an anonymous token sends you to the sign-in page instead of pretending.
+- **The app presents itself like a real browser, consistently**: the user agent now carries the reduced version every desktop Chrome sends (no build number in it), the brand list follows the version the way Chromium builds it, and what is remembered per install is how far behind the WebView it sits — so the claim follows WebView updates instead of drifting.
+
+- **Dragging a song to the edge of the queue scrolls the list**: the reorder used to work only among the visible rows; a drag near the top or bottom now scrolls the sheet (speed growing toward the edge) and the song can be moved across the whole queue.
+- The log line `login=` (it only meant "the page is on a login URL") is now `session=signed-in|anonymous|login-page`, read from the token; a relayed request now carries the page's cookies and the browser's own transport headers.
+- **Fewer needless reloads**: a page that misses one answer (a long render, a busy main thread) is no longer taken for a dead one — the reload waits for two silent ticks in a row, so a short hiccup does not cost a full page reload.
+- **An episode stuck at its end goes on to the next one** instead of starting again from 0:00 (the stall recovery only knew songs).
+- **Spotify's colours everywhere, and smoother motion**: switches, sliders, radio buttons, dialogs and spinners took the phone's wallpaper colours (or Material purple); they now use Spotify's green and greys. Covers fade in instead of popping, play/pause morphs instead of swapping, the mini player's colour cross-fades from one song to the next, the podcast player takes the cover's colour, unfolded Recents rows slide in, and the bottom bar's fade is dense enough that covers no longer show through the tab labels. The episode page's Play button now turns into Pause while it plays.
 
 ## 2.0.0-beta.8
 

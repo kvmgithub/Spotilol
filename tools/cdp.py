@@ -73,6 +73,10 @@ def main():
     ap.add_argument("--serial")
     ap.add_argument("--trace", type=float, default=0, help="seconds of Network tracing after evaluating expr")
     ap.add_argument("--bodies", default="", help="regex: print request/response bodies for matching URLs (trace mode)")
+    ap.add_argument("--headers", action="store_true",
+                    help="trace mode: print the headers of every spotify.com request, as the browser really "
+                         "sends them (Network.requestWillBeSentExtraInfo), with the tells that matter: "
+                         "X-Requested-With (the app's own package name), Sec-Fetch-*, client hints, language")
     ap.add_argument("--click", default="", help="CSS selector: dispatch a trusted mouse click on its center")
     ap.add_argument("expr", nargs="?", default="0")
     a = ap.parse_args()
@@ -130,6 +134,21 @@ def main():
                 body = r.get("postData")
                 if body and body_re and body_re.search(r["url"]):
                     print("  >>", reqs[p["requestId"]], body[:2000])
+            elif m == "Network.requestWillBeSentExtraInfo":
+                if not a.headers:
+                    continue
+                h = {k.lower(): v for k, v in (p.get("headers") or {}).items()}
+                url = reqs.get(p.get("requestId"), "")
+                if "spotify.com" not in url and "scdn.co" not in url:
+                    continue
+                shown = [f"xrw={'YES' if 'x-requested-with' in h else 'no'}"]
+                for k in ("x-requested-with", "sec-fetch-site", "sec-fetch-mode", "sec-fetch-dest",
+                          "accept-language", "referer", "origin", "sec-ch-ua", "sec-ch-ua-mobile",
+                          "sec-ch-ua-platform", "client-token", "spotify-app-version", "app-platform"):
+                    if k in h:
+                        shown.append(f"{k}={h[k][:60]}")
+                shown.append("auth=" + ("yes" if "authorization" in h else "no"))
+                print("HDR", url.split("?")[0][:95], "|", " ".join(shown))
             elif m == "Network.responseReceived":
                 print("HTTP", p["response"]["status"], reqs.get(p["requestId"], p["response"]["url"][:110]))
             elif m == "Network.loadingFinished" and body_re and body_re.search(reqs.get(p["requestId"], "")):

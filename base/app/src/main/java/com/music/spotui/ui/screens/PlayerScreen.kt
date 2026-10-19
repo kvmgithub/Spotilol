@@ -2,6 +2,7 @@ package com.music.spotui.ui.screens
 
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
@@ -57,6 +58,7 @@ import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -116,6 +118,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.myspoti.power.EnergySettings
 import androidx.navigation.NavController
 import com.bumptech.glide.integration.compose.ExperimentalGlideComposeApi
+import com.bumptech.glide.integration.compose.CrossFade
 import com.bumptech.glide.integration.compose.GlideImage
 import app.myspoti.engine.R
 import com.music.spotui.data.api.Response
@@ -148,6 +151,8 @@ fun PlayerScreen(navController: NavController) {
     val songCoverUri = playerViewModel.currentSongCoverUri.value
     val songPlayingState = playerViewModel.currentSongPlayingState.value
     val audioBuffering = SongPlayer.isBuffering
+    // T4: the page shows no track during an ad break; an explicit ad state is shown instead.
+    val adPlaying = SongPlayer.adPlaying
     val songId = playerViewModel.currentSongId.value
     val context = LocalContext.current
     val energy by EnergySettings.state.collectAsStateWithLifecycle()
@@ -158,14 +163,22 @@ fun PlayerScreen(navController: NavController) {
     var showSavedIn by remember { mutableStateOf(false) }
     var showDevices by remember { mutableStateOf(false) }
     var showQueue by remember { mutableStateOf(false) }
+    // Immersive view (official app: a tap on the artwork): artwork full-bleed, no top bar,
+    // no title / controls block, only one compact strip. A second tap leaves it.
+    var immersive by remember { mutableStateOf(false) }
     if (showDevices) com.music.spotui.ui.components.DevicesSheet { showDevices = false }
     if (showQueue) com.music.spotui.ui.components.QueueSheet(
-        contextName = SongPlayer.nowPlaying.value.contextName.ifBlank { playerViewModel.currentSongAlbum.value },
+        // B26: the list's own name (the page's label is blank for some lists), not the album's.
+        contextName = playerContextName(playerViewModel),
         onDismiss = { showQueue = false },
     )
 
     BackHandler(enabled = showLyrics) {
         showLyrics = false
+    }
+    // Back leaves the immersive view first; the lyrics (handled above) keep priority.
+    BackHandler(enabled = immersive && !showLyrics) {
+        immersive = false
     }
 
     if (showMenu) {
@@ -262,18 +275,10 @@ fun PlayerScreen(navController: NavController) {
     }
     val canvasAlpha = canvasProgress.value
     val coverAlpha = 1f - canvasProgress.value
-    // A tap on the Canvas hides the player (title, controls, progress) to watch the clip,
-    // brighter; another tap anywhere brings everything back.
-    var canvasOnly by remember(canvasUrl) { mutableStateOf(false) }
-    val chrome by androidx.compose.animation.core.animateFloatAsState(
-        if (canvasOnly) 0f else 1f, androidx.compose.animation.core.tween(CANVAS_FADE_MS / 2), label = "chrome")
+    // A tap on the Canvas no longer needs its own mode: the immersive view below handles both
+    // cases (Canvas playing or plain cover), so the Canvas-only fade ("chrome") is gone.
     // No music videos in Spotilol UI (the YouTube clips are removed).
     val videoOn = false
-    // Canvas players are built once the sheet has finished rising (then kept):
-    // creating them in the first frame stalled it and the slide jumped.
-    val settled by com.music.spotui.ui.navigation.LocalPageSettled.current
-    var mediaReady by remember { mutableStateOf(false) }
-    LaunchedEffect(settled) { if (settled) mediaReady = true }
     // Pulled down from the top, the player closes, like the back button (issue #4).
     val pullToClose = com.music.spotui.ui.components.rememberPullToDismiss { com.music.spotui.ui.navigation.PlayerSheet.close() }
     pullToClose.enabled = !showLyrics
@@ -282,8 +287,11 @@ fun PlayerScreen(navController: NavController) {
             .graphicsLayer { translationY = pullToClose.offset }
             .fillMaxSize()
             .background(
+                // The tint follows the cover in BOTH modes: AMOLED used to be pure black, and the
+                // colour was asked for anyway (that replaces the halo idea). The screen keeps its
+                // gradient, the toggle still governs the rest of the app.
                 Brush.verticalGradient(
-                    colors = if (energy.policy.oledBlack) listOf(Color.Black, Color.Black) else listOf(
+                    colors = listOf(
                         androidx.compose.ui.graphics.lerp(dominentColor, Color.Black, 0.35f),
                         Color(0xFF121212),
                     ),
@@ -304,7 +312,9 @@ fun PlayerScreen(navController: NavController) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .alpha(canvasAlpha * chrome)
+                    // Lighter dim in the immersive view: the clip is the page there, only the
+                    // compact strip needs something to sit on.
+                    .alpha(canvasAlpha * if (immersive) 0.35f else 1f)
                     .background(
                         Brush.verticalGradient(
                             colors = listOf(
@@ -320,7 +330,6 @@ fun PlayerScreen(navController: NavController) {
         androidx.compose.foundation.lazy.LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
-                .graphicsLayer { alpha = chrome }
                 .nestedScroll(pullToClose.connection)
                 .statusBarsPadding(),
             horizontalAlignment = Alignment.CenterHorizontally
@@ -337,7 +346,9 @@ fun PlayerScreen(navController: NavController) {
         // Height budget from the screen, as before (the list item is shorter than the screen and
         // gave a smaller cover); the width cap only matters on wide windows.
         val screenHeight = androidx.compose.ui.platform.LocalConfiguration.current.screenHeightDp.dp
-        val artSide = minOf(contentWidth, screenHeight - PLAYER_CONTROLS_DP.dp).coerceAtLeast(160.dp)
+        // Immersive: the artwork takes the whole height instead of leaving room for controls.
+        val artSide = if (immersive) screenHeight
+            else minOf(contentWidth, screenHeight - PLAYER_CONTROLS_DP.dp).coerceAtLeast(160.dp)
         Column(
             modifier = Modifier
                 .fillMaxHeight()
@@ -345,48 +356,57 @@ fun PlayerScreen(navController: NavController) {
                 .navigationBarsPadding(),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            PlayerTopBar(
-                navController,
-                onMenuClick = { showMenu = true },
-                np = np,
-                fallbackName = playerViewModel.currentSongAlbum.value,
-            )
-            Spacer(modifier = Modifier.height(28.dp))
+            // Immersive mode has no top bar: only the artwork and the compact strip remain.
+            if (!immersive) {
+                PlayerTopBar(
+                    navController,
+                    onMenuClick = { showMenu = true },
+                    np = np,
+                    fallbackName = playerViewModel.currentSongAlbum.value,
+                )
+                Spacer(modifier = Modifier.height(28.dp))
+            }
             // Media area: artwork (swipe to change track) or the music video, with
             // Spotify's "Passer à la vidéo" pill over it (black, like the official app).
             // Square, but never taller than what the controls leave (foldables, landscape-ish
             // screens): otherwise play / pause ends up under the lyrics card.
             // A clear upward drag on the artwork opens the lyrics (observed on the initial pass,
             // never consumed, so the pager and the pull-to-close keep working).
-            Box(modifier = Modifier.size(artSide).pointerInput(canvasUrl, videoOn) {
+            Box(modifier = Modifier.size(artSide).pointerInput(immersive, videoOn) {
                 detectTapGestures(onTap = {
-                    if (canvasUrl != null && !videoOn) canvasOnly = true
+                    // Plain tap on the artwork: the immersive toggle, with or without a Canvas
+                    // (it used to depend on the Canvas being there, and only ever turned on).
+                    if (!videoOn) immersive = !immersive
                 })
             }.pointerInput(Unit) {
                 val threshold = 80.dp.toPx()
+                // A deliberate flick, judged on release: an upward drag that crosses the threshold in
+                // under [maxMs]. Reported bug: scrolling up through the player opened the lyrics —
+                // that gesture crosses a distance threshold too, but never that fast, so distance
+                // alone was not a gesture.
+                val maxMs = 350L
                 while (true) awaitPointerEventScope {
                     val down = awaitFirstDown(requireUnconsumed = false, pass = androidx.compose.ui.input.pointer.PointerEventPass.Initial)
                     var dx = 0f
                     var dy = 0f
-                    var fired = false
                     while (true) {
                         val event = awaitPointerEvent(androidx.compose.ui.input.pointer.PointerEventPass.Initial)
                         val change = event.changes.firstOrNull { it.id == down.id } ?: break
-                        if (!change.pressed) break
                         val d = change.positionChange()
                         dx += d.x; dy += d.y
-                        if (!fired && -dy > threshold && -dy > kotlin.math.abs(dx) * 2f) {
-                            fired = true
-                            showLyrics = true
+                        if (!change.pressed) {
+                            val quick = change.uptimeMillis - down.uptimeMillis <= maxMs
+                            if (quick && -dy > threshold && -dy > kotlin.math.abs(dx) * 2f) showLyrics = true
+                            break
                         }
                     }
                 }
             }) {
             HorizontalPager(
                 state = artworkPagerState,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .aspectRatio(1f),
+                // Immersive: the artwork fills the screen instead of sitting in a square.
+                modifier = if (immersive) Modifier.fillMaxSize()
+                    else Modifier.fillMaxWidth().aspectRatio(1f),
             ) { page ->
                 val cover = when (page) {
                     0 -> np.prev?.coverUri
@@ -395,10 +415,10 @@ fun PlayerScreen(navController: NavController) {
                 } ?: songCoverUri
                 Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
                     GlideImage(
-                        modifier = Modifier
-                            .padding(horizontal = 24.dp)
-                            .aspectRatio(1f)
-                            .clip(RoundedCornerShape(8.dp))
+                        transition = CrossFade,
+                        modifier = (if (immersive) Modifier.fillMaxSize()
+                            // Normal layout keeps the inset, rounded cover.
+                            else Modifier.padding(horizontal = 24.dp).aspectRatio(1f).clip(RoundedCornerShape(8.dp)))
                             .graphicsLayer {
                                 alpha = coverAlpha
                                 val grow = 1f + (1f - coverAlpha) * 0.06f
@@ -412,79 +432,87 @@ fun PlayerScreen(navController: NavController) {
             }
             Spacer(modifier = Modifier.weight(1f))
 
-            PlayerInfo(
-                songTitle = songTitle,
-                songSinger = songSinger,
-                explicit = np.explicit || currentTrack?.explicit == true,
-                liked = isLiked.value,
-                onLikeClick = { playerViewModel.updateLikeState(!isLiked.value) },
-                likeSong = { nowPlayingSong(playerViewModel) },
-                onTitleClick = {
-                    val albumId = np.albumUri.substringAfterLast(":")
-                    if (albumId.isNotBlank()) navController.navigate(albumRoute(playerViewModel.currentSongAlbum.value, songSinger, albumId))
-                },
-                onArtistClick = {
-                    playerViewModel.goToArtist(SongPlayer.currentTrackId, songSinger) { route ->
-                        navController.navigate(route)
-                    }
-                },
-            )
-
-            // Seek bar: follows the finger while dragging, seeks once on release.
-            var isDragging by remember { mutableStateOf(false) }
-            var dragValue by remember { mutableStateOf(0f) }
-            val duration = SongPlayer.getDuration()
-            SpotifySeekBar(
-                fraction = {
-                    frame.value // redraw each frame
-                    if (isDragging) dragValue else {
-                        val d = SongPlayer.getDuration()
-                        if (d > 0) (SongPlayer.getCurrentPosition().toFloat() / d).coerceIn(0f, 1f) else 0f
-                    }
-                },
-                onDrag = { isDragging = true; dragValue = it },
-                onRelease = {
-                    val target = (dragValue * SongPlayer.getDuration()).toLong()
-                    SongPlayer.seekTo(target)
-                    isDragging = false
-                },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 24.dp)
-                    .padding(top = 14.dp),
-            )
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 24.dp),
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                ElapsedLabel(songPlayingState, if (isDragging) (dragValue * duration).toLong() else null) {
-                    playerViewModel.formatDuration(it)
-                }
-                Text(
-                    text = playerViewModel.formatDuration(duration.coerceAtLeast(0)),
-                    color = Color.White.copy(alpha = 0.7f),
-                    fontSize = 12.sp,
+            // Immersive mode keeps none of this: the compact strip at the bottom of
+            // the screen replaces the title block and every control.
+            if (!immersive) {
+                PlayerInfo(
+                    songTitle = songTitle,
+                    songSinger = songSinger,
+                    explicit = np.explicit || currentTrack?.explicit == true,
+                    liked = isLiked.value,
+                    onLikeClick = { playerViewModel.updateLikeState(!isLiked.value) },
+                    likeSong = { nowPlayingSong(playerViewModel) },
+                    adPlaying = adPlaying,
+                    onTitleClick = {
+                        val albumId = np.albumUri.substringAfterLast(":")
+                        if (albumId.isNotBlank()) navController.navigate(albumRoute(playerViewModel.currentSongAlbum.value, songSinger, albumId))
+                    },
+                    onArtistClick = {
+                        playerViewModel.goToArtist(SongPlayer.currentTrackId, songSinger) { route ->
+                            navController.navigate(route)
+                        }
+                    },
                 )
+
+                // Seek bar: follows the finger while dragging, seeks once on release.
+                var isDragging by remember { mutableStateOf(false) }
+                var dragValue by remember { mutableStateOf(0f) }
+                val duration = SongPlayer.getDuration()
+                SpotifySeekBar(
+                    fraction = {
+                        frame.value // redraw each frame
+                        if (isDragging) dragValue else {
+                            val d = SongPlayer.getDuration()
+                            if (d > 0) (SongPlayer.getCurrentPosition().toFloat() / d).coerceIn(0f, 1f) else 0f
+                        }
+                    },
+                    onDrag = { isDragging = true; dragValue = it },
+                    onRelease = {
+                        val target = (dragValue * SongPlayer.getDuration()).toLong()
+                        SongPlayer.seekTo(target)
+                        isDragging = false
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 24.dp)
+                        .padding(top = 14.dp),
+                )
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 24.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    ElapsedLabel(songPlayingState, if (isDragging) (dragValue * duration).toLong() else null) {
+                        playerViewModel.formatDuration(it)
+                    }
+                    Text(
+                        text = playerViewModel.formatDuration(duration.coerceAtLeast(0)),
+                        color = Color.White.copy(alpha = 0.7f),
+                        fontSize = 12.sp,
+                    )
+                }
+
+                PlayerFull(songPlayingState, playerViewModel, context, isLiked, shuffle, repeat, queueSongs)
+
+                PlayerConnectRow(
+                    context = context,
+                    title = songTitle,
+                    artist = songSinger,
+                    coverUri = songCoverUri,
+                    onDevices = { showDevices = true },
+                    onQueue = { showQueue = true },
+                )
+                Spacer(modifier = Modifier.height(20.dp))
             }
-
-            PlayerFull(songPlayingState, playerViewModel, context, isLiked, shuffle, repeat, queueSongs)
-
-            PlayerConnectRow(
-                context = context,
-                title = songTitle,
-                artist = songSinger,
-                coverUri = songCoverUri,
-                onDevices = { showDevices = true },
-                onQueue = { showQueue = true },
-            )
-            Spacer(modifier = Modifier.height(20.dp))
         }
         }
         }
-        item {
-            if (!audioBuffering) InlineLyrics(
+        // The lyrics card belongs to the scrolled layout; in immersive mode the list holds the
+        // artwork only, so a swipe there cannot pull a card up under the compact strip.
+        if (!immersive) item {
+            // T4: no lyrics card during an ad break — the song it belongs to is not what plays.
+            if (!audioBuffering && !adPlaying) InlineLyrics(
                 title = songTitle,
                 artist = songSinger,
                 album = playerViewModel.currentSongAlbum.value,
@@ -493,12 +521,23 @@ fun PlayerScreen(navController: NavController) {
             )
         }
         }
-        // The Canvas alone: any tap brings the player back.
-        if (canvasOnly) Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .pointerInput(Unit) { detectTapGestures(onTap = { canvasOnly = false }) }
-        )
+        // Immersive: one compact strip at the bottom of the full-bleed artwork, the official
+        // app's collapsed layout. It swallows taps, so only the artwork leaves the mode.
+        if (immersive) {
+            ImmersiveStrip(
+                modifier = Modifier.align(Alignment.BottomCenter).navigationBarsPadding(),
+                coverUri = songCoverUri,
+                title = songTitle,
+                artists = songSinger,
+                liked = isLiked.value,
+                onLike = { playerViewModel.updateLikeState(!isLiked.value) },
+                fraction = {
+                    frame.value // redraw each frame
+                    val d = SongPlayer.getDuration()
+                    if (d > 0) (SongPlayer.getCurrentPosition().toFloat() / d).coerceIn(0f, 1f) else 0f
+                },
+            )
+        }
 
         AnimatedVisibility(
             visible = showLyrics,
@@ -522,12 +561,95 @@ fun PlayerScreen(navController: NavController) {
     }
 }
 
+/**
+ * The immersive player's single control strip (official app): cover, title, artists, like
+ * and a thin progress line. No transport row, no timestamps, no Connect/Share/Queue — those
+ * disappear with the rest of the player when the artwork is tapped.
+ */
+@OptIn(ExperimentalGlideComposeApi::class)
+@Composable
+private fun ImmersiveStrip(
+    modifier: Modifier = Modifier,
+    coverUri: String,
+    title: String,
+    artists: String,
+    liked: Boolean,
+    onLike: () -> Unit,
+    fraction: () -> Float,
+) {
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            // Swallows taps: the strip is not the artwork, so hitting it must not close the
+            // mode (its own like button still works).
+            .pointerInput(Unit) { detectTapGestures(onTap = {}) }
+            .background(
+                // Scrim only under the strip: the artwork above stays untouched.
+                Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(alpha = 0.72f)))
+            )
+            .padding(horizontal = 16.dp, vertical = 10.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            GlideImage(
+                transition = CrossFade,
+                model = coverUri,
+                contentDescription = "",
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.size(44.dp).clip(RoundedCornerShape(4.dp)),
+            )
+            Column(modifier = Modifier.weight(1f).padding(horizontal = 12.dp)) {
+                Text(
+                    text = title,
+                    color = Color.White,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1,
+                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                )
+                if (artists.isNotBlank()) Text(
+                    text = artists,
+                    color = Color.White.copy(alpha = 0.75f),
+                    fontSize = 12.sp,
+                    maxLines = 1,
+                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                )
+            }
+            LikeButton(liked = liked, size = 26.dp, onClick = onLike)
+        }
+        Spacer(modifier = Modifier.height(10.dp))
+        // Read in the draw phase, so the line follows playback without recomposing.
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(2.dp)
+                .clip(RoundedCornerShape(1.dp))
+                .drawBehind {
+                    drawRect(Color.White.copy(alpha = 0.3f))
+                    val played = fraction().coerceIn(0f, 1f)
+                    drawRect(
+                        color = Color.White,
+                        size = androidx.compose.ui.geometry.Size(size.width * played, size.height),
+                    )
+                },
+        )
+    }
+}
+
+/** B26: the list the music plays from — the page's own label, else the name the app knows
+ *  (the list the play started from), else the album's name. */
+private fun contextDisplayName(np: SongPlayer.NowPlaying, fallbackName: String): String =
+    np.contextName.ifBlank { SongPlayer.knownContextName(np.contextUri) }.ifBlank { fallbackName }
+
+/** The list name both the header and the queue sheet show (B26). */
+private fun playerContextName(playerViewModel: PlayerViewModel): String =
+    contextDisplayName(SongPlayer.nowPlaying.value, playerViewModel.currentSongAlbum.value)
+
 /** "Lecture à partir de <type>" + context name, or the queue (like the official app). */
 @Composable
 private fun playingFromLabels(np: SongPlayer.NowPlaying, fallbackName: String): Pair<String, String> {
     if (np.provider == "queue") return stringResource(R.string.context_type_description_play_queue) to ""
     val type = np.contextUri.split(":").getOrNull(1).orEmpty()
-    val name = np.contextName.ifBlank { fallbackName }
+    val name = contextDisplayName(np, fallbackName)
     return when {
         np.contextUri.contains(":collection") -> stringResource(R.string.context_type_description_collection_your_library) to stringResource(R.string.collection_liked_songs_title)
         type == "playlist" -> stringResource(R.string.context_type_description_playlist) to name
@@ -543,11 +665,13 @@ private fun playingFromLabels(np: SongPlayer.NowPlaying, fallbackName: String): 
 private fun contextRoute(np: SongPlayer.NowPlaying): String? {
     val parts = np.contextUri.split(":")
     val id = parts.getOrNull(2).orEmpty()
+    // B26: opening that page again must carry the name the header shows.
+    val name = contextDisplayName(np, "")
     return when {
         np.contextUri.contains(":collection") -> Routes.Liked.route
-        parts.getOrNull(1) == "playlist" && id.isNotBlank() -> com.music.spotui.ui.navigation.playlistRoute(id, np.contextName)
-        parts.getOrNull(1) == "album" && id.isNotBlank() -> albumRoute(np.contextName, "", id)
-        parts.getOrNull(1) == "artist" && id.isNotBlank() -> com.music.spotui.ui.navigation.artistRoute(np.contextName, id)
+        parts.getOrNull(1) == "playlist" && id.isNotBlank() -> com.music.spotui.ui.navigation.playlistRoute(id, name)
+        parts.getOrNull(1) == "album" && id.isNotBlank() -> albumRoute(name, "", id)
+        parts.getOrNull(1) == "artist" && id.isNotBlank() -> com.music.spotui.ui.navigation.artistRoute(name, id)
         else -> null
     }
 }
@@ -686,6 +810,8 @@ fun PlayerInfo(
     likeSong: (() -> SongsModel)? = null,
     onArtistClick: (() -> Unit)? = null,
     onTitleClick: (() -> Unit)? = null,
+    /** T4: an ad break is on: what the caller passes is the song from before it, not what plays. */
+    adPlaying: Boolean = false,
 ) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
@@ -698,18 +824,21 @@ fun PlayerInfo(
                 modifier = Modifier
                     // A few passes, after the sheet has settled (not an endless 120 Hz animation).
                     .basicMarquee(iterations = 3, initialDelayMillis = 1_500, repeatDelayMillis = 2_500)
-                    .then(if (onTitleClick != null) Modifier.clickable(
+                    // Nothing to open during an ad: the title would lead to the previous song.
+                    .then(if (onTitleClick != null && !adPlaying) Modifier.clickable(
                         interactionSource = remember { MutableInteractionSource() },
                         indication = null,
                     ) { onTitleClick() } else Modifier),
-                text = songTitle,
+                text = if (adPlaying) stringResource(R.string.ad_playing) else songTitle,
                 color = Color.White,
                 fontSize = 22.sp,
                 fontWeight = FontWeight.Bold,
                 maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
                 softWrap = false,
             )
-            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 2.dp)) {
+            // The artist row belongs to the song: during an ad the previous one's artist is
+            // what the state still holds, so it is not shown as if it were playing.
+            if (!adPlaying) Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 2.dp)) {
                 if (explicit) {
                     ExplicitBadge()
                     Spacer(modifier = Modifier.width(6.dp))
@@ -727,8 +856,9 @@ fun PlayerInfo(
                 )
             }
         }
-        // No like for a local file (not in the Spotify library).
-        if (!com.music.spotui.di.LocalPlayer.active.value) {
+        // No like for a local file (not in the Spotify library), and none during an ad break:
+        // the + would save the song from before the break.
+        if (!adPlaying && !com.music.spotui.di.LocalPlayer.active.value) {
             if (likeSong != null) AddButton(song = likeSong, liked = liked, onLike = onLikeClick)
             else LikeButton(liked = liked, onClick = onLikeClick)
         }
@@ -939,17 +1069,10 @@ fun PlayerFull(
             ,
             contentAlignment = Alignment.Center
         ) {
-            Icon(
-                modifier = Modifier
-                    .size(30.dp)
-
-                ,
+            com.music.spotui.ui.components.PlayPauseIcon(
+                modifier = Modifier.size(30.dp),
                 tint = Color.Black,
-                painter = if (songPlayingState)
-                    painterResource(id = R.drawable.ic_playing)
-                else
-                    painterResource(id = R.drawable.play_svgrepo_com)
-                ,
+                playing = songPlayingState,
                 contentDescription = stringResource(if (songPlayingState) R.string.notif_action_pause else R.string.notif_action_play))
         }
 

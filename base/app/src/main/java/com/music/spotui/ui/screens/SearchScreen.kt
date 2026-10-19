@@ -49,6 +49,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.layout.ContentScale
@@ -62,6 +63,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import com.bumptech.glide.integration.compose.ExperimentalGlideComposeApi
+import com.bumptech.glide.integration.compose.CrossFade
 import com.bumptech.glide.integration.compose.GlideImage
 import com.bumptech.glide.integration.compose.placeholder
 import app.myspoti.engine.R
@@ -122,6 +124,21 @@ fun SumUpSearchScreen(
         mutableStateOf(com.music.spotui.data.preferences.getRecentItems(context).filter { com.music.spotui.data.api.Features.PODCASTS || it.type != "show" })
     }
     var menuSong by remember { mutableStateOf<SongsModel?>(null) }
+    // Re-tapping the Search tab while already on it focuses the field (official behaviour)
+    // and shows the recents again; no query is re-run. The field lives in the sticky bar,
+    // so a focus requester is handed down to it.
+    val listState = androidx.compose.foundation.lazy.rememberLazyListState()
+    val searchFieldFocus = remember { androidx.compose.ui.focus.FocusRequester() }
+    LaunchedEffect(Unit) {
+        com.music.spotui.ui.navigation.TabReselect.search.collect {
+            // Focus first: the keyboard should be up as soon as the tab is tapped.
+            // Not attached yet (screen being torn down): the tap is simply dropped.
+            runCatching { searchFieldFocus.requestFocus() }
+            if (listState.firstVisibleItemIndex != 0 || listState.firstVisibleItemScrollOffset != 0) {
+                listState.animateScrollToItem(0)
+            }
+        }
+    }
     // Spotify's filter chips: Top (mixed), or one kind of result.
     val filter = searchViewModel.filter
     menuSong?.let { sel ->
@@ -158,6 +175,7 @@ fun SumUpSearchScreen(
     }
 
     LazyColumn(
+        state = listState,
         contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = com.music.spotui.ui.components.bottomBarsSpace()),
         modifier = Modifier
             .fillMaxSize()
@@ -172,6 +190,7 @@ fun SumUpSearchScreen(
             SearchStickyBar(
                 text,
                 onFocusChange = { searchFocused = it },
+                focusRequester = searchFieldFocus,
             ) {
                 searchViewModel.search(it)
             }
@@ -486,6 +505,7 @@ fun RecentItemRow(
             .padding(16.dp, 8.dp),
     ) {
         GlideImage(
+            transition = CrossFade,
             modifier = Modifier
                 .size(48.dp)
                 .clip(RoundedCornerShape(if (item.type == "artist") 100.dp else 6.dp)),
@@ -570,6 +590,7 @@ fun SearchSongRow(
             modifier = Modifier.weight(1f).padding(end = 8.dp),
         ) {
             GlideImage(
+                transition = CrossFade,
                 modifier = Modifier
                     .padding(0.dp, 0.dp, 10.dp, 0.dp)
                     .size(48.dp)
@@ -618,6 +639,7 @@ fun SearchShowRow(show: com.music.spotui.data.entity.PodcastModel, onClick: () -
             ,
     ) {
         GlideImage(
+            transition = CrossFade,
             modifier = Modifier
                 .padding(0.dp, 0.dp, 10.dp, 0.dp)
                 .size(48.dp)
@@ -649,6 +671,7 @@ fun SearchArtistRow(artist: com.music.spotui.data.entity.ArtistsModel, onClick: 
             ,
     ) {
         GlideImage(
+            transition = CrossFade,
             modifier = Modifier
                 .padding(0.dp, 0.dp, 10.dp, 0.dp)
                 .size(48.dp)
@@ -677,6 +700,7 @@ fun SearchAlbumRow(album: com.music.spotui.data.entity.AlbumsModel, onClick: () 
             ,
     ) {
         GlideImage(
+            transition = CrossFade,
             modifier = Modifier
                 .padding(0.dp, 0.dp, 10.dp, 0.dp)
                 .size(48.dp)
@@ -702,6 +726,7 @@ fun SearchPlaylistRow(playlist: com.music.spotui.data.entity.LibraryEntry, onCli
         modifier = Modifier.pressable(0.96f) { onClick() }.fillMaxWidth().padding(16.dp, 8.dp),
     ) {
         GlideImage(
+            transition = CrossFade,
             modifier = Modifier.padding(0.dp, 0.dp, 10.dp, 0.dp).size(48.dp).clip(RoundedCornerShape(6.dp)),
             model = playlist.coverUri,
             contentScale = ContentScale.Crop,
@@ -782,6 +807,7 @@ private fun BrowseCategoryTile(
     ) {
         if (cover.isNotBlank()) {
             GlideImage(
+                transition = CrossFade,
                 model = cover,
                 contentScale = ContentScale.Crop,
                 contentDescription = null,
@@ -823,6 +849,7 @@ fun SearchTopBar() {
 fun SearchStickyBar(
     text: String,
     onFocusChange: (Boolean) -> Unit = {},
+    focusRequester: androidx.compose.ui.focus.FocusRequester? = null,
     onTextChange: (String) -> Unit,
 ) {
 
@@ -842,7 +869,9 @@ fun SearchStickyBar(
 
         TextField(
             enabled = true,
-            modifier = Modifier.onFocusChanged { onFocusChange(it.isFocused) },
+            modifier = Modifier
+                .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
+                .onFocusChanged { onFocusChange(it.isFocused) },
             value = text,
             textStyle = TextStyle.Default.copy(fontSize = 16.sp, color = Color.Black, fontWeight = FontWeight(500)),
             colors = TextFieldDefaults.colors(
@@ -879,6 +908,7 @@ private fun SearchProfileRow(name: String, image: String?, onClick: () -> Unit) 
         modifier = Modifier.fillMaxWidth().pressable(0.98f, onClick = onClick).padding(16.dp, 8.dp),
     ) {
         com.bumptech.glide.integration.compose.GlideImage(
+            transition = CrossFade,
             model = image, contentDescription = null, contentScale = androidx.compose.ui.layout.ContentScale.Crop,
             failure = com.bumptech.glide.integration.compose.placeholder(R.drawable.placeholder),
             modifier = Modifier.size(52.dp).clip(androidx.compose.foundation.shape.CircleShape),

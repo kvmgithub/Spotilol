@@ -25,6 +25,21 @@ data class SongsModel(
     val playable : Boolean = true,
     // Spotify ids of the artists, for "liked songs by this artist". Empty in older caches.
     val artistIds : List<String> = emptyList(),
+    // ── Podcast episodes. Empty / false on tracks: the show page and the episode page
+    // read these from the row itself instead of asking Spotify again.
+    /** Episode description, as Spotify publishes it (the row snippet and the episode page). */
+    val description : String = "",
+    /** Release date (ISO 8601), shown as "24 juil." on the episode page. */
+    val releaseDate : String = "",
+    /** Spotify keeps this episode as finished (playedState, or the page's own mark). */
+    val played : Boolean = false,
+    /** Where the user stopped listening, in ms (0 when never started). */
+    val playedPositionMs : Long = 0L,
+    /** Raw Spotify id of the show the episode belongs to. */
+    val showId : String = "",
 ){
     constructor() : this(-1 ,"" ,"" ,"" ,"" ,"", "")
+
+    /** A podcast episode (url = "episode:<raw id>"), not a music track. */
+    val isEpisode : Boolean get() = url.startsWith("episode:")
 }

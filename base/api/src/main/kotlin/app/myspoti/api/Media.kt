@@ -36,6 +36,30 @@ data class MediaCard(
     val images: List<Image>,
 )
 
+/**
+ * One row of the account's "Recently played", as the Web Player's own list returns it: a track
+ * or a context (playlist, album, artist, show) that was played. Spotify keeps the list, so it
+ * covers every device of the account; the app's own play counter does not.
+ */
+data class RecentItem(
+    val uri: Uri,
+    val kind: MediaKind,
+    val title: String,
+    /** The artists (or the playlist's owner), when the server says. */
+    val subtitle: String?,
+    val images: List<Image>,
+    val durationMs: Long = 0,
+    val explicit: Boolean = false,
+    /** The play's day (epoch ms, local midnight): the list dates its rows, it does not time them. */
+    val playedAtMs: Long? = null,
+    /**
+     * The server's own type word for the entity ("EP", "Playlist", "Artiste"), localised with the
+     * account's language: the recents page prints it between the play count and the creators,
+     * which a [MediaKind] alone cannot say (an EP is an album).
+     */
+    val typeLabel: String? = null,
+)
+
 data class Shelf(val uri: Uri?, val title: String?, val items: List<MediaCard>, val total: Int)
 
 // --- Home and browse ---------------------------------------------------------
@@ -125,6 +149,23 @@ data class Episode(
     val playable: Boolean,
     val previewUrl: String?,
 )
+
+/**
+ * A podcast episode's audio, as the Web Player resolves it (soundfinder REST endpoint).
+ *
+ * [url] is the publisher's own file — clear MP3/M4A, no DRM — when Spotify exposes one.
+ * It is null for Spotify-exclusive shows, whose only copy is Widevine-encrypted.
+ */
+data class EpisodeAudio(
+    val url: String?,
+    /** "ALLOWED", "MANDATORY" or "NONE": whether the publisher's file exists. */
+    val passthrough: String,
+    /** Spotify's copy format ("MP4_128", "DO_NOT_USE"…); diagnostic only. */
+    val format: String,
+) {
+    /** A clear file we can store and play ourselves. */
+    val downloadable: Boolean get() = !url.isNullOrBlank() && !passthrough.equals("NONE", ignoreCase = true)
+}
 
 data class Audiobook(
     val uri: Uri,

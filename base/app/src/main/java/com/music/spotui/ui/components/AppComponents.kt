@@ -22,6 +22,8 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.BluetoothAudio
+import androidx.compose.material.icons.filled.Headphones
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Slider
@@ -53,6 +55,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavHostController
 import com.bumptech.glide.integration.compose.ExperimentalGlideComposeApi
+import com.bumptech.glide.integration.compose.CrossFade
 import com.bumptech.glide.integration.compose.GlideImage
 import com.bumptech.glide.integration.compose.placeholder
 import app.myspoti.engine.R
@@ -137,6 +140,15 @@ fun MiniPlayer(navController: NavHostController) {
     val liked = vm.likeState.value
     val np by SongPlayer.nowPlaying
     val context = LocalContext.current
+    // A29: where the sound goes when it is not this phone's speaker. rememberAudioRoute
+    // follows devices coming and going, so plugging a headset or getting in the car
+    // updates the label without the screen reopening.
+    val route = rememberAudioRoute()
+    val routeLabel = when (route.kind) {
+        AudioRoute.Kind.SPEAKER -> null
+        AudioRoute.Kind.BLUETOOTH -> route.name.ifBlank { stringResource(R.string.label_bluetooth) }
+        AudioRoute.Kind.WIRED -> stringResource(R.string.headphones)
+    }
 
     // Card tint from the cover — extracted once per cover, not on every recomposition.
     var tint by remember { mutableStateOf(Palette.cachedFirst(songCoverUri) ?: Color(0xFF2A2A2A)) }
@@ -147,6 +159,9 @@ fun MiniPlayer(navController: NavHostController) {
             Palette().extractSecondColorFromCoverUrl(context, songCoverUri) { }
         }
     }
+
+    // A new song cross-fades the card's colour instead of snapping to it.
+    val animatedTint by androidx.compose.animation.animateColorAsState(tint, androidx.compose.animation.core.tween(400), label = "miniTint")
 
     // The Canvas of the song playing is looked up and loaded now, so the full player
     // opens on it directly instead of showing the cover first.
@@ -182,8 +197,7 @@ fun MiniPlayer(navController: NavHostController) {
         modifier = Modifier.pressable(0.96f) { com.music.spotui.ui.navigation.PlayerSheet.show() }
             .padding(horizontal = 8.dp)
             .clip(RoundedCornerShape(8.dp))
-            .background(tint)
-            
+            .background(animatedTint)
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
@@ -197,8 +211,12 @@ fun MiniPlayer(navController: NavHostController) {
                 modifier = Modifier.weight(1f),
             ) { page ->
                 val s = when (page) { 0 -> np.prev; 2 -> np.next; else -> null }
+                // T4: during an ad break the page publishes no track, so the song before it
+                // would sit in the mini player; an explicit ad state is shown instead.
+                val adPlaying = com.music.spotui.di.SongPlayer.adPlaying
                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
                     GlideImage(
+                        transition = CrossFade,
                         modifier = Modifier
                             .size(40.dp)
                             .clip(RoundedCornerShape(4.dp)),
@@ -211,8 +229,28 @@ fun MiniPlayer(navController: NavHostController) {
                     val remote = SongPlayer.activeDevice.value
                     Column(modifier = Modifier.padding(start = 12.dp, end = 8.dp)) {
                         if (remote == null) {
-                            Text(text = s?.title ?: songTitle, color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
-                            Text(text = s?.singer ?: songSinger, color = Color.White.copy(alpha = 0.7f), fontSize = 13.sp, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                            Text(text = if (adPlaying) stringResource(R.string.ad_playing) else (s?.title ?: songTitle), color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                            if (!adPlaying) Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                                // The artist yields the width: the output's name stays whole.
+                                Text(
+                                    text = s?.singer ?: songSinger, color = Color.White.copy(alpha = 0.7f), fontSize = 13.sp,
+                                    maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                                    modifier = Modifier.weight(1f, fill = false),
+                                )
+                                if (routeLabel != null) {
+                                    Icon(
+                                        imageVector = if (route.kind == AudioRoute.Kind.BLUETOOTH) Icons.Filled.BluetoothAudio else Icons.Filled.Headphones,
+                                        contentDescription = stringResource(R.string.playing_on),
+                                        tint = Color.White.copy(alpha = 0.55f),
+                                        modifier = Modifier.padding(start = 6.dp).size(12.dp),
+                                    )
+                                    Text(
+                                        text = routeLabel, color = Color.White.copy(alpha = 0.55f), fontSize = 11.sp,
+                                        maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                                        modifier = Modifier.padding(start = 3.dp).widthIn(max = 110.dp),
+                                    )
+                                }
+                            }
                         } else {
                             // Playing on another device: "Title • Artist", then the device in green.
                             Text(
@@ -248,9 +286,8 @@ fun MiniPlayer(navController: NavHostController) {
             Spacer(modifier = Modifier.width(20.dp))
             if (!com.music.spotui.di.LocalPlayer.active.value) com.music.spotui.ui.screens.AddButton(song = { com.music.spotui.ui.screens.nowPlayingSong(vm) }, liked = liked, size = 24.dp) { vm.updateLikeState(true) }
             Spacer(modifier = Modifier.width(20.dp))
-            Icon(
-                painter = if (songPlayingState) painterResource(id = R.drawable.ic_playing)
-                    else painterResource(id = R.drawable.play_svgrepo_com),
+            com.music.spotui.ui.components.PlayPauseIcon(
+                playing = songPlayingState,
                 contentDescription = if (songPlayingState) stringResource(R.string.content_description_pause_button) else stringResource(R.string.content_description_play_button),
                 tint = Color.White,
                 modifier = Modifier.pressable(0.96f) {

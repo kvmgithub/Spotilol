@@ -23,26 +23,38 @@ data class OfflineTrack(
     val file: String,
     /** Cover file name in the covers folder, empty when it could not be fetched. */
     val cover: String,
-    /** Where the audio came from (YouTube watch URL). */
+    /** Where the audio came from (YouTube watch URL, or the podcast publisher). */
     val source: String,
     /** The audio was checked against the recording's official preview. */
     val verified: Boolean,
     val bytes: Long,
     val addedAt: Long,
+    /**
+     * Music or podcast episode. Entries written before this field existed are music, so an
+     * older index stays valid (and its files are not swept as strays).
+     */
+    val kind: String = KIND_MUSIC,
 ) {
+    val isEpisode: Boolean get() = kind == KIND_PODCAST
+
     fun toJson(): JSONObject = JSONObject()
         .put("id", trackId).put("title", title).put("artist", artist).put("album", album)
         .put("albumId", albumId).put("duration", durationMs).put("coverUrl", coverUrl)
         .put("file", file).put("cover", cover).put("source", source).put("verified", verified)
-        .put("bytes", bytes).put("added", addedAt)
+        .put("bytes", bytes).put("added", addedAt).put("kind", kind)
 
     companion object {
+        const val KIND_MUSIC = "MUSIC"
+        const val KIND_PODCAST = "PODCAST"
+
         fun fromJson(o: JSONObject) = OfflineTrack(
             trackId = o.getString("id"), title = o.optString("title"), artist = o.optString("artist"),
             album = o.optString("album"), albumId = o.optString("albumId"), durationMs = o.optLong("duration"),
             coverUrl = o.optString("coverUrl"), file = o.getString("file"), cover = o.optString("cover"),
             source = o.optString("source"), verified = o.optBoolean("verified"), bytes = o.optLong("bytes"),
             addedAt = o.optLong("added"),
+            // Absent in an index written before podcasts: those entries are all music.
+            kind = o.optString("kind").ifBlank { KIND_MUSIC },
         )
     }
 }
@@ -116,6 +128,8 @@ object OfflineStore {
     /** The index before the last write, the fallback when [indexFile] is damaged. */
     private val backupFile: File get() = File(root, "index.json.bak")
     internal val pendingFile: File get() = File(root, "pending.json")
+    /** The podcast queue: kept apart so a restart resumes episodes without touching music. */
+    internal val podcastPendingFile: File get() = File(root, "podcasts-pending.json")
     val tmpDir: File get() = File(root, "tmp").apply { mkdirs() }
 
     fun isDownloaded(trackId: String) = trackId.isNotBlank() && tracks.containsKey(trackId)
@@ -186,7 +200,10 @@ object OfflineStore {
         id = "track:${t.trackId}".hashCode() and 0x7fffffff,
         title = t.title, album = t.album, singer = t.artist,
         coverUri = coverFile(t)?.let { Uri.fromFile(it).toString() } ?: t.coverUrl,
-        url = "spotify:track:${t.trackId}", spotifyTrackId = t.trackId,
+        // An episode is keyed "episode:<id>" and must keep that url (playback, download state);
+        // it has no Spotify track id, and giving it one would send it down the track paths.
+        url = if (t.isEpisode) t.trackId else "spotify:track:${t.trackId}",
+        spotifyTrackId = if (t.isEpisode) "" else t.trackId,
         durationMs = t.durationMs.toInt(), albumId = t.albumId,
     )
 

@@ -27,6 +27,7 @@ import com.music.spotui.data.entity.HomeSection
 import com.music.spotui.data.entity.LibraryEntry
 import com.music.spotui.data.entity.PodcastModel
 import com.music.spotui.data.entity.SearchResults
+import com.music.spotui.data.entity.ShowPage
 import com.music.spotui.data.entity.SongsModel
 import com.music.spotui.di.Graph
 import com.music.spotui.di.SongPlayer
@@ -36,6 +37,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.withTimeoutOrNull
+import kotlinx.serialization.json.contentOrNull
 
 /**
  * The UI's data source, over [MyspotiApi]. Keeps the `Flow<Response<...>>` contract the
@@ -60,6 +62,12 @@ class Api constructor(
         const val DOWNLOADS_ID = "downloads"
         /** "Your Episodes" (saved podcast episodes). */
         const val EPISODES_ID = "your-episodes"
+        /** "Recently played": Spotify's own list for the account, pinned in the library. */
+        const val RECENT_ID = "recently-played"
+        /** Pages of 50 asked for a show's episodes / chapters, at most (500 rows). */
+        const val MAX_EPISODE_PAGES = 10
+        /** The page's collection set behind its "Mark as finished" menu. */
+        private const val MARKED_FINISHED = "markedasfinished"
         @Volatile var albums: List<AlbumsModel>? = null
         @Volatile var artists: List<ArtistsModel>? = null
         @Volatile var home: HomeFeedModel? = null
@@ -173,6 +181,14 @@ class Api constructor(
             coverUri = cover(e.images).ifBlank { cover(e.show?.images.orEmpty()) },
             url = "episode:$id",
             durationMs = e.durationMs.toInt(),
+            // No spotifyTrackId on purpose: an episode is keyed by its "episode:<id>" url
+            // everywhere (download, playback). "playable" is what the downloader refuses on.
+            playable = e.playable,
+            description = e.description.orEmpty(),
+            releaseDate = e.releaseDate.orEmpty(),
+            played = e.played,
+            playedPositionMs = e.playedPositionMs,
+            showId = e.show?.uri?.substringAfterLast(':').orEmpty(),
         )
     }
 
@@ -368,6 +384,128 @@ class Api constructor(
         return runCatching { api.podcasts.show("spotify:show:$showId") }.getOrNull()?.let {
             PodcastModel(showId, it.name, it.publisher, big(it.images))
         }
+    }
+
+    /**
+     * The show page: header and rows in one flow, so the screen has a single loading state.
+     *
+     * A podcast answers [app.myspoti.api.Podcasts.episodes]; a book answers nothing there and
+     * only has chapters, which is why its page used to show a cover and a title and nothing
+     * else (B13).
+     */
+    suspend fun getShowPage(showId: String): Flow<Response<ShowPage>> = flow {
+        emit(Response.Loading())
+        if (!ready()) { emit(Response.Error(notSignedIn())); return@flow }
+        val uri = "spotify:show:$showId"
+        val head = runCatching { api.podcasts.show(uri) }.getOrNull()
+        val rows = ArrayList<SongsModel>()
+        var failure: Throwable? = null
+        var audiobook = false
+        var book: app.myspoti.api.Audiobook? = null
+
+        try {
+            var offset = 0
+            loop@ for (page in 0 until MAX_EPISODE_PAGES) {
+                val p = api.podcasts.episodes(uri, offset, 50)
+                if (p.items.isEmpty()) break@loop
+                rows += p.items.map(::episodeSong)
+                emit(Response.Success(pageOf(showId, head, book, rows, audiobook = false)))
+                offset = p.nextOffset ?: break@loop
+            }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            failure = e
+        }
+
+        if (rows.isEmpty()) {
+            // A book: its chapters come from queryBookChapters, not from the episodes query.
+            audiobook = true
+            book = runCatching { api.podcasts.audiobook(uri) }.getOrNull()
+            try {
+                var offset = 0
+                loop@ for (page in 0 until MAX_EPISODE_PAGES) {
+                    val p = api.podcasts.chapters(uri, offset, 50)
+                    if (p.items.isEmpty()) break@loop
+                    rows += p.items.map(::episodeSong)
+                    emit(Response.Success(pageOf(showId, head, book, rows, audiobook = true)))
+                    offset = p.nextOffset ?: break@loop
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                if (rows.isEmpty()) failure = e
+            }
+        }
+
+        if (rows.isEmpty() && failure != null) {
+            Log.e("Api", "getShowPage failed", failure)
+            emit(Response.Error(failure.message ?: "error"))
+            return@flow
+        }
+        SongPlayer.registerContext(rows.map { it.url }, uri)
+        emit(Response.Success(pageOf(showId, head, book, rows, audiobook)))
+    }
+
+    private fun pageOf(
+        showId: String,
+        head: app.myspoti.api.Show?,
+        book: app.myspoti.api.Audiobook?,
+        rows: List<SongsModel>,
+        audiobook: Boolean,
+    ): ShowPage {
+        val cover = head?.let { big(it.images) }.orEmpty()
+            .ifBlank { book?.images?.let(::big).orEmpty() }
+            .ifBlank { rows.firstOrNull()?.coverUri.orEmpty() }
+        val model = PodcastModel(
+            id = showId,
+            name = head?.name ?: book?.name ?: rows.firstOrNull()?.album.orEmpty(),
+            publisher = head?.publisher?.takeIf { it.isNotBlank() }
+                ?: book?.authors?.joinToString(", ").orEmpty(),
+            coverUri = cover,
+            description = head?.description ?: book?.description.orEmpty(),
+            rating = head?.rating ?: 0.0,
+            saved = head?.saved == true,
+            authors = book?.authors.orEmpty(),
+            narrators = book?.narrators.orEmpty(),
+            audiobook = audiobook,
+        )
+        return ShowPage(model, rows, audiobook, cover)
+    }
+
+    /** One episode (or chapter) by raw Spotify id, for the episode page. */
+    suspend fun getEpisode(episodeId: String): SongsModel? {
+        if (!ready()) return null
+        return runCatching { episodeSong(api.podcasts.episode("spotify:episode:$episodeId")) }.getOrNull()
+    }
+
+    /**
+     * Marks an episode finished, or not started. The page keeps this in its own
+     * "markedasfinished" collection — the set behind its "Mark as finished" menu — so the
+     * change follows the account like Spotify's own menu does.
+     */
+    suspend fun setEpisodePlayed(episodeUri: String, played: Boolean) {
+        if (episodeUri.isBlank()) return
+        MyspotiRuntime.spotify.raw.service(
+            "CollectionPlatformAPI",
+            if (played) "add" else "remove",
+            kotlinx.serialization.json.JsonPrimitive(MARKED_FINISHED),
+            kotlinx.serialization.json.JsonArray(listOf(kotlinx.serialization.json.JsonPrimitive(episodeUri))),
+        )
+    }
+
+    /** Raw uris the page has in its "markedasfinished" set (empty when it refuses). */
+    suspend fun finishedEpisodes(): Set<String> {
+        if (!ready()) return emptySet()
+        // The page's get() throws on an empty set: that simply means nothing is marked.
+        val raw = runCatching {
+            MyspotiRuntime.spotify.raw.service(
+                "CollectionPlatformAPI", "get", kotlinx.serialization.json.JsonPrimitive(MARKED_FINISHED),
+            )
+        }.getOrNull()
+        return (raw as? kotlinx.serialization.json.JsonArray).orEmpty()
+            .mapNotNull { (it as? kotlinx.serialization.json.JsonPrimitive)?.contentOrNull }
+            .toSet()
     }
 
     /** "Your Episodes": saved podcast episodes. */

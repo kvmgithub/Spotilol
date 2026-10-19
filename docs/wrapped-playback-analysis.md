@@ -39,7 +39,7 @@ SemanticMetric / KmPageView — analytics produit, pas de comptage d'écoute.
   honnêtement dans le README (« no altered listening events » → « real listens
   only, no fabricated events »).
 
-## Décisions ouvertes (posées à Dani le 16/10, sans réponse)
+## Décisions ouvertes (posées le 16/10, sans réponse)
 
 1. Niveau d'honnêteté : écoutes réelles seules / + queue offline / match parfait des shapes.
 2. sub_state qualité : reproduire 128k/HIGH/format 10 (comme le Web Player) ou valeurs réelles FLAC.

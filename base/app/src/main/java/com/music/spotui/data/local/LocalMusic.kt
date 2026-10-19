@@ -56,9 +56,18 @@ object LocalMusic {
             MediaStore.Audio.Media.RELATIVE_PATH,
         )
         val out = ArrayList<LocalTrack>()
+        // Android's index decides what is "music": a phone full of recorded or downloaded audio can
+        // come back empty while another player lists those very files (reported: 29 tracks with a
+        // third-party player, none here). Anything long enough to be a song is therefore listed too,
+        // minus the system folders whose sounds are not music.
+        val notSystem = listOf("Ringtones", "Notifications", "Alarms", "Android")
+            .joinToString(" AND ") { "${MediaStore.Audio.Media.RELATIVE_PATH} NOT LIKE '$it/%'" }
+        val selection = "(${MediaStore.Audio.Media.IS_MUSIC} != 0 AND ${MediaStore.Audio.Media.DURATION} >= 30000)" +
+            " OR (${MediaStore.Audio.Media.DURATION} >= 20000" +
+            " AND ${MediaStore.Audio.Media.RELATIVE_PATH} IS NOT NULL AND $notSystem)"
         context.contentResolver.query(
             collection, projection,
-            "${MediaStore.Audio.Media.IS_MUSIC} != 0 AND ${MediaStore.Audio.Media.DURATION} >= 30000",
+            selection,
             null, "${MediaStore.Audio.Media.TITLE} COLLATE NOCASE ASC",
         )?.use { c ->
             val iId = c.getColumnIndexOrThrow(MediaStore.Audio.Media._ID)

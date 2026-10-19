@@ -89,6 +89,13 @@ class PlaybackService : MediaBrowserServiceCompat() {
         session = MediaSessionCompat(this, "Myspoti").apply {
             setCallback(callback)
             setSessionActivity(launchIntent())
+            // Android Auto binds on a cold start, before the app has pushed any state: a
+            // session without a playback state gives the car no play button, and no command
+            // is ever sent (issue #41). Paused with the full action set: the car can play.
+            setPlaybackState(PlaybackStateCompat.Builder()
+                .setActions(ACTIONS)
+                .setState(PlaybackStateCompat.STATE_PAUSED, 0L, 0f)
+                .build())
             isActive = true
         }
         sessionToken = session.sessionToken
@@ -163,12 +170,7 @@ class PlaybackService : MediaBrowserServiceCompat() {
             else -> PlaybackStateCompat.STATE_PAUSED
         }
         session.setPlaybackState(PlaybackStateCompat.Builder()
-            .setActions(
-                PlaybackStateCompat.ACTION_PLAY or PlaybackStateCompat.ACTION_PAUSE or PlaybackStateCompat.ACTION_PLAY_PAUSE or
-                    PlaybackStateCompat.ACTION_SKIP_TO_NEXT or PlaybackStateCompat.ACTION_SKIP_TO_PREVIOUS or
-                    PlaybackStateCompat.ACTION_SEEK_TO or PlaybackStateCompat.ACTION_PLAY_FROM_MEDIA_ID or
-                    PlaybackStateCompat.ACTION_PLAY_FROM_SEARCH
-            )
+            .setActions(ACTIONS)
             // Like on the left of previous / play / next, shuffle on the right: five buttons, so
             // play / pause sits in the middle (lock screen, Samsung Now Bar, Android 13+ shade).
             .addCustomAction(ACTION_LIKE, if (info.liked) "Unlike" else "Like",
@@ -313,14 +315,30 @@ class PlaybackService : MediaBrowserServiceCompat() {
         if (parentId == EMPTY_ROOT_ID || !callerMayBrowse()) return result.sendResult(mutableListOf())
         val lib = library ?: return result.sendResult(mutableListOf())
         result.detach()
-        scope.launch { result.sendResult(runCatching { lib.children(this@PlaybackService, parentId).toMutableList() }.getOrElse { mutableListOf() }) }
+        scope.launch {
+            val outcome = runCatching { lib.children(this@PlaybackService, parentId).toMutableList() }
+            val items = outcome.getOrNull()
+            if (items == null) {
+                // The library waits for the player itself; reaching here means it never came
+                // up. MediaBrowserCompat has no error reply on API 26+ (sendError throws), so
+                // an empty list is the only answer: the log names the cause of a cold start
+                // that failed (#41), and the folder loads on the next browse.
+                android.util.Log.w("Myspoti", "browse $parentId: ${outcome.exceptionOrNull()?.message}")
+            }
+            result.sendResult(items ?: mutableListOf())
+        }
     }
 
     override fun onSearch(query: String, extras: Bundle?, result: Result<MutableList<MediaBrowserCompat.MediaItem>>) {
         if (!callerMayBrowse()) return result.sendResult(mutableListOf())
         val lib = library ?: return result.sendResult(mutableListOf())
         result.detach()
-        scope.launch { result.sendResult(runCatching { lib.search(query).toMutableList() }.getOrElse { mutableListOf() }) }
+        scope.launch {
+            val outcome = runCatching { lib.search(query).toMutableList() }
+            val items = outcome.getOrNull()
+            if (items == null) android.util.Log.w("Myspoti", "search: ${outcome.exceptionOrNull()?.message}")
+            result.sendResult(items ?: mutableListOf())
+        }
     }
 
     /** The app itself, the listed browsers, and system apps may browse the library. */
@@ -345,10 +363,18 @@ class PlaybackService : MediaBrowserServiceCompat() {
         private const val NOTIFICATION_ID = 1
         private const val ACTION_LIKE = "like"
         private const val ACTION_SHUFFLE = "shuffle"
+        /** Everything the car, the lock screen and the notification may ask for. */
+        private val ACTIONS = PlaybackStateCompat.ACTION_PLAY or PlaybackStateCompat.ACTION_PAUSE or PlaybackStateCompat.ACTION_PLAY_PAUSE or
+            PlaybackStateCompat.ACTION_SKIP_TO_NEXT or PlaybackStateCompat.ACTION_SKIP_TO_PREVIOUS or
+            PlaybackStateCompat.ACTION_SEEK_TO or PlaybackStateCompat.ACTION_PLAY_FROM_MEDIA_ID or
+            PlaybackStateCompat.ACTION_PLAY_FROM_SEARCH
         private val http = app.myspoti.spotify.security.BoundedHttp.client(OkHttpClient(), callTimeoutSeconds = 20)
 
         @Volatile private var instance: PlaybackService? = null
         @Volatile private var current: NowPlayingInfo? = null
+
+        /** True while the service runs (its notification is up): the app may be in the background. */
+        val isRunning: Boolean get() = instance != null
 
         private const val PAUSE_GRACE_MS = 60_000L
         /** A state that did not change is republished at most that often (see [update]). */

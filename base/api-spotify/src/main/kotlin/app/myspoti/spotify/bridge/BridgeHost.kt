@@ -32,11 +32,12 @@ object BridgeScript {
 }
 
 /**
- * Audio ads. Spotify's server puts them in the player's queue (track-playback state machine),
- * each with an audio file in a format of its own. The player registers itself without those
- * formats ([withoutAdFormats]), so an ad comes with nothing to play; the ad audio host is
- * refused as well. The player then halts at the end of the song before the ad, and
- * [app.myspoti.spotify.SpotifyPlayer] starts the next song.
+ * Audio ads. Spotify's server puts them in the player's queue (track-playback state machine).
+ * The page's own ad managers are switched off from the bridge (`ads.off`), the ad media and
+ * Spotify's ad hosts are refused here, and an ad that still shows up is muted and skipped by
+ * [app.myspoti.spotify.SpotifyPlayer]. The device registration is left as the Web Player
+ * sends it: removing the ad formats from it was the suspected cause of `402 COMMAND_FAILED`
+ * refusals for free accounts (Myspoti 2.0.0-beta.9).
  */
 object AdBlock {
     /**
@@ -91,20 +92,30 @@ object AdBlock {
 
     fun isBlocked(url: String): Boolean = isAd(url) || isTelemetry(url)
 
-    /** Formats only ads use: the ad mp3 links and the ad manifests. Songs and episodes use others. */
-    val adFormats = setOf("manifest_urls_audio_ad", "file_urls_mp3")
-
-    /** The player's registration (POST track-playback/v1/devices), to rewrite with [withoutAdFormats]. */
+    /** The player's registration (POST track-playback/v1/devices); see [withDeviceName]. */
     fun isDeviceRegistration(method: String, url: String): Boolean =
         method.equals("POST", ignoreCase = true) && url.substringBefore('?').endsWith("/track-playback/v1/devices")
 
-    /** [body] (the registration JSON) without [adFormats] in its manifest formats; unchanged when unreadable. */
-    fun withoutAdFormats(body: String): String = runCatching {
-        val root = Json.parseToJsonElement(body).jsonObject
-        val device = root["device"]?.jsonObject ?: return body
-        val caps = device["capabilities"]?.jsonObject ?: return body
-        val formats = caps["manifest_formats"]?.jsonArray ?: return body
-        val kept = JsonArray(formats.filter { (it as? JsonPrimitive)?.contentOrNull !in adFormats })
-        JsonObject(root + ("device" to JsonObject(device + ("capabilities" to JsonObject(caps + ("manifest_formats" to kept)))))).toString()
+    /**
+     * The name the player registers itself under is the name Spotify shows on every other device.
+     * The Web Player's own ("Web Player (Chrome)") is replaced by the name the phone already has,
+     * so this client appears as the phone it runs on; **nothing else is touched** — capabilities,
+     * platform, versions stay byte-for-byte what the real Web Player sends.
+     *
+     * An earlier version also removed `manifest_urls_audio_ad` from the manifest formats, which made
+     * this registration the only one of its kind (the real one declares it twice) and was the prime
+     * suspect for the `402 COMMAND_FAILED` refusals. Ads are blocked at the URL level instead
+     * ([blockedHosts]), not by lying about what this client can play.
+     */
+    fun withDeviceName(body: String, name: String): String = runCatching {
+        val device = Json.parseToJsonElement(body).jsonObject["device"]?.jsonObject ?: return body
+        val raw = device["name"] as? kotlinx.serialization.json.JsonPrimitive ?: return body
+        if (raw is kotlinx.serialization.json.JsonNull) return body
+        val old = raw.content
+        if (old.isBlank() || old == name || name.isBlank()) return body
+        // A plain string swap, not a re-serialisation: the registration keeps its exact shape,
+        // duplicate array entries included.
+        val quoted = name.replace("\\", "\\\\").replace("\"", "\\\"")
+        body.replace("\"$old\"", "\"$quoted\"")
     }.getOrDefault(body)
 }

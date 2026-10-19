@@ -22,6 +22,9 @@ object MyspotiRuntime {
     val api: MyspotiApi get() = spotify
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
+    /** Spotify reachable: the system network plus the outcome of the relay's requests. */
+    val network = app.myspoti.spotify.NetworkHealth()
+
     val isStarted: Boolean get() = ::host.isInitialized
     val loginRequired: StateFlow<Boolean> get() = host.loginRequired
 
@@ -37,6 +40,8 @@ object MyspotiRuntime {
         host.onPageLoaded = { scope.launch { spotify.onPageLoaded() } }
         host.onPageStarting = { spotify.onPageStarting() }
         spotify.player.reloadHost = { host.reload() }
+        spotify.player.online = network::online
+        watchNetwork(context)
         // The bridge, the page and the player in Logcat (diagnostics of a bug report): what
         // changes is logged when it changes, not once every 10 s whether or not anything happened.
         scope.launch {
@@ -57,6 +62,37 @@ object MyspotiRuntime {
         // New Spotify build: pick up its operation hashes (public bundles, no account).
         scope.launch {
             runCatching { updater.refresh(spotify.opsInUse) }.getOrNull()?.let(spotify::updateOps)
+        }
+    }
+
+    /**
+     * Follows the default network: lost means offline; a different network (Wi-Fi to mobile
+     * data, a VPN reconnect) drops the pooled connections, which would otherwise hang until
+     * their timeout on the old route.
+     */
+    private fun watchNetwork(context: Context) {
+        val cm = context.getSystemService(android.net.ConnectivityManager::class.java) ?: return
+        runCatching {
+            cm.registerDefaultNetworkCallback(object : android.net.ConnectivityManager.NetworkCallback() {
+                private var current: android.net.Network? = null
+                private var started = false
+
+                override fun onCapabilitiesChanged(n: android.net.Network, caps: android.net.NetworkCapabilities) {
+                    network.systemOnline = caps.hasCapability(android.net.NetworkCapabilities.NET_CAPABILITY_INTERNET)
+                    if (n == current) return
+                    current = n
+                    app.myspoti.spotify.security.BoundedHttp.pool.evictAll()
+                    if (started) WebPlayerHost.log("network changed: connections reset")
+                    started = true
+                }
+
+                override fun onLost(n: android.net.Network) {
+                    network.systemOnline = false
+                    current = null
+                    app.myspoti.spotify.security.BoundedHttp.pool.evictAll()
+                    WebPlayerHost.log("network lost")
+                }
+            })
         }
     }
 

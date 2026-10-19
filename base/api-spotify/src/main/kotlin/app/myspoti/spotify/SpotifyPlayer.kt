@@ -79,6 +79,13 @@ class SpotifyPlayer(private val bridge: Bridge, private val scope: CoroutineScop
     /** Reloads the Web Player page (set by the host); used when a stalled player does not recover. */
     @Volatile var reloadHost: (suspend () -> Unit)? = null
 
+    /**
+     * Whether Spotify is reachable (set by the host). Offline, a song stuck at its end cannot
+     * be helped: the stall recovery waits instead of replaying and reloading every few seconds,
+     * and tries once when the network is back.
+     */
+    @Volatile var online: () -> Boolean = { true }
+
     /** Streaming quality ("auto", "low", "normal", "high", "very_high"), kept for every page load. */
     @Volatile var audioQuality: String = "auto"
         private set
@@ -270,6 +277,7 @@ class SpotifyPlayer(private val bridge: Bridge, private val scope: CoroutineScop
         var tick = 0
         var lastMediaTime = -1.0
         var silentSince = 0L
+        var waitingForNetwork = false
         while (true) {
             // A song plays (or an ad is on): the watcher looks every [WATCH_TICK_MS] to hear a
             // stall in seconds. Nothing plays: there is less to see, so it looks less often.
@@ -277,6 +285,13 @@ class SpotifyPlayer(private val bridge: Bridge, private val scope: CoroutineScop
             delay(if (quiet) WATCH_IDLE_TICK_MS else WATCH_TICK_MS)
             tick++
             if (!bridge.ready.value || ownReload) { key = null; attempts = 0; silentSince = 0L; continue }
+            if (!online()) {
+                if (!waitingForNetwork) bridge.logger?.invoke("offline: stall recovery waits for the network")
+                waitingForNetwork = true
+                key = null; attempts = 0; silentSince = 0L
+                continue
+            }
+            if (waitingForNetwork) { waitingForNetwork = false; bridge.logger?.invoke("network back: stall recovery resumes") }
             val now = System.currentTimeMillis()
             // The page answers nothing, not even a ping: frozen (a stuck renderer). Reloaded
             // at once, the song going on where it was.

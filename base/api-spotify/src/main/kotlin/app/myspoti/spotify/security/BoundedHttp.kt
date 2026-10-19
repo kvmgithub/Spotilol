@@ -11,10 +11,14 @@ import java.util.concurrent.TimeUnit
 object BoundedHttp {
     const val MAX_RESPONSE_BYTES = 16 * 1024 * 1024
 
+    /** Shared by every client built here, so a network change can drop all dead connections. */
+    val pool = okhttp3.ConnectionPool()
+
     /** [base] without redirects (a 3xx comes back as is) and with a total call deadline. */
     fun client(base: OkHttpClient = OkHttpClient(), callTimeoutSeconds: Long = 45): OkHttpClient = base.newBuilder()
         .followRedirects(false)
         .followSslRedirects(false)
+        .connectionPool(pool)
         .connectTimeout(10, TimeUnit.SECONDS)
         .readTimeout(30, TimeUnit.SECONDS)
         .callTimeout(callTimeoutSeconds, TimeUnit.SECONDS)

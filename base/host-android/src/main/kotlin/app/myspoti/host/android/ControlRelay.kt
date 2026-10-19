@@ -96,11 +96,13 @@ internal class ControlRelay(private val view: WebView) {
         val label = "${request.method} ${shortPath(request.url.toString())}"
         http.newCall(request).enqueue(object : Callback {
             override fun onFailure(call: Call, e: IOException) {
+                MyspotiRuntime.network.failed()
                 android.util.Log.d(WebPlayerHost.LOG, "relay $label failed: ${e.javaClass.simpleName}")
                 answer(reply, id, 0, "{}", "")
             }
 
             override fun onResponse(call: Call, response: Response) {
+                MyspotiRuntime.network.succeeded()
                 response.use {
                     if (it.isRedirect || it.code in 300..399) {
                         android.util.Log.d(WebPlayerHost.LOG, "relay $label redirect ${it.code} rejected")

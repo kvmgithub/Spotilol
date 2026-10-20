@@ -6,6 +6,11 @@ Each version section is the text of the GitHub pre-release tagged `ui-v<version>
 
 ## [Unreleased]
 
+## [0.7.3] - 2026-10-20
+
+### Fixed
+- Crossfade: a short dropout when the fade ended. At that moment the new song moved from one audio path to the other and its reserve started with a speed change, both while it played at full level. The new song now stays on its own path from its first second, and its speed is set right at its start, under the fade-in; the next song change uses the other path. Speed changes during a song are also rarer.
+
 ## [0.7.2] - 2026-10-20
 
 ### Fixed

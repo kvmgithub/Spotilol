@@ -73,6 +73,8 @@ class Bridge(private val host: BridgeHost, scope: CoroutineScope) {
             "queue" -> _events.tryEmit("queue" to (msg["queue"] ?: JsonNull))
             // Spotify refused a playback command (HTTP 402/403 on Connect), see ControlRelay.
             "refused" -> _events.tryEmit("refused" to msg)
+            // The volume boost's probe: sound through Web Audio or not (see "volume boost").
+            "boost" -> _events.tryEmit("boost" to msg)
             "error" -> _ready.value = false
         }
     }

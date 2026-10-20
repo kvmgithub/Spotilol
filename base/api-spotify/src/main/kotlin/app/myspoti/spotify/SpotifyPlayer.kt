@@ -13,10 +13,13 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withTimeoutOrNull
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.addJsonObject
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.booleanOrNull
@@ -113,6 +116,7 @@ class SpotifyPlayer(private val bridge: Bridge, private val scope: CoroutineScop
                     "state" -> onState(playerState(payload))
                     "queue" -> queue(payload)?.let { q -> _queue.value = q.copy(nextUp = q.nextUp.filter { it.kind != ItemKind.AD }) }
                     "refused" -> onRefused()
+                    "boost" -> (payload as? JsonObject)?.let(::onBoost)
                 }
             }
         }
@@ -138,6 +142,7 @@ class SpotifyPlayer(private val bridge: Bridge, private val scope: CoroutineScop
                     runCatching { if (lost != null) resumeAfterReload(lost) else { delay(RESTORE_GAP_MS); playIntent() } }
                 }
                 if (audioQuality != "auto") applyAudioQuality()
+                if (boost > 1.0) applyBoost()
                 // The page keeps its volume: an app closed during a muted ad must not stay silent.
                 runCatching { if (volume() == 0.0) setVolume(wantedVolume?.takeIf { v -> v > 0.0 } ?: 1.0) }
                 // A reloaded page during an ad break plays the ad again: muted again at once.
@@ -1032,6 +1037,42 @@ class SpotifyPlayer(private val bridge: Bridge, private val scope: CoroutineScop
         (o["bitrate"]?.jsonPrimitive?.content?.toDoubleOrNull()?.toInt() ?: 0) to (o["mime"]?.jsonPrimitive?.content.orEmpty())
     }.getOrDefault(0 to "")
 
+    /**
+     * Volume boost, 1.0 (off) to [BOOST_MAX]: the page's audio through Web Audio, a gain and a
+     * limiter, on this phone only ("media.boost" in the bridge). Set again on every new page.
+     */
+    @Volatile var boost: Double = 1.0
+        private set
+
+    private val _boostSilent = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+    /** The boost turned itself off: no sound came through Web Audio on this page. */
+    val boostSilent: SharedFlow<Unit> = _boostSilent
+
+    suspend fun setBoost(level: Double) {
+        boost = level.coerceIn(1.0, BOOST_MAX)
+        if (bridge.ready.value) applyBoost()
+    }
+
+    private suspend fun applyBoost() {
+        runCatching { bridge.call("media.boost", buildJsonObject { put("level", boost) }) }
+            .onSuccess { bridge.logger?.invoke("boost $boost: $it") }
+            .onFailure { bridge.logger?.invoke("boost $boost not set: ${it.message}") }
+    }
+
+    /**
+     * The probe heard nothing while the page played (protected or cross-origin audio that
+     * Chromium keeps from Web Audio): the boost goes off, and a new page plays on where this
+     * one was, since only a reload takes the media element out of Web Audio again.
+     */
+    private fun onBoost(msg: JsonObject) {
+        // Also at 100 %: a page that has built the graph stays routed through it, silent or not.
+        if ((msg["sound"] as? JsonPrimitive)?.booleanOrNull != false) return
+        bridge.logger?.invoke("boost off: no sound through Web Audio, the page reloads")
+        boost = 1.0
+        _boostSilent.tryEmit(Unit)
+        scope.launch { reloadAndPlayOn(lastTrackState, next = false) }
+    }
+
     private suspend fun applyAudioQuality() {
         runCatching { bridge.call("player.setAudioQuality", buildJsonObject { put("level", audioQuality) }) }
             .onFailure { bridge.logger?.invoke("audio quality $audioQuality not set: ${it.message}") }
@@ -1076,6 +1117,8 @@ class SpotifyPlayer(private val bridge: Bridge, private val scope: CoroutineScop
         const val RESTORE_GAP_MS = 1_500L
         /** The media element read each tick; a page that cannot answer that fast is pinged. */
         const val MEDIA_TIMEOUT_MS = 3_000L
+        /** The highest volume boost: twice the level (+6 dB), see [setBoost]. */
+        const val BOOST_MAX = 2.0
         const val LEVEL_TIMEOUT_MS = 3_000L
         /** A song the page says it plays here while its media element stands still that long. */
         const val SILENT_MS = 6_000L

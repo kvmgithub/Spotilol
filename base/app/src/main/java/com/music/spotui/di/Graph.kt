@@ -2,6 +2,7 @@ package com.music.spotui.di
 
 import android.app.Application
 import app.myspoti.host.android.MyspotiRuntime
+import kotlinx.coroutines.launch
 import com.music.spotui.data.api.Api
 import com.music.spotui.ui.repository.AppRepository
 
@@ -20,6 +21,11 @@ object Graph {
         com.music.spotui.data.preferences.applyStreamingQuality(com.music.spotui.data.preferences.getStreamingQuality(application))
         // The crossfade length (0 = off), in the player from the first song on.
         com.music.spotui.data.preferences.applyCrossfade(com.music.spotui.data.preferences.getCrossfadeSeconds(application))
+        // The volume boost (100 % = off), and back to 100 % when no sound comes through it.
+        com.music.spotui.data.preferences.BoostPref.applyToPlayer()
+        if (MyspotiRuntime.isStarted) MyspotiRuntime.scope.launch {
+            MyspotiRuntime.spotify.player.boostSilent.collect { com.music.spotui.data.preferences.BoostPref.turnedOff(application) }
+        }
         com.music.spotui.data.local.ListenHistory.init(application)
         // Supporter accent colour state before any screen draws (no prompts in this variant).
         com.music.spotui.data.api.SupportReminder.init(application)

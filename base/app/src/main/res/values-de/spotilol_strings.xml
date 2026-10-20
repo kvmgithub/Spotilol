@@ -27,6 +27,11 @@
     <string name="spotilol_diagnostics_open">Protokoll anzeigen und kopieren</string>
     <string name="spotilol_diagnostics_open_detail">Letzte %1$d Minuten dieser App, geschwärzt</string>
 
+    <string name="spotilol_boost_title">Lautstärke-Verstärkung</string>
+    <string name="spotilol_boost_detail">Über 100 % läuft die Musik durch einen Verstärker mit Limiter, nur auf diesem Telefon. Mit Kopfhörern aufs Gehör achten: Die Lautstärkewarnung von Android sieht diese Verstärkung nicht.</string>
+    <string name="spotilol_boost_percent">%1$d\u00A0%%</string>
+    <string name="spotilol_boost_silent">Auf diesem Telefon kam kein Ton durch den Verstärker, deshalb ist er wieder aus. Details stehen im Diagnoseprotokoll.</string>
+
     <!-- German for Myspoti beta.9 texts that upstream ships in English only. If upstream adds them to
          values-de/myspoti_strings.xml, drop the duplicates here (the build fails on duplicate names). -->
     <string name="ad_playing">Werbung</string>

@@ -24,6 +24,7 @@ class Host:
         self.pending = {}
         self.states = []
         self.queues = 0
+        self.boosts = []
         self.ready = asyncio.Event()
 
     def on_message(self, raw):
@@ -35,6 +36,8 @@ class Host:
             self.states.append(msg["state"])
         elif kind == "queue":
             self.queues += 1
+        elif kind == "boost":
+            self.boosts.append(msg)
         elif kind == "result":
             fut = self.pending.pop(msg["id"], None)
             if fut and not fut.done():
@@ -208,8 +211,23 @@ async def test_state_events(h):
     assert any(s and s["track"] for s in h.states)
 
 
+async def test_boost(h):
+    # Last: a boosted page stays routed through Web Audio until it reloads.
+    await h.call("player.resume")
+    await h.wait_state(lambda s: not s["isPaused"])
+    r = await h.call("media.boost", level=1.5)
+    assert r["routed"] >= 1 and r["state"] == "running", r
+    for _ in range(15):
+        if h.boosts:
+            break
+        await asyncio.sleep(1)
+    assert h.boosts and h.boosts[0].get("sound") is True, f"no sound through Web Audio: {h.boosts}"
+    await h.call("media.boost", level=1)
+
+
 TESTS = [test_ready_and_state, test_token, test_play_context, test_pause_resume, test_seek,
-         test_next_previous, test_queue, test_volume, test_library, test_gql_search, test_services, test_state_events]
+         test_next_previous, test_queue, test_volume, test_library, test_gql_search, test_services, test_state_events,
+         test_boost]
 
 
 async def main():

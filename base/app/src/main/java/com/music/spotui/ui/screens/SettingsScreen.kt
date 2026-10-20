@@ -73,6 +73,7 @@ fun SettingsScreen(navController: NavController) {
                 onChecked = { com.music.spotui.data.preferences.AutoplayPref.set(ctx, it) },
             )
             CrossfadeRow()
+            BoostRow()
             Divider()
 
             Section(R.string.spotilol_section_accounts)
@@ -235,6 +236,45 @@ private fun CrossfadeRow() {
                 )
             }
         }
+    }
+}
+
+/**
+ * Volume boost: 100 % (off, the default) to 200 %, through a gain and a limiter in the page.
+ * A note replaces nothing: it only says when the player turned the boost off by itself.
+ */
+@Composable
+private fun BoostRow() {
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    val pref = com.music.spotui.data.preferences.BoostPref
+    androidx.compose.foundation.layout.Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 10.dp)) {
+        Text(stringResource(R.string.spotilol_boost_title), color = Color.White, fontSize = 16.sp)
+        Text(
+            stringResource(R.string.spotilol_boost_detail),
+            color = Color(0xFFB3B3B3), fontSize = 12.sp,
+            modifier = Modifier.padding(top = 2.dp),
+        )
+        Row(
+            horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(6.dp),
+            modifier = Modifier.padding(top = 10.dp),
+        ) {
+            for (v in listOf(100, 125, 150, 175, 200)) {
+                val selected = pref.percent == v
+                Text(
+                    stringResource(R.string.spotilol_boost_percent, v),
+                    color = if (selected) Color.Black else Color.White, fontSize = 14.sp,
+                    modifier = Modifier.clip(androidx.compose.foundation.shape.RoundedCornerShape(50))
+                        .background(if (selected) com.music.spotui.ui.theme.AppAccent else Color(0xFF2A2A2A))
+                        .clickable { pref.set(ctx, v) }
+                        .padding(horizontal = 10.dp, vertical = 8.dp),
+                )
+            }
+        }
+        if (pref.silent) Text(
+            stringResource(R.string.spotilol_boost_silent),
+            color = Color(0xFFB3B3B3), fontSize = 12.sp,
+            modifier = Modifier.padding(top = 8.dp),
+        )
     }
 }
 

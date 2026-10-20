@@ -6,6 +6,17 @@ Each version section is the text of the GitHub pre-release tagged `ui-v<version>
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-10-20
+
+Test release for the volume boost. Whether it works depends on the phone's WebView passing Spotify's protected audio to Web Audio, which only a device test can show.
+
+### Added
+- Volume boost (Settings → Playback): 100 % (off) to 200 %. Above 100 % the music plays through an amplifier with a limiter, on this phone only; other Spotify Connect devices are not affected. Android's volume warning does not see this boost.
+- If no sound comes through the amplifier during 10 seconds of playback, the app turns the boost off, reloads the player and plays on where it was; Settings then says so.
+
+### Diagnostics
+- New log lines: `boost …` (level, connected media elements, audio state) and `page boost: …` (sound through the amplifier or not, and the kind of audio source).
+
 ## [0.3.0] - 2026-10-20
 
 ### Changed

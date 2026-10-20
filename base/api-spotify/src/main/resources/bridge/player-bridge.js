@@ -11,6 +11,7 @@
  *   - window.__mspHostPost(json)            CDP Runtime.addBinding
  * Messages: {type: "ready"} | {type: "state", state} | {type: "queue", queue}
  *         | {type: "result", id, ok, value | error} | {type: "error", error}
+ *         | {type: "boost", sound, src, state | error}  (see "volume boost")
  *
  * The bridge only reads the page's own service registry; it patches nothing.
  */
@@ -220,6 +221,71 @@
   let fadeTimers = [];
   const cancelFade = () => { fadeTimers.forEach(clearTimeout); fadeTimers = []; };
 
+  // --- volume boost ---------------------------------------------------------
+  //
+  // Above 100 %: the page's media elements play through Web Audio, a gain and then a limiter
+  // (a compressor at -1 dBFS, ratio 20). An element routed into Web Audio cannot go back to
+  // direct output before the page reloads, so nothing is built until a boost above 1 is asked
+  // for, and at 1 the graph is neutral (gain 1, ratio 1). During an ad (window.__mspMuted) the
+  // gain is 0 as well, whatever Chromium does with the element's own volume in the graph.
+  //
+  // Whether Chromium hands Widevine-protected or cross-origin audio to Web Audio is not
+  // specified; silence is what it gives when it does not. A probe listens while an element
+  // plays: {type: 'boost', sound: true} once per page when sound comes through, sound: false
+  // after BOOST_SILENT_S seconds of playing in silence (the host then reloads the page).
+  const BOOST_MAX = 2;
+  const BOOST_SILENT_S = 10;
+  let boost = null;
+
+  const srcKind = el => {
+    const s = el.currentSrc || '';
+    if (s.startsWith('blob:')) return 'blob';
+    try { return new URL(s, location.href).origin === location.origin ? 'same-origin' : 'cross-origin'; } catch (e) { return 'none'; }
+  };
+
+  // Routes every media element the page played (and the player's own) into the graph, once.
+  const boostRoute = async () => {
+    if (!boost) return;
+    const player = await localPlayer().catch(() => null);
+    const els = new Set(window.__mspMedia || []);
+    if (player && player._player instanceof HTMLMediaElement) els.add(player._player);
+    for (const el of els) {
+      if (!(el instanceof HTMLMediaElement) || boost.routed.has(el)) continue;
+      boost.routed.add(el);
+      try {
+        boost.ctx.createMediaElementSource(el).connect(boost.gain);
+        boost.count++;
+      } catch (e) {
+        post({ type: 'boost', error: String(e && e.message || e).slice(0, 200) });
+      }
+    }
+    if (boost.ctx.state === 'suspended') boost.ctx.resume().catch(() => {});
+  };
+
+  const boostProbe = () => {
+    const buf = new Float32Array(boost.analyser.fftSize);
+    let silent = 0, last = -1, heard = false;
+    const timer = setInterval(async () => {
+      const player = await localPlayer().catch(() => null);
+      const el = player && player._player;
+      if (!(el instanceof HTMLMediaElement) || !boost.routed.has(el)) return;
+      const moving = !el.paused && el.currentTime !== last;
+      last = el.currentTime;
+      if (!moving || window.__mspMuted || el.volume < 0.05 || boost.gain.gain.value === 0) { silent = 0; return; }
+      boost.analyser.getFloatTimeDomainData(buf);
+      let peak = 0;
+      for (const v of buf) peak = Math.max(peak, Math.abs(v));
+      if (peak > 0.0001) {
+        silent = 0;
+        if (!heard) { heard = true; post({ type: 'boost', sound: true, src: srcKind(el), state: boost.ctx.state }); }
+        return;
+      }
+      if (++silent < BOOST_SILENT_S) return;
+      clearInterval(timer);
+      post({ type: 'boost', sound: false, src: srcKind(el), state: boost.ctx.state });
+    }, 1000);
+  };
+
   // "Is this page Spotify Connect's active device": a full device-list round trip, so it is
   // read at most once every ACTIVE_CACHE_MS and reused (a transfer happens minutes apart).
   const ACTIVE_CACHE_MS = 6000;
@@ -375,6 +441,7 @@
     'media.mute': async a => {
       cancelFade();
       window.__mspMuted = !!a.on;
+      if (boost) boost.gain.gain.value = a.on ? 0 : boost.level;
       const player = await localPlayer().catch(() => null);
       const els = new Set([...(window.__mspMedia || []), ...document.querySelectorAll('audio, video'), ...await playerMedia()]);
       for (const el of els) {
@@ -428,6 +495,31 @@
       fadeTimers = steps.map((v, i) => setTimeout(() => set(v), i * per));
       if (a.restore) fadeTimers.push(setTimeout(() => { el.volume = ownLevel(player); }, steps.length * per));
       return true;
+    },
+
+    // The volume boost (see "volume boost"): {level: 1..2} -> {level, routed, state}.
+    'media.boost': async a => {
+      const level = Math.min(BOOST_MAX, Math.max(1, Number(a.level) || 1));
+      if (!boost && level <= 1) return { level, routed: 0, state: 'off' };
+      if (!boost) {
+        const ctx = new AudioContext({ latencyHint: 'playback' });
+        const gain = ctx.createGain();
+        const limiter = ctx.createDynamicsCompressor();
+        limiter.knee.value = 0;
+        limiter.attack.value = 0.002;
+        limiter.release.value = 0.2;
+        const analyser = ctx.createAnalyser();
+        gain.connect(limiter).connect(ctx.destination);
+        gain.connect(analyser);
+        boost = { ctx, gain, limiter, analyser, level, routed: new WeakSet(), count: 0 };
+        boostProbe();
+      }
+      boost.level = level;
+      boost.gain.gain.value = window.__mspMuted ? 0 : level;
+      boost.limiter.threshold.value = level > 1 ? -1 : 0;
+      boost.limiter.ratio.value = level > 1 ? 20 : 1;
+      await boostRoute();
+      return { level, routed: boost.count, state: boost.ctx.state };
     },
 
     'volume.get': () => need().playback.getVolume(),
@@ -518,6 +610,8 @@
     if (json === lastState) return;
     lastState = json;
     post({ type: 'state', state });
+    // A new element (a new song, an ad) joins the boost.
+    if (boost) boostRoute();
   };
 
   const pushQueue = () => {

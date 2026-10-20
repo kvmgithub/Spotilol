@@ -26,4 +26,8 @@
     <string name="spotilol_about_lite_detail">AdNenio/Spotilol-Lite: the lean feature scope this app keeps</string>
     <string name="spotilol_diagnostics_open">Show and copy log</string>
     <string name="spotilol_diagnostics_open_detail">Last %1$d minutes of this app, redacted</string>
+    <string name="spotilol_boost_title">Volume boost</string>
+    <string name="spotilol_boost_detail">Above 100%, the music plays through an amplifier with a limiter, on this phone only. Mind your hearing with headphones: Android\'s volume warning does not see this boost.</string>
+    <string name="spotilol_boost_percent">%1$d%%</string>
+    <string name="spotilol_boost_silent">No sound came through the amplifier on this phone, so it is off again. The diagnostic log has the details.</string>
 </resources>

@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Spotilol-UI-eigene Texte (Deutsch). -->
+<!-- MySpotilol-eigene Texte (Deutsch). -->
 <resources>
     <string name="spotilol_section_accounts">Konten</string>
     <string name="spotilol_profile_save">Aktuelles Konto speichern</string>
@@ -17,11 +17,72 @@
     <string name="spotilol_profile_save_button">Speichern</string>
     <string name="spotilol_diagnostics_title">Diagnoseprotokoll</string>
     <string name="spotilol_diagnostics_detail">Blendet darunter den Protokolleintrag ein. Protokolle sind geschwärzt und verlassen das Gerät nur, wenn du sie kopierst oder teilst.</string>
-    <string name="spotilol_about_body">Die native Oberfläche von Myspoti mit dem Datenschutz- und Sicherheitsumfang von Spotilol Lite. Freie Software unter der GPL-3.0.</string>
+    <string name="spotilol_about_body">Die native Oberfläche von Myspoti mit dem Datenschutz- und Sicherheitsumfang von Spotilol und Spotilol Lite. Freie Software unter der GPL-3.0, nicht mit Spotify verbunden.</string>
     <string name="spotilol_about_source">Quellcode</string>
     <string name="spotilol_about_source_detail">kvmgithub/Spotilol, Branch myspoti-ui</string>
-    <string name="spotilol_about_upstream">Basiert auf Myspoti</string>
-    <string name="spotilol_about_upstream_detail">kota-zo/myspoti (GPL-3.0), Oberfläche aus Spotui und Metrolist</string>
+    <string name="spotilol_about_based_on">Basiert auf</string>
+    <string name="spotilol_about_myspoti_detail">kota-zo/myspoti: die native Oberfläche, mit UI aus Spotui und Metrolist</string>
+    <string name="spotilol_about_spotilol_detail">Original von lyssadev nach deviatos Spotifuck. Sicherheitsregeln, Blockliste und verschlüsselte Profile aus kvmgithub/Spotilol</string>
+    <string name="spotilol_about_lite_detail">AdNenio/Spotilol-Lite: der schlanke Funktionsumfang, den diese App beibehält</string>
     <string name="spotilol_diagnostics_open">Protokoll anzeigen und kopieren</string>
     <string name="spotilol_diagnostics_open_detail">Letzte %1$d Minuten dieser App, geschwärzt</string>
+
+    <!-- German for Myspoti beta.9 texts that upstream ships in English only. If upstream adds them to
+         values-de/myspoti_strings.xml, drop the duplicates here (the build fails on duplicate names). -->
+    <string name="ad_playing">Werbung</string>
+    <string name="track_unavailable_region">In deinem Land nicht verfügbar</string>
+    <string name="recently_played_empty">Was du mit diesem Konto hörst, erscheint hier.</string>
+    <string name="recently_played_failed">Zuletzt gehört konnte nicht geladen werden (%1$s)</string>
+    <string name="recents_title">Zuletzt gehört</string>
+    <string name="recents_detail">Was du gehört hast, auf allen Geräten</string>
+    <string name="recents_filter_music">Musik</string>
+    <string name="recents_filter_podcasts">Podcasts</string>
+    <string name="recents_today">Heute</string>
+    <string name="recents_yesterday">Gestern</string>
+    <string name="recents_played_one">1 Titel gespielt</string>
+    <string name="recents_played_many">%1$d Titel gespielt</string>
+    <string name="recents_saved_one">1 Titel hinzugefügt</string>
+    <string name="recents_saved_many">%1$d Titel hinzugefügt</string>
+    <string name="recents_expand">Titel anzeigen</string>
+    <string name="recents_collapse">Titel ausblenden</string>
+    <string name="context_menu_remove_from_playlist">Aus dieser Playlist entfernen</string>
+    <string name="context_menu_add_to_another_playlist">Zu einer anderen Playlist hinzufügen</string>
+    <string name="add_to_playlist_search_hint">Playlist suchen</string>
+    <string name="add_to_playlist_empty">Du hast keine Playlist, zu der sich dieser Titel hinzufügen lässt</string>
+    <string name="add_to_playlist_no_match">Keine Playlist passt zu „%1$s“</string>
+    <string name="undo">Rückgängig</string>
+    <string name="settings_crossfade_title">Überblenden (ausblenden, ohne Überlappung)</string>
+    <string name="settings_crossfade_detail">Ein Titel wird in seinen letzten Sekunden leiser, der nächste wird lauter. Beide laufen nie gleichzeitig: ein Player, ein Audiostream.</string>
+    <string name="settings_crossfade_off">Aus</string>
+    <string name="settings_crossfade_seconds">%1$d s</string>
+    <string name="show_follow">Folgen</string>
+    <string name="show_following">Gefolgt</string>
+    <string name="show_tab_episodes">Episoden</string>
+    <string name="show_tab_chapters">Kapitel</string>
+    <string name="show_tab_about">Info</string>
+    <string name="show_sort_newest">Alle Episoden • Neueste zuerst</string>
+    <string name="show_sort_oldest">Alle Episoden • Älteste zuerst</string>
+    <string name="show_sort_chapters_newest">Alle Kapitel • Neueste zuerst</string>
+    <string name="show_sort_chapters_oldest">Alle Kapitel • Älteste zuerst</string>
+    <string name="show_empty">Hier gibt es noch nichts zu hören</string>
+    <string name="show_authors">Von %1$s</string>
+    <string name="show_narrators">Gelesen von %1$s</string>
+    <string name="episode_duration_min">%1$d Min.</string>
+    <string name="episode_remaining">Noch %1$s</string>
+    <string name="episode_mark_played">Als gespielt markieren</string>
+    <string name="episode_mark_unplayed">Als nicht begonnen markieren</string>
+    <string name="episode_marked_played">Als gespielt markiert</string>
+    <string name="episode_marked_unplayed">Als nicht begonnen markiert</string>
+    <string name="episode_play">Abspielen</string>
+    <string name="episode_open">Episode öffnen</string>
+    <string name="episode_add_queue">Zur Warteschlange hinzufügen</string>
+    <string name="episode_show_more">mehr anzeigen</string>
+    <string name="episode_show_less">weniger anzeigen</string>
+    <string name="episode_options">Episodenoptionen</string>
+    <string name="episode_not_found">Episode nicht gefunden</string>
+    <string name="podcast_playing_from">Wiedergabe aus dem Podcast</string>
+    <string name="player_speed_chip">%1$s×</string>
+    <string name="player_back_15">15 Sekunden zurück</string>
+    <string name="player_forward_15">15 Sekunden vor</string>
+    <string name="player_sleep_timer">Sleep-Timer</string>
 </resources>

@@ -277,7 +277,7 @@ fun PlayerScreen(navController: NavController) {
     val coverAlpha = 1f - canvasProgress.value
     // A tap on the Canvas no longer needs its own mode: the immersive view below handles both
     // cases (Canvas playing or plain cover), so the Canvas-only fade ("chrome") is gone.
-    // No music videos in Spotilol UI (the YouTube clips are removed).
+    // No music videos in MySpotilol (the YouTube clips are removed).
     val videoOn = false
     // Pulled down from the top, the player closes, like the back button (issue #4).
     val pullToClose = com.music.spotui.ui.components.rememberPullToDismiss { com.music.spotui.ui.navigation.PlayerSheet.close() }

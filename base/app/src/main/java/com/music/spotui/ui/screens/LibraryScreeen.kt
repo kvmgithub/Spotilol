@@ -280,7 +280,7 @@ fun LibraryScreen(navController: NavController) {
                 val localName = stringResource(R.string.local_files_title)
                 val downloadsName = stringResource(R.string.collection_downloaded)
                 val localSubtitle = stringResource(R.string.assisted_curation_search_playlist) + " • " + stringResource(R.string.local_playlist_subtitle)
-                // Downloads are removed in Spotilol UI: the "Downloaded" folder never appears.
+                // Downloads are removed in MySpotilol: the "Downloaded" folder never appears.
                 val hasDownloads = false
                 val likedName = stringResource(R.string.collection_liked_songs_title)
                 // Liked Songs, Local Files and Downloaded stay on top; the rest follows the

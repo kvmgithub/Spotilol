@@ -3,10 +3,10 @@
 <resources>
     <string name="welcome_tagline">Η μουσική σου, με συγχρονισμένους στίχους και επίσημα μουσικά βίντεο.</string>
     <string name="welcome_login">Σύνδεση με Spotify</string>
-    <string name="welcome_privacy">Συνδέεσαι στη σελίδα του Spotify. Το Spotilol UI δεν βλέπει ποτέ τον κωδικό σου.</string>
-    <string name="crash_heading">Το Spotilol UI σταμάτησε να λειτουργεί</string>
+    <string name="welcome_privacy">Συνδέεσαι στη σελίδα του Spotify. Το MySpotilol δεν βλέπει ποτέ τον κωδικό σου.</string>
+    <string name="crash_heading">Το MySpotilol σταμάτησε να λειτουργεί</string>
     <string name="crash_explanation">Κάτι πήγε στραβά. Κάνε επανεκκίνηση της εφαρμογής· αν ξανασυμβεί, αντίγραψε την αναφορά και μοιράσου την σε ένα ζήτημα στο GitHub.</string>
-    <string name="crash_restart_app">Επανεκκίνηση του Spotilol UI</string>
+    <string name="crash_restart_app">Επανεκκίνηση του MySpotilol</string>
     <string name="crash_copy_report">Αντιγραφή αναφοράς</string>
     <string name="crash_report_copied">Η αναφορά αντιγράφηκε</string>
     <string name="remove_from_liked">Κατάργηση από τα τραγούδια που σου αρέσουν</string>
@@ -56,7 +56,7 @@
     <string name="local_files_none_subtitle">Δεν βρέθηκαν αρχεία ήχου που να μπορούν να παιχτούν σε αυτή τη συσκευή. Όταν υπάρχουν, θα εμφανίζονται εδώ.</string>
     <string name="downloads_empty_title">Κάνε λήψη για να ακούς εκτός σύνδεσης</string>
     <string name="downloads_empty_subtitle">Πάτα Λήψη στο μενού ενός τραγουδιού, ή το κουμπί λήψης ενός άλμπουμ ή μιας playlist.</string>
-    <string name="downloads_source">Lossless FLAC, ελεγμένο με την αρχική ηχογράφηση. Μένει αποθηκευμένο μόνο μέσα στο Spotilol UI.</string>
+    <string name="downloads_source">Lossless FLAC, ελεγμένο με την αρχική ηχογράφηση. Μένει αποθηκευμένο μόνο μέσα στο MySpotilol.</string>
     <string name="downloads_size">%1$s σε αυτό το τηλέφωνο</string>
     <string name="download_unavailable">Δεν βρέθηκε αντίστοιχη ηχογράφηση</string>
     <string name="download_retry">Δοκίμασε ξανά</string>
@@ -69,8 +69,8 @@
     <string name="browse_workout">Προπόνηση</string>
     <string name="browse_dance_electronic">Χορός/Ηλεκτρονική</string>
     <string name="language_auto">Αυτόματη</string>
-    <string name="language_auto_detail">Η γλώσσα του τηλεφώνου σου, όταν το Spotilol UI τη διαθέτει (αγγλικά, γαλλικά, γερμανικά, ελληνικά, ισπανικά, ιταλικά, πορτογαλικά), αλλιώς αγγλικά</string>
-    <string name="language_partial_note">Άλλες γλώσσες: οι ετικέτες του ίδιου του Spotify μεταφράζονται, τα κείμενα του Spotilol UI μένουν στα αγγλικά.</string>
+    <string name="language_auto_detail">Η γλώσσα του τηλεφώνου σου, όταν το MySpotilol τη διαθέτει (αγγλικά, γαλλικά, γερμανικά, ελληνικά, ισπανικά, ιταλικά, πορτογαλικά), αλλιώς αγγλικά</string>
+    <string name="language_partial_note">Άλλες γλώσσες: οι ετικέτες του ίδιου του Spotify μεταφράζονται, τα κείμενα του MySpotilol μένουν στα αγγλικά.</string>
     <string name="restart_player_title">Επανεκκίνηση του player</string>
     <string name="restart_player_detail">Αν η μουσική σταματήσει να ανταποκρίνεται: φορτώνει ξανά το player του Spotify</string>
     <string name="local_playlist_subtitle">Σε αυτή τη συσκευή</string>
@@ -84,21 +84,21 @@
     <string name="local_playlist_empty">Πρόσθεσε τραγούδια από τα Τοπικά αρχεία με το κουμπί + τους.</string>
     <string name="playlist_change_refused">Το Spotify απέρριψε την αλλαγή σε αυτή την playlist</string>
     <string name="download_kept_by_list">Εξακολουθεί να έχει ληφθεί: τη διατηρεί μια playlist που έχει ληφθεί</string>
-    <string name="support_title">Στήριξε το Spotilol UI</string>
-    <string name="support_body">Το Spotilol UI είναι δωρεάν, χωρίς διαφημίσεις, και φτιάχνεται στον ελεύθερο χρόνο μου. Αν σου αρέσει, μια μικρή δωρεά βοηθά να συνεχίσει.</string>
+    <string name="support_title">Στήριξε το MySpotilol</string>
+    <string name="support_body">Το MySpotilol είναι δωρεάν, χωρίς διαφημίσεις, και φτιάχνεται στον ελεύθερο χρόνο μου. Αν σου αρέσει, μια μικρή δωρεά βοηθά να συνεχίσει.</string>
     <string name="support_action">Στήριξε στο Ko-fi</string>
     <string name="support_decline">Όχι, ευχαριστώ</string>
     <string name="support_row_detail">Μια μικρή δωρεά στο Ko-fi ή στο GitHub Sponsors βοηθά την εφαρμογή να συνεχίσει</string>
     <string name="supporter_perks_title">Ανταμοιβές υποστηρικτή</string>
     <string name="supporter_perks_detail">Χρώμα τόνου, εικονίδιο εφαρμογής και σήμα, ως ευχαριστία</string>
-    <string name="supporter_perks_locked">Ξεκλειδώνεται με τη στήριξη του Spotilol UI. Βασίζεται στον λόγο σου: δεν ελέγχεται τίποτα.</string>
-    <string name="supporter_i_supported">Έχω στηρίξει το Spotilol UI</string>
+    <string name="supporter_perks_locked">Ξεκλειδώνεται με τη στήριξη του MySpotilol. Βασίζεται στον λόγο σου: δεν ελέγχεται τίποτα.</string>
+    <string name="supporter_i_supported">Έχω στηρίξει το MySpotilol</string>
     <string name="supporter_how">Πώς το στήριξες;</string>
     <string name="supporter_once">Μία δωρεά</string>
     <string name="supporter_monthly">Κάθε μήνα</string>
     <string name="supporter_badge">Υποστηρικτής</string>
     <string name="supporter_thanks_title">Ευχαριστούμε για τη στήριξή σου!</string>
-    <string name="supporter_thanks_body">Αν το Spotilol UI εξακολουθεί να σου είναι χρήσιμο, μια νέα μικρή δωρεά βοηθά να συνεχίσει.</string>
+    <string name="supporter_thanks_body">Αν το MySpotilol εξακολουθεί να σου είναι χρήσιμο, μια νέα μικρή δωρεά βοηθά να συνεχίσει.</string>
     <string name="support_again">Στήριξε ξανά</string>
     <string name="supporter_accent">Χρώμα τόνου</string>
     <string name="supporter_icon">Εικονίδιο εφαρμογής</string>
@@ -109,7 +109,7 @@
     <string name="color_purple">Μωβ</string>
     <string name="color_pink">Ροζ</string>
     <string name="color_orange">Πορτοκαλί</string>
-    <string name="about_detail">Έκδοση, κοινότητα Discord, πηγαίος κώδικας</string>
+    <string name="about_detail">Έκδοση, πηγαίος κώδικας και προέλευση</string>
     <string name="about_discord">Discord</string>
     <string name="about_discord_detail">Νέα, βοήθεια και ιδέες: μπες στην κοινότητα</string>
     <string name="about_github">Πηγαίος κώδικας</string>
@@ -120,7 +120,7 @@
     <string name="song_radio_failed">Δεν ήταν δυνατό το άνοιγμα του ραδιοφώνου αυτού του τραγουδιού</string>
     <string name="local_files_find_hint">Αναζήτηση στα Τοπικά αρχεία</string>
     <string name="data_saver_title">Εξοικονόμηση δεδομένων</string>
-    <string name="data_saver_summary">Με δεδομένα κινητής, το Spotilol UI δεν χρησιμοποιεί δεδομένα: παίζουν μόνο τα ληφθέντα τραγούδια και τα Τοπικά αρχεία</string>
+    <string name="data_saver_summary">Με δεδομένα κινητής, το MySpotilol δεν χρησιμοποιεί δεδομένα: παίζουν μόνο τα ληφθέντα τραγούδια και τα Τοπικά αρχεία</string>
     <string name="data_saver_blocked">Εξοικονόμηση δεδομένων: με δεδομένα κινητής, παίζουν μόνο τα ληφθέντα τραγούδια και τα Τοπικά αρχεία</string>
     <string name="new_releases_followed">Από καλλιτέχνες που ακολουθείς</string>
     <string name="new_releases_latest">Τελευταίες κυκλοφορίες</string>
@@ -138,8 +138,8 @@
     <string name="recap_top_tracks">Κορυφαία τραγούδια</string>
     <string name="recap_top_artists">Κορυφαίοι καλλιτέχνες</string>
     <string name="recap_top_albums">Κορυφαία άλμπουμ</string>
-    <string name="recap_private_note">Μετράει όλα όσα παίζονται στο Spotilol UI (Spotify, λήψεις, τοπικά αρχεία). Μένει σε αυτό το τηλέφωνο και δεν στέλνεται ποτέ στο Spotify.</string>
-    <string name="recap_detail">Περιλαμβάνει την ακρόασή σου, τις λήψεις και τα τοπικά αρχεία</string>
+    <string name="recap_private_note">Μετράει όλα όσα παίζονται στο MySpotilol (Spotify, λήψεις, τοπικά αρχεία). Μένει σε αυτό το τηλέφωνο και δεν στέλνεται ποτέ στο Spotify.</string>
+    <string name="recap_detail">Περιλαμβάνει την ακρόασή σου και τα τοπικά αρχεία</string>
     <string name="track_credits">Συντελεστές</string>
     <string name="exclude_taste">Αφαίρεση από το προφίλ γούστου σου</string>
     <string name="include_taste">Συμπερίληψη στο προφίλ γούστου σου</string>
@@ -171,7 +171,7 @@
     <string name="track_sort_artist">Καλλιτέχνης</string>
     <string name="track_sort_album">Άλμπουμ</string>
     <string name="track_sort_duration">Διάρκεια</string>
-    <string name="setup_title">Ρύθμιση του Spotilol UI</string>
+    <string name="setup_title">Ρύθμιση του MySpotilol</string>
     <string name="setup_subtitle">Επίτρεψε ό,τι θέλεις· μπορείς να το αλλάξεις αργότερα στις ρυθμίσεις του τηλεφώνου.</string>
     <string name="setup_notifications_title">Ειδοποιήσεις</string>
     <string name="setup_notifications_detail">Χειριστήρια στην κλειδωμένη οθόνη και στο πάνελ ειδοποιήσεων</string>
@@ -191,7 +191,7 @@
     <string name="track_sort_added">Ημερομηνία προσθήκης</string>
     <!-- Lossless (SpotiFLAC) downloads -->
     <string name="spotiflac_row_title">Lossless λήψεις (FLAC)</string>
-    <string name="spotiflac_row_on">Επαληθευμένο — το Spotilol UI χρησιμοποιεί τους δικούς τους διακομιστές του SpotiFLAC.</string>
+    <string name="spotiflac_row_on">Επαληθευμένο — το MySpotilol χρησιμοποιεί τους δικούς τους διακομιστές του SpotiFLAC.</string>
     <string name="spotiflac_row_off">Μη επαληθευμένο — πάτα για να λύσεις τον μοναδικό έλεγχο.</string>
     <string name="spotiflac_verify_title">Επαλήθευση SpotiFLAC</string>
     <string name="spotiflac_verify_start_failed">Δεν ήταν δυνατή η έναρξη της επαλήθευσης. Πάτα Δοκίμασε ξανά ή επέστρεψε αργότερα.</string>
@@ -211,7 +211,7 @@
     <string name="setup_spotiflac_title">Lossless λήψεις (FLAC)</string>
     <string name="setup_spotiflac_detail">Επαλήθευσε μία φορά με το SpotiFLAC, ώστε οι λήψεις να έρχονται από τους lossless διακομιστές του.</string>
     <string name="settings_title">Ρυθμίσεις</string>
-    <string name="settings_detail">Ποιότητα ήχου, λήψεις, δεδομένα, μπαταρία και γλώσσα</string>
+    <string name="settings_detail">Ποιότητα ήχου, δεδομένα, μπαταρία και γλώσσα</string>
     <string name="settings_section_playback">Αναπαραγωγή</string>
     <string name="settings_section_downloads">Λήψεις</string>
     <string name="settings_section_data">Δεδομένα και μπαταρία</string>
@@ -235,7 +235,7 @@
     <string name="quality_download_hires">FLAC Hi-Res</string>
     <string name="quality_download_hires_detail">24-bit όταν υπάρχει, αρχεία περίπου τρεις φορές μεγαλύτερα</string>
     <string name="setup_quality_title">Ποιότητα ήχου</string>
-    <string name="setup_quality_subtitle">Επίλεξε πώς παίζει και αποθηκεύει το Spotilol UI τη μουσική σου. Μπορείς να την αλλάξεις αργότερα στις Ρυθμίσεις.</string>
+    <string name="setup_quality_subtitle">Επίλεξε πώς παίζει και αποθηκεύει το MySpotilol τη μουσική σου. Μπορείς να την αλλάξεις αργότερα στις Ρυθμίσεις.</string>
     <string name="downloads_off_toast">Οι λήψεις είναι απενεργοποιημένες. Ενεργοποίησέ τες στις Ρυθμίσεις.</string>
     <string name="quality_streaming_high_detail">160 kbit/s, ο καλύτερος ήχος</string>
     <string name="downloads_verify_hint">Καμία lossless πηγή δεν απάντησε. Επαλήθευσε μία φορά το SpotiFLAC στις Ρυθμίσεις, Λήψεις: οι διακομιστές του είναι οι αξιόπιστοι.</string>
@@ -251,7 +251,7 @@
     <string name="spotiflac_verify_in_browser">Λύσε τον έλεγχο στην καρτέλα του προγράμματος περιήγησης που άνοιξε, και μετά επέστρεψε εδώ.</string>
     <string name="update_downloading">Λήψη… %1$d%%</string>
     <string name="update_installing">Εγκατάσταση…</string>
-    <string name="update_needs_permission">Για να ενημερωθείς, επίτρεψε στο Spotilol UI να εγκαθιστά εφαρμογές και μετά επέστρεψε εδώ.</string>
+    <string name="update_needs_permission">Για να ενημερωθείς, επίτρεψε στο MySpotilol να εγκαθιστά εφαρμογές και μετά επέστρεψε εδώ.</string>
     <string name="update_allow">Επίτρεψε</string>
     <string name="update_failed">Η ενημέρωση απέτυχε: %1$s</string>
     <string name="update_retry">Δοκίμασε ξανά</string>

@@ -9,34 +9,41 @@ DOC = """# Title
 
 Intro text.
 
-## Unveröffentlicht
+## [Unreleased]
 
-### Neu
-- next thing
+## [0.3.0] - 2026-10-20
 
-## 0.2.1010 – 2026-10-20
+### Changed
+- renamed
+
+## [0.2.1010] - 2026-10-20
 
 - merged
-
-## 0.1.1004 – 2026-10-19
-
-- first
 """
 
-assert notes.unreleased(DOC) == "### Neu\n- next thing"
-assert notes.unreleased(DOC.replace("## Unveröffentlicht\n\n### Neu\n- next thing\n\n", "")) == ""
-assert notes.versioned(DOC, "0.2.1010") == "- merged"
-assert notes.versioned(DOC, "0.1.1004") == "- first"
-assert notes.versioned(DOC, "0.1.9999") is None
-assert [h for h, _ in notes.sections(DOC)][1:] == ["0.2.1010 – 2026-10-20", "0.1.1004 – 2026-10-19"]
 
-marked = notes.mark(DOC, "0.2.1011", "2026-10-21", "### Neu\n- next thing\n")
-assert marked is not None and "## 0.2.1011 – 2026-10-21\n\n### Neu" in marked and "Unveröffentlicht" not in marked
-assert notes.versioned(marked, "0.2.1011") == "### Neu\n- next thing"
-# A newer unreleased section pushed meanwhile is never renamed under the old notes.
-assert notes.mark(DOC, "0.2.1011", "2026-10-21", "### Neu\n- other thing") is None
+def fails(fn, *args):
+    try:
+        fn(*args)
+    except ValueError:
+        return True
+    return False
 
-body = notes.compose("- merged", "0.2.1010", "18106341b4f4b5b1")
-assert body.startswith("- merged\n\n---\nSpotilol UI 0.2.1010 · Commit `1810634`")
+
+assert notes.latest(DOC) == "0.3.0"
+assert [notes.name(v) for v, _ in notes.versions(DOC)] == ["0.3.0", "0.2.1010"]
+assert notes.code("0.3.0") == 3_000 and notes.code("0.3.1") == 3_001 and notes.code("1.0.0") == 1_000_000
+assert notes.code("0.3.0") > 1010, "must upgrade the legacy 0.2.1010 build (versionCode 1010)"
+assert fails(notes.code, "0.2.1010")
+# Versions must go down the file, and the newest one needs notes.
+assert fails(notes.latest, DOC.replace("[0.3.0]", "[0.2.999]"))
+assert fails(notes.latest, DOC.replace("[0.3.0]", "[0.2.1010]"))
+assert fails(notes.latest, DOC.replace("### Changed\n- renamed\n", ""))
+assert fails(notes.latest, DOC.replace("## [0.3.0] - 2026-10-20", "## 0.3.0 – 2026-10-20"))
+assert fails(notes.latest, "# Title\n\n## [Unreleased]\n\n- soon\n")
+
+body = notes.body(DOC, "0.2.1010", "18106341b4f4b5b1")
+assert body.startswith("- merged\n\n---\nCommit `1810634` · package `com.project.lol.fork.ui`")
+assert fails(notes.body, DOC, "0.1.0", "abc")
 
 print("release notes checks passed")

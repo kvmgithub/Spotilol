@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Spotilol UI's own texts (English default, German in values-de). -->
+<!-- MySpotilol's own texts (English default, German in values-de). -->
 <resources>
     <string name="spotilol_section_accounts">Accounts</string>
     <string name="spotilol_profile_save">Save current account</string>
@@ -17,11 +17,13 @@
     <string name="spotilol_profile_save_button">Save</string>
     <string name="spotilol_diagnostics_title">Diagnostic logs</string>
     <string name="spotilol_diagnostics_detail">Shows the log entry below. Logs are redacted and leave the phone only when you copy or share them.</string>
-    <string name="spotilol_about_body">Myspoti\'s native interface with Spotilol Lite\'s privacy and security scope. Free software under the GPL-3.0.</string>
+    <string name="spotilol_about_body">Myspoti\'s native interface with the privacy and security scope of Spotilol and Spotilol Lite. Free software under the GPL-3.0, not affiliated with Spotify.</string>
     <string name="spotilol_about_source">Source code</string>
     <string name="spotilol_about_source_detail">kvmgithub/Spotilol, branch myspoti-ui</string>
-    <string name="spotilol_about_upstream">Based on Myspoti</string>
-    <string name="spotilol_about_upstream_detail">kota-zo/myspoti (GPL-3.0), with UI from Spotui and Metrolist</string>
+    <string name="spotilol_about_based_on">Based on</string>
+    <string name="spotilol_about_myspoti_detail">kota-zo/myspoti: the native interface, with UI from Spotui and Metrolist</string>
+    <string name="spotilol_about_spotilol_detail">Original by lyssadev, after deviato\'s Spotifuck. Security rules, blocking and encrypted profiles from kvmgithub/Spotilol</string>
+    <string name="spotilol_about_lite_detail">AdNenio/Spotilol-Lite: the lean feature scope this app keeps</string>
     <string name="spotilol_diagnostics_open">Show and copy log</string>
     <string name="spotilol_diagnostics_open_detail">Last %1$d minutes of this app, redacted</string>
 </resources>

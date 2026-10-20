@@ -299,7 +299,7 @@ class PlaybackService : MediaBrowserServiceCompat() {
 
     // Media browser (Android Auto).
     override fun onGetRoot(clientPackageName: String, clientUid: Int, rootHints: Bundle?): BrowserRoot? {
-        // Spotilol UI has no Android Auto: the service is not exported and only this app
+        // MySpotilol has no Android Auto: the service is not exported and only this app
         // may connect. Notification, lock screen and Bluetooth use the media session.
         if (clientPackageName != packageName || clientUid != android.os.Process.myUid()) return null
         if (!mayBrowse(clientPackageName)) {

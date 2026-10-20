@@ -18,12 +18,12 @@ android {
     namespace = "app.myspoti.engine"
     compileSdk = 37
 
-    // Spotilol UI: own package next to Spotilol Lite (com.project.lol.fork), same signing key.
+    // MySpotilol: own package next to Spotilol Lite (com.project.lol.fork), same signing key.
     // CI passes -PappVersionName / -PappVersionCode; local builds use the defaults.
     val version = (findProperty("appVersionName") as String?) ?: "0.1.0"
     defaultConfig {
         applicationId = "com.project.lol.fork.ui"
-        manifestPlaceholders["appLabel"] = "Spotilol UI"
+        manifestPlaceholders["appLabel"] = "MySpotilol"
         minSdk = 29
         targetSdk = 36
         versionCode = (findProperty("appVersionCode") as String?)?.toIntOrNull() ?: 1
@@ -68,7 +68,7 @@ android {
         debug {
             // Installs next to the release apps (own data, own sign-in).
             applicationIdSuffix = ".dev"
-            manifestPlaceholders["appLabel"] = "Spotilol UI dev"
+            manifestPlaceholders["appLabel"] = "MySpotilol dev"
         }
         release {
             // Real key when provided (CI releases); otherwise the debug key, so a local

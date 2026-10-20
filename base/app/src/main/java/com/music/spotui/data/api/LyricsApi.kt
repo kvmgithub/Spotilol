@@ -10,7 +10,7 @@ import kotlinx.coroutines.launch
 
 /**
  * Lyrics: Spotify's own color-lyrics, by track id, exactly what the official app shows.
- * Spotilol UI keeps Spotify as the only source: no LRCLIB, NetEase, Genius or other
+ * MySpotilol keeps Spotify as the only source: no LRCLIB, NetEase, Genius or other
  * third-party lookups (they would receive the title and artist of every track).
  */
 object LyricsApi {

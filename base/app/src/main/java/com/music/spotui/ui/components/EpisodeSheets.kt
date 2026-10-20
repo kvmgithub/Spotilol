@@ -100,7 +100,7 @@ fun EpisodeOptionsSheet(
                 SongPlayer.setSaved(song.spotifyUri, !saved)
                 onDismiss()
             }
-            // Episode downloads are removed in Spotilol UI.
+            // Episode downloads are removed in MySpotilol.
             // The mark the official episode menu carries and the music menu does not.
             if (finished) {
                 SheetAction(Icons.Outlined.Undo, stringResource(R.string.episode_mark_unplayed)) {

@@ -39,7 +39,7 @@ object BetaLogs {
                 .redirectErrorStream(true).start()
             process.inputStream.bufferedReader().use { it.readText() }.also { process.waitFor() }
         }.getOrElse { "logcat unavailable: ${it.message}" }
-        val header = "Spotilol UI ${app.myspoti.engine.BuildConfig.VERSION_NAME} · Android ${android.os.Build.VERSION.RELEASE} (SDK ${android.os.Build.VERSION.SDK_INT}) · " +
+        val header = "MySpotilol ${app.myspoti.engine.BuildConfig.VERSION_NAME} · Android ${android.os.Build.VERSION.RELEASE} (SDK ${android.os.Build.VERSION.SDK_INT}) · " +
             "${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL} · last $minutes min\n\n"
         header + sanitize(useful(text)).takeLast(MAX_CHARS)
     }

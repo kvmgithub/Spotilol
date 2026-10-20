@@ -51,7 +51,7 @@ fun App() {
         }
     }
 
-    // No update or donation prompts in Spotilol UI.
+    // No update or donation prompts in MySpotilol.
 
     androidx.compose.foundation.layout.Box(Modifier.fillMaxSize()) {
         Scaffold(

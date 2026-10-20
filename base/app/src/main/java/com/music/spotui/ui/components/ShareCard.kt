@@ -22,7 +22,7 @@ import java.io.File
 
 /**
  * "Share as image": a 1080x1920 story card (blurred cover background, large cover, title,
- * artist, Myspoti wordmark) written to cache/shared/ and handed out through the FileProvider,
+ * artist, MySpotilol wordmark) written to cache/shared/ and handed out through the FileProvider,
  * so Instagram / WhatsApp stories and the like can pick it up.
  */
 object ShareCard {
@@ -113,7 +113,7 @@ object ShareCard {
             color = Color.argb(170, 255, 255, 255); textSize = 40f; textAlign = Paint.Align.CENTER
             typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD); letterSpacing = 0.12f
         }
-        c.drawText("Myspoti", W / 2f, H - 150f, mark)
+        c.drawText("MySpotilol", W / 2f, H - 150f, mark)
         return out
     }
 }

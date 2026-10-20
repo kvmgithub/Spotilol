@@ -1,6 +1,6 @@
 # Third-party notices
 
-Spotilol UI is free software under the GNU General Public License v3.0 (see `LICENSE`).
+MySpotilol is free software under the GNU General Public License v3.0 (see `LICENSE`).
 It is a modified version of Myspoti and builds on the projects below; their licences are
 compatible with the GPL-3.0.
 

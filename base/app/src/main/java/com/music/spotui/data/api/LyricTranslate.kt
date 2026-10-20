@@ -1,7 +1,7 @@
 package com.music.spotui.data.api
 
 /**
- * Lyric translation is removed in Spotilol UI: it sent the lyrics to Google's public
+ * Lyric translation is removed in MySpotilol: it sent the lyrics to Google's public
  * translate endpoint. Kept as a stub so the lyrics screen's contract compiles; it never
  * makes a request and the screen hides the translate actions.
  */

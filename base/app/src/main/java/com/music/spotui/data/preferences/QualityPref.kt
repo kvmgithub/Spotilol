@@ -1,7 +1,7 @@
 package com.music.spotui.data.preferences
 
 /*
- * Sound quality: what the Web Player streams (downloads are removed in Spotilol UI).
+ * Sound quality: what the Web Player streams (downloads are removed in MySpotilol).
  */
 
 import android.content.Context

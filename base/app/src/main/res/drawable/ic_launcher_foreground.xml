@@ -1,8 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Myspoti launcher mark: one rounded wave line (adaptive-icon safe zone). -->
+<!-- MySpotilol mark: pixel headphones with an equalizer between the ear cups, drawn on a
+     19x16 grid. Generated from one grid so launcher, splash, monochrome and notification match. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp" android:height="108dp"
     android:viewportWidth="108" android:viewportHeight="108">
-    <path android:pathData="M27.25,55.11 L27.25,60.64 A4.95,4.95 0 0 0 37.15,60.64 L37.15,45.97 A5.67,5.67 0 0 1 48.5,45.97 L48.5,62.72 A5.12,5.12 0 0 0 58.74,62.72 L58.74,52.89 A5.36,5.36 0 0 1 69.47,52.89 L69.47,58.57 Q69.47,65.07 75.97,65.07 L80.96,65.07" android:strokeColor="#1ED760" android:strokeWidth="6.44"
-        android:strokeLineCap="round" android:strokeLineJoin="round" android:fillColor="#00000000" />
+    <path android:fillColor="#1ED760" android:pathData="M41.85,32.4h24.3v2.7h-24.3zM39.15,35.1h29.7v2.7h-29.7zM36.45,37.8h8.1v2.7h-8.1zM63.45,37.8h8.1v2.7h-8.1zM33.75,40.5h8.1v2.7h-8.1zM66.15,40.5h8.1v2.7h-8.1zM31.05,43.2h8.1v2.7h-8.1zM68.85,43.2h8.1v2.7h-8.1zM31.05,45.9h5.4v2.7h-5.4zM71.55,45.9h5.4v2.7h-5.4zM31.05,48.6h5.4v2.7h-5.4zM71.55,48.6h5.4v2.7h-5.4zM28.35,51.3h8.1v2.7h-8.1zM71.55,51.3h8.1v2.7h-8.1zM28.35,54h8.1v2.7h-8.1zM71.55,54h8.1v2.7h-8.1zM31.05,56.7h8.1v2.7h-8.1zM68.85,56.7h8.1v2.7h-8.1zM28.35,59.4h10.8v2.7h-10.8zM68.85,59.4h10.8v2.7h-10.8zM28.35,62.1h10.8v2.7h-10.8zM68.85,62.1h10.8v2.7h-10.8zM28.35,64.8h10.8v2.7h-10.8zM68.85,64.8h10.8v2.7h-10.8zM28.35,67.5h10.8v2.7h-10.8zM68.85,67.5h10.8v2.7h-10.8zM28.35,70.2h10.8v2.7h-10.8zM68.85,70.2h10.8v2.7h-10.8zM31.05,72.9h8.1v2.7h-8.1zM68.85,72.9h8.1v2.7h-8.1z" />
+    <path android:fillColor="#AF7AF6" android:pathData="M39.15,59.4h2.7v2.7h-2.7zM66.15,59.4h2.7v2.7h-2.7zM39.15,62.1h2.7v2.7h-2.7zM49.95,62.1h2.7v2.7h-2.7zM66.15,62.1h2.7v2.7h-2.7zM39.15,64.8h2.7v2.7h-2.7zM49.95,64.8h2.7v2.7h-2.7zM60.75,64.8h2.7v2.7h-2.7zM66.15,64.8h2.7v2.7h-2.7zM39.15,67.5h2.7v2.7h-2.7zM49.95,67.5h2.7v2.7h-2.7zM55.35,67.5h2.7v2.7h-2.7zM60.75,67.5h2.7v2.7h-2.7zM66.15,67.5h2.7v2.7h-2.7zM39.15,70.2h2.7v2.7h-2.7zM44.55,70.2h2.7v2.7h-2.7zM49.95,70.2h2.7v2.7h-2.7zM55.35,70.2h2.7v2.7h-2.7zM60.75,70.2h2.7v2.7h-2.7zM66.15,70.2h2.7v2.7h-2.7zM44.55,72.9h2.7v2.7h-2.7zM49.95,72.9h2.7v2.7h-2.7zM55.35,72.9h2.7v2.7h-2.7zM60.75,72.9h2.7v2.7h-2.7z" />
 </vector>

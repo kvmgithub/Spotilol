@@ -1,15 +1,16 @@
-# Spotilol UI
+# MySpotilol
 
-Myspoti's native Android interface with Spotilol Lite's feature and security scope. This branch (`myspoti-ui`) is separate from Spotilol Lite on `main`; both apps install side by side.
+Myspoti's native Android interface with the feature and security scope of Spotilol and Spotilol Lite (formerly "Spotilol UI"). This branch (`myspoti-ui`) is separate from Spotilol Lite on `main`; both apps install side by side.
 
 Base: [kota-zo/myspoti](https://github.com/kota-zo/myspoti) 2.0.0-beta.9 (`f25ddfe`, GPL-3.0), merged from the vendor branch `myspoti-upstream`. Playback still runs in Spotify's Web Player in a hidden WebView (Widevine); search, library, artist, album and playlist screens are native.
 
 ## Install
 
-- Package `com.project.lol.fork.ui`, label **Spotilol UI**, signed with the Spotilol fork key.
-- Spotilol Lite (`com.project.lol.fork`) stays installed and unchanged. Spotilol UI needs its own sign-in; Lite's saved profiles are not shared.
+- Package `com.project.lol.fork.ui`, label **MySpotilol**, signed with the Spotilol fork key. Versions up to 0.2.1010 were called Spotilol UI; they upgrade in place.
+- Spotilol Lite (`com.project.lol.fork`) stays installed and unchanged. MySpotilol needs its own sign-in; Lite's saved profiles are not shared.
 - APKs are published as pre-releases tagged `ui-v<version>`. Pre-releases never become "latest", so Spotilol Lite's update check ignores them. This variant has no update checker of its own.
-- What changed in each release: [CHANGELOG-UI.md](CHANGELOG-UI.md) (German), also shown on each GitHub release. `CHANGELOG.md` is Myspoti's own history, kept as upstream ships it.
+- Versions follow [Semantic Versioning](https://semver.org) from 0.3.0 on: patch for fixes, minor for features or larger upstream merges, 1.0.0 once it replaces Spotilol Lite in daily use. Earlier releases used the CI run number as patch version.
+- What changed in each release: [CHANGELOG-UI.md](CHANGELOG-UI.md), also shown on each GitHub release. `CHANGELOG.md` is Myspoti's own history, kept as upstream ships it.
 
 ## Scope compared to Myspoti
 
@@ -45,6 +46,12 @@ From beta.9: the page's ad managers switched off at runtime (the device registra
 
 Policy, redaction, blocking and profile regressions run as JVM tests in CI.
 
+## Credits and lineage
+
+- [Myspoti](https://github.com/kota-zo/myspoti) by kota-zo: the native interface, with UI derived from [Spotui](https://github.com/Spotui/Spotui) and [Metrolist](https://github.com/MetrolistGroup/Metrolist).
+- Spotilol by lyssadev, after deviato's Spotifuck; security rules, blocking and encrypted profiles from [kvmgithub/Spotilol](https://github.com/kvmgithub/Spotilol).
+- [Spotilol Lite](https://github.com/AdNenio/Spotilol-Lite) by AdNenio: the lean feature scope.
+
 ## Build
 
 The Android project is in `base/` (JDK 17+, Android SDK with compileSdk 37):
@@ -54,10 +61,12 @@ cd base
 ./gradlew testDebugUnitTest :api:test :api-spotify:test :app:assembleDebug
 ```
 
-Release signing reads `APK_KEYSTORE`, `APK_KEY_PASSWORD` and `APK_KEY_ALIAS` (CI fills them from `APK_SIGNING_BUNDLE`), else `base/keystore/keystore.properties`. `.github/workflows/spotilol-ui.yml` builds every push to `myspoti-ui` and publishes a pre-release for commits whose subject line carries `[publish]`. Such a commit needs a `## Unveröffentlicht` section at the top of `CHANGELOG-UI.md`: it becomes the release text, and CI renames it to the version afterwards (pull before the next push). Editing a published section updates that release's text on the next push.
+Release signing reads `APK_KEYSTORE`, `APK_KEY_PASSWORD` and `APK_KEY_ALIAS` (CI fills them from `APK_SIGNING_BUNDLE`), else `base/keystore/keystore.properties`. `.github/workflows/spotilol-ui.yml` builds every push to `myspoti-ui`.
 
-## Credits and license
+Releasing: collect notes under `## [Unreleased]` in `CHANGELOG-UI.md`, then rename that heading to `## [X.Y.Z] - YYYY-MM-DD` with a higher version and push. CI takes the newest version from the changelog (versionCode = MAJOR·1,000,000 + MINOR·1,000 + PATCH) and publishes it once as `ui-vX.Y.Z`; later pushes of the same version only build. Editing a published section updates that release's text on the next push.
 
-GPL-3.0 (see `LICENSE`). Myspoti by kota-zo; UI derived from [Spotui](https://github.com/Spotui/Spotui) and [Metrolist](https://github.com/MetrolistGroup/Metrolist); see `THIRD_PARTY_NOTICES.md`. Security rules ported from [kvmgithub/Spotilol](https://github.com/kvmgithub/Spotilol).
+## License
+
+GPL-3.0 (see `LICENSE`); third-party notices in `THIRD_PARTY_NOTICES.md`. The launcher icon is an original pixel drawing.
 
 Not affiliated with or endorsed by Spotify. Blocking ads goes against Spotify's Terms of Use; use at your own risk.

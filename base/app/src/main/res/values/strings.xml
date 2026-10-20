@@ -1,5 +1,5 @@
 <resources xmlns:tools="http://schemas.android.com/tools">
-    <string name="app_name">Spotilol UI</string>
+    <string name="app_name">MySpotilol</string>
     <string name="aa_playlists">Playlists</string>
     <string name="aa_albums">Albums</string>
     <string name="aa_artists">Artists</string>
@@ -14,7 +14,7 @@
     <string name="main_update_available">A new update is available</string>
 
     <string name="notif_channel_media_name">Media Playback</string>
-    <string name="notif_channel_media_description">Spotilol UI media playback controls</string>
+    <string name="notif_channel_media_description">MySpotilol media playback controls</string>
     <string name="notif_action_previous">Previous</string>
     <string name="notif_action_next">Next</string>
     <string name="notif_action_play">Play</string>

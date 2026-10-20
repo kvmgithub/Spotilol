@@ -518,7 +518,7 @@ private fun ContextContent(navController: NavController, vm: ContextViewModel, p
                         LikeButton(liked = SongPlayer.library[p.uri] ?: contextSaved, size = 28.dp) { vm.toggleContextSaved(p) }
                         Spacer(Modifier.width(20.dp))
                     }
-                    // Downloads are removed in Spotilol UI (no download button).
+                    // Downloads are removed in MySpotilol (no download button).
                     if (p.type == "playlist") {
                         Spacer(Modifier.width(16.dp))
                         Icon(Icons.Default.MoreVert, stringResource(R.string.content_description_context_menu), tint = Color.White.copy(alpha = 0.8f),

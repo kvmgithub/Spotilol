@@ -68,7 +68,7 @@ object Logbook {
         val pageUrl = if (MyspotiRuntime.isStarted) runCatching { MyspotiRuntime.host.url.value }.getOrNull() else null
         val tail = recent()
         return buildString {
-            appendLine("Spotilol UI diagnostic report")
+            appendLine("MySpotilol diagnostic report")
             appendLine("app     : $versionName ($versionCode)")
             appendLine("android : ${android.os.Build.VERSION.RELEASE} (SDK ${android.os.Build.VERSION.SDK_INT})")
             appendLine("device  : ${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL}")

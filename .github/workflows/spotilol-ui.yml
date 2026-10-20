@@ -1,11 +1,10 @@
-# Spotilol UI: Myspoti's native interface with Spotilol's security scope.
-# Builds on every push to myspoti-ui, signs with the fork key (APK_SIGNING_BUNDLE) and
-# publishes a pre-release tagged ui-v<version> for commits marked [publish]. Pre-releases never become "latest", so
-# Spotilol Lite's update check (releases/latest) ignores them.
-# Release notes come from CHANGELOG-UI.md: a [publish] commit needs a "## Unveröffentlicht" section,
-# which becomes the release text and is then renamed to the version. The notes job keeps the text of
-# every published release in step with its section.
-name: Spotilol UI
+# MySpotilol: Myspoti's native interface with the security scope of Spotilol and Spotilol Lite.
+# Builds on every push to myspoti-ui and signs with the fork key (APK_SIGNING_BUNDLE).
+# CHANGELOG-UI.md holds the version: when its newest "## [X.Y.Z] - date" section has no ui-vX.Y.Z
+# release yet, the build is published as that pre-release, with the section as its text.
+# Pre-releases never become "latest", so Spotilol Lite's update check (releases/latest) ignores them.
+# The notes job keeps the text of every published release in step with its section.
+name: MySpotilol
 on:
   push:
     branches: [myspoti-ui]
@@ -27,20 +26,25 @@ jobs:
         working-directory: base
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
-      - name: Publish or build only
-        # Only a commit whose subject line carries [publish] is released; the body may mention it.
+      - name: Version, and publish or build only
+        # A new version in CHANGELOG-UI.md is released once; every later push of it only builds.
         id: mode
-        env:
-          HEAD_MESSAGE: ${{ github.event.head_commit.message }}
-        run: |
-          subject=$(printf '%s\n' "$HEAD_MESSAGE" | head -n 1)
-          case "$subject" in *"[publish]"*) echo "publish=true" >> "$GITHUB_OUTPUT";; *) echo "publish=false" >> "$GITHUB_OUTPUT";; esac
-          echo "subject: $subject"
-      - name: Release notes for this build
-        # Checked before the build: a release without notes is refused at once.
-        if: steps.mode.outputs.publish == 'true'
         working-directory: ${{ github.workspace }}
-        run: python3 .github/scripts/ui_release_notes.py unreleased CHANGELOG-UI.md > "$RUNNER_TEMP/section.md"
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          notes=.github/scripts/ui_release_notes.py
+          python3 .github/scripts/test_ui_release_notes.py
+          version=$(python3 "$notes" latest CHANGELOG-UI.md)
+          code=$(python3 "$notes" code "$version")
+          echo "APK_VERSION_NAME=$version" >> "$GITHUB_ENV"
+          echo "APK_VERSION_CODE=$code" >> "$GITHUB_ENV"
+          if gh release view "ui-v$version" --json tagName >/dev/null 2>&1; then
+            echo "publish=false" >> "$GITHUB_OUTPUT"; echo "$version ($code) is already released: build only"
+          else
+            echo "publish=true" >> "$GITHUB_OUTPUT"; echo "$version ($code) is new: publish"
+            python3 "$notes" body CHANGELOG-UI.md "$version" "$GITHUB_SHA" > "$RUNNER_TEMP/notes.md"
+          fi
       - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
         with:
           distribution: temurin
@@ -52,7 +56,7 @@ jobs:
       - name: Install Android build dependencies
         run: sdkmanager 'platforms;android-37.0' 'build-tools;36.0.0' 'build-tools;37.0.0'
       - uses: gradle/actions/setup-gradle@v6
-      - name: Prepare signing and version
+      - name: Prepare signing
         env:
           APK_SIGNING_BUNDLE: ${{ secrets.APK_SIGNING_BUNDLE }}
         run: |
@@ -65,10 +69,8 @@ jobs:
           key.chmod(0o600)
           password = bundle['password']
           print('::add-mask::' + password)
-          code = 1000 + int(os.environ['GITHUB_RUN_NUMBER'])
           with open(os.environ['GITHUB_ENV'], 'a') as out:
               out.write(f'APK_KEYSTORE={key}\nAPK_KEY_PASSWORD={password}\nAPK_KEY_ALIAS=release\n')
-              out.write(f'APK_VERSION_CODE={code}\nAPK_VERSION_NAME=0.2.{code}\n')
           PY
       - name: Unit tests and signed release
         run: |
@@ -83,7 +85,7 @@ jobs:
         run: |
           exec > >(tee -a "$RUNNER_TEMP/build.log") 2>&1
           mkdir -p release-assets
-          apk="release-assets/Spotilol-UI-arm64-${APK_VERSION_NAME}.apk"
+          apk="release-assets/MySpotilol-arm64-${APK_VERSION_NAME}.apk"
           cp app/build/outputs/apk/release/app-release.apk "$apk"
           tools="$ANDROID_HOME/build-tools/37.0.0"
           "$tools/apksigner" verify --print-certs "$apk" | grep -E 'certificate (DN|SHA-256 digest)'
@@ -95,6 +97,8 @@ jobs:
           fields = dict(re.findall(r"(\w+)='([^']*)'", next(x for x in data.splitlines() if x.startswith('package:'))))
           assert fields['name'] == 'com.project.lol.fork.ui', fields
           assert fields['versionName'] == os.environ['APK_VERSION_NAME'], fields
+          assert fields['versionCode'] == os.environ['APK_VERSION_CODE'], fields
+          assert "application-label:'MySpotilol'" in data, 'app label'
           assert 'application-debuggable' not in data
           assert 'REQUEST_INSTALL_PACKAGES' not in data, 'in-app installer permission present'
           with zipfile.ZipFile(sys.argv[1]) as apk:
@@ -111,32 +115,12 @@ jobs:
           PY
           (cd release-assets && sha256sum *.apk > SHA256SUMS.txt && cat SHA256SUMS.txt)
       - name: Publish pre-release
-        # Only commits whose subject carries [publish] become a downloadable pre-release.
         if: steps.mode.outputs.publish == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          tag="ui-v${APK_VERSION_NAME}"
-          python3 ../.github/scripts/ui_release_notes.py compose "$RUNNER_TEMP/section.md" "$APK_VERSION_NAME" "$GITHUB_SHA" > "$RUNNER_TEMP/notes.md"
-          gh release create "$tag" release-assets/* --target "$GITHUB_SHA" --title "Spotilol UI ${APK_VERSION_NAME}" \
+          gh release create "ui-v${APK_VERSION_NAME}" release-assets/* --target "$GITHUB_SHA" --title "MySpotilol ${APK_VERSION_NAME}" \
             --notes-file "$RUNNER_TEMP/notes.md" --prerelease --latest=false
-      - name: Record the release in CHANGELOG-UI.md
-        # "## Unveröffentlicht" becomes "## <version> – <date>" on the branch. A push made with the
-        # workflow token starts no new run. If the branch moved on, the rename is skipped with a warning.
-        if: steps.mode.outputs.publish == 'true'
-        working-directory: ${{ github.workspace }}
-        run: |
-          git fetch -q --depth=1 origin myspoti-ui
-          git worktree add -q "$RUNNER_TEMP/notes-tree" FETCH_HEAD
-          cd "$RUNNER_TEMP/notes-tree"
-          status=0
-          python3 "$GITHUB_WORKSPACE/.github/scripts/ui_release_notes.py" mark CHANGELOG-UI.md \
-            "$APK_VERSION_NAME" "$(TZ=Europe/Berlin date +%F)" "$RUNNER_TEMP/section.md" || status=$?
-          if [ "$status" = 2 ]; then echo "::warning::No matching unreleased section on the branch; heading left as is"; exit 0; fi
-          [ "$status" = 0 ] || exit "$status"
-          git -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' \
-            commit -qam "Release notes: Spotilol UI $APK_VERSION_NAME"
-          git push -q origin HEAD:myspoti-ui || echo "::warning::Could not record $APK_VERSION_NAME in CHANGELOG-UI.md (branch moved on)"
       - name: Publish failure log
         if: failure()
         env:
@@ -159,7 +143,7 @@ jobs:
           cd "$out"
           git init -q -b ui-ci-logs
           git add -A
-          git -c user.name=ci -c user.email=ci@localhost commit -qm "Spotilol UI run $GITHUB_RUN_NUMBER failed"
+          git -c user.name=ci -c user.email=ci@localhost commit -qm "MySpotilol run $GITHUB_RUN_NUMBER failed"
           git push -fq "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" ui-ci-logs
       - name: Remove signing material
         if: always()
@@ -167,6 +151,7 @@ jobs:
 
   notes:
     # Every published ui-v release shows its section of CHANGELOG-UI.md (and the standard footer).
+    # Titles stay as published: releases before 0.3.0 keep the name Spotilol UI.
     if: github.repository_owner == 'kvmgithub'
     runs-on: ubuntu-24.04
     timeout-minutes: 10
@@ -174,8 +159,6 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
-      - name: Check the notes tool
-        run: python3 .github/scripts/test_ui_release_notes.py
       - name: Update published release notes
         env:
           GH_TOKEN: ${{ github.token }}

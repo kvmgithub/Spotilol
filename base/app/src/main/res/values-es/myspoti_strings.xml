@@ -3,10 +3,10 @@
 <resources>
     <string name="welcome_tagline">Tu música, con letras sincronizadas y vídeos musicales oficiales.</string>
     <string name="welcome_login">Inicia sesión con Spotify</string>
-    <string name="welcome_privacy">Inicias sesión en la página oficial de Spotify. Spotilol UI nunca ve tu contraseña.</string>
-    <string name="crash_heading">Spotilol UI se ha detenido</string>
+    <string name="welcome_privacy">Inicias sesión en la página oficial de Spotify. MySpotilol nunca ve tu contraseña.</string>
+    <string name="crash_heading">MySpotilol se ha detenido</string>
     <string name="crash_explanation">Algo ha salido mal. Reinicia la app; si vuelve a pasar, copia el informe y compártelo en una incidencia de GitHub.</string>
-    <string name="crash_restart_app">Reiniciar Spotilol UI</string>
+    <string name="crash_restart_app">Reiniciar MySpotilol</string>
     <string name="crash_copy_report">Copiar el informe</string>
     <string name="crash_report_copied">Informe copiado</string>
     <string name="remove_from_liked">Quitar de Canciones que te gustan</string>
@@ -56,7 +56,7 @@
     <string name="local_files_none_subtitle">No se ha encontrado ningún archivo de audio reproducible en este dispositivo. Cuando haya, aparecerán aquí.</string>
     <string name="downloads_empty_title">Descarga para escuchar sin conexión</string>
     <string name="downloads_empty_subtitle">Toca Descargar en el menú de una canción, o en el botón de descarga de un álbum o una playlist.</string>
-    <string name="downloads_source">FLAC sin pérdida, verificado con la grabación original. Se guarda solo dentro de Spotilol UI.</string>
+    <string name="downloads_source">FLAC sin pérdida, verificado con la grabación original. Se guarda solo dentro de MySpotilol.</string>
     <string name="downloads_size">%1$s en este teléfono</string>
     <string name="download_unavailable">No se ha encontrado ninguna grabación coincidente</string>
     <string name="download_retry">Reintentar</string>
@@ -69,8 +69,8 @@
     <string name="browse_workout">Entrenamiento</string>
     <string name="browse_dance_electronic">Dance/Electrónica</string>
     <string name="language_auto">Automático</string>
-    <string name="language_auto_detail">El idioma de tu teléfono si Spotilol UI lo tiene (alemán, español, francés, griego, inglés, italiano, portugués); si no, inglés</string>
-    <string name="language_partial_note">Otros idiomas: los textos de Spotify están traducidos, los de Spotilol UI siguen en inglés.</string>
+    <string name="language_auto_detail">El idioma de tu teléfono si MySpotilol lo tiene (alemán, español, francés, griego, inglés, italiano, portugués); si no, inglés</string>
+    <string name="language_partial_note">Otros idiomas: los textos de Spotify están traducidos, los de MySpotilol siguen en inglés.</string>
     <string name="restart_player_title">Reiniciar el reproductor</string>
     <string name="restart_player_detail">Si la música deja de responder: recarga el reproductor de Spotify</string>
     <string name="local_playlist_subtitle">En este dispositivo</string>
@@ -84,21 +84,21 @@
     <string name="local_playlist_empty">Añade canciones desde Archivos locales con su botón +.</string>
     <string name="playlist_change_refused">Spotify ha rechazado el cambio en esta playlist</string>
     <string name="download_kept_by_list">Sigue descargada: una playlist descargada la incluye</string>
-    <string name="support_title">Apoya Spotilol UI</string>
-    <string name="support_body">Spotilol UI es gratis, sin anuncios, y lo desarrollo en mi tiempo libre. Si te gusta, una pequeña donación ayuda a que siga adelante.</string>
+    <string name="support_title">Apoya MySpotilol</string>
+    <string name="support_body">MySpotilol es gratis, sin anuncios, y lo desarrollo en mi tiempo libre. Si te gusta, una pequeña donación ayuda a que siga adelante.</string>
     <string name="support_action">Apoyar en Ko-fi</string>
     <string name="support_decline">No, gracias</string>
     <string name="support_row_detail">Una pequeña donación en Ko-fi o GitHub Sponsors ayuda a mantener la app</string>
     <string name="supporter_perks_title">Ventajas de apoyo</string>
     <string name="supporter_perks_detail">Color de acento, icono de la app y una insignia, como agradecimiento</string>
-    <string name="supporter_perks_locked">Se desbloquean al apoyar Spotilol UI. Es de palabra: no se comprueba nada.</string>
-    <string name="supporter_i_supported">Ya he apoyado Spotilol UI</string>
+    <string name="supporter_perks_locked">Se desbloquean al apoyar MySpotilol. Es de palabra: no se comprueba nada.</string>
+    <string name="supporter_i_supported">Ya he apoyado MySpotilol</string>
     <string name="supporter_how">¿Cómo lo has apoyado?</string>
     <string name="supporter_once">Una donación</string>
     <string name="supporter_monthly">Cada mes</string>
     <string name="supporter_badge">Colaborador</string>
     <string name="supporter_thanks_title">¡Gracias por tu apoyo!</string>
-    <string name="supporter_thanks_body">Si Spotilol UI te sigue siendo útil, una nueva pequeña donación ayuda a que siga adelante.</string>
+    <string name="supporter_thanks_body">Si MySpotilol te sigue siendo útil, una nueva pequeña donación ayuda a que siga adelante.</string>
     <string name="support_again">Apoyar de nuevo</string>
     <string name="supporter_accent">Color de acento</string>
     <string name="supporter_icon">Icono de la app</string>
@@ -109,7 +109,7 @@
     <string name="color_purple">Morado</string>
     <string name="color_pink">Rosa</string>
     <string name="color_orange">Naranja</string>
-    <string name="about_detail">Versión, comunidad de Discord, código fuente</string>
+    <string name="about_detail">Versión, código fuente y orígenes</string>
     <string name="about_discord">Discord</string>
     <string name="about_discord_detail">Novedades, ayuda e ideas: únete a la comunidad</string>
     <string name="about_github">Código fuente</string>
@@ -120,7 +120,7 @@
     <string name="song_radio_failed">No se pudo abrir la radio de esta canción</string>
     <string name="local_files_find_hint">Buscar en Archivos locales</string>
     <string name="data_saver_title">Ahorro de datos</string>
-    <string name="data_saver_summary">En datos móviles, Spotilol UI no usa datos: solo se reproducen las canciones descargadas y los archivos locales</string>
+    <string name="data_saver_summary">En datos móviles, MySpotilol no usa datos: solo se reproducen las canciones descargadas y los archivos locales</string>
     <string name="data_saver_blocked">Ahorro de datos: en datos móviles, solo se reproducen las canciones descargadas y los archivos locales</string>
     <string name="new_releases_followed">De artistas que sigues</string>
     <string name="new_releases_latest">Últimos lanzamientos</string>
@@ -138,8 +138,8 @@
     <string name="recap_top_tracks">Canciones más escuchadas</string>
     <string name="recap_top_artists">Artistas más escuchados</string>
     <string name="recap_top_albums">Álbumes más escuchados</string>
-    <string name="recap_private_note">Cuenta todo lo reproducido en Spotilol UI (Spotify, descargas, archivos locales). Se queda en este teléfono y nunca se envía a Spotify.</string>
-    <string name="recap_detail">Incluye tus escuchas, descargas y archivos locales</string>
+    <string name="recap_private_note">Cuenta todo lo reproducido en MySpotilol (Spotify, descargas, archivos locales). Se queda en este teléfono y nunca se envía a Spotify.</string>
+    <string name="recap_detail">Incluye tus escuchas y archivos locales</string>
     <string name="track_credits">Créditos</string>
     <string name="exclude_taste">Excluir de tu perfil musical</string>
     <string name="include_taste">Incluir en tu perfil musical</string>
@@ -171,7 +171,7 @@
     <string name="track_sort_artist">Artista</string>
     <string name="track_sort_album">Álbum</string>
     <string name="track_sort_duration">Duración</string>
-    <string name="setup_title">Configura Spotilol UI</string>
+    <string name="setup_title">Configura MySpotilol</string>
     <string name="setup_subtitle">Permite lo que quieras; podrás cambiarlo más tarde en los ajustes del teléfono.</string>
     <string name="setup_notifications_title">Notificaciones</string>
     <string name="setup_notifications_detail">Controles en la pantalla de bloqueo y en el panel de notificaciones</string>
@@ -191,7 +191,7 @@
     <string name="track_sort_added">Fecha de adición</string>
     <!-- Lossless (SpotiFLAC) downloads -->
     <string name="spotiflac_row_title">Descargas sin pérdida (FLAC)</string>
-    <string name="spotiflac_row_on">Verificado — Spotilol UI usa los servidores propios de SpotiFLAC.</string>
+    <string name="spotiflac_row_on">Verificado — MySpotilol usa los servidores propios de SpotiFLAC.</string>
     <string name="spotiflac_row_off">No verificado — toca para completar la comprobación única.</string>
     <string name="spotiflac_verify_title">Verificación de SpotiFLAC</string>
     <string name="spotiflac_verify_start_failed">No se pudo iniciar la verificación. Toca Reintentar o vuelve más tarde.</string>
@@ -211,7 +211,7 @@
     <string name="setup_spotiflac_title">Descargas sin pérdida (FLAC)</string>
     <string name="setup_spotiflac_detail">Verifica una vez con SpotiFLAC para que las descargas vengan de sus servidores sin pérdida.</string>
     <string name="settings_title">Ajustes</string>
-    <string name="settings_detail">Calidad de sonido, descargas, datos, batería e idioma</string>
+    <string name="settings_detail">Calidad de sonido, datos, batería e idioma</string>
     <string name="settings_section_playback">Reproducción</string>
     <string name="settings_section_downloads">Descargas</string>
     <string name="settings_section_data">Datos y batería</string>
@@ -235,7 +235,7 @@
     <string name="quality_download_hires">FLAC Hi-Res</string>
     <string name="quality_download_hires_detail">24 bits cuando existe, archivos unas tres veces más pesados</string>
     <string name="setup_quality_title">Calidad de sonido</string>
-    <string name="setup_quality_subtitle">Elige cómo Spotilol UI reproduce y guarda tu música. Podrás cambiarlo más tarde en Ajustes.</string>
+    <string name="setup_quality_subtitle">Elige cómo MySpotilol reproduce y guarda tu música. Podrás cambiarlo más tarde en Ajustes.</string>
     <string name="downloads_off_toast">Las descargas están desactivadas. Actívalas en Ajustes.</string>
     <string name="quality_streaming_high_detail">160 kbit/s, el mejor sonido</string>
     <string name="downloads_verify_hint">Ninguna fuente sin pérdida ha respondido. Verifica SpotiFLAC una vez en Ajustes, Descargas: sus servidores son los fiables.</string>
@@ -251,7 +251,7 @@
     <string name="spotiflac_verify_in_browser">Resuelve la comprobación en la pestaña del navegador que se ha abierto y vuelve aquí.</string>
     <string name="update_downloading">Descargando… %1$d%%</string>
     <string name="update_installing">Instalando…</string>
-    <string name="update_needs_permission">Para actualizar, permite que Spotilol UI instale apps y vuelve aquí.</string>
+    <string name="update_needs_permission">Para actualizar, permite que MySpotilol instale apps y vuelve aquí.</string>
     <string name="update_allow">Permitir</string>
     <string name="update_failed">La actualización ha fallado: %1$s</string>
     <string name="update_retry">Reintentar</string>

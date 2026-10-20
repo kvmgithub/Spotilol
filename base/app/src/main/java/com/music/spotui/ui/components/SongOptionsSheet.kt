@@ -194,7 +194,7 @@ fun SongOptionsSheet(
                     onOpenQueue()
                 }
             }
-            // Downloads are removed in Spotilol UI.
+            // Downloads are removed in MySpotilol.
             MenuRow(Icons.Outlined.Radio, stringResource(R.string.context_menu_go_to_song_radio), enabled = hasId) {
                 onDismiss()
                 playerViewModel.goToSongRadio(song.spotifyTrackId, song.title,

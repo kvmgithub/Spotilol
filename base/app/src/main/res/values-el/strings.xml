@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources xmlns:tools="http://schemas.android.com/tools">
-    <string name="app_name">Spotilol UI</string>
+    <string name="app_name">MySpotilol</string>
     <string name="aa_playlists">Playlist</string>
     <string name="aa_albums">Άλμπουμ</string>
     <string name="aa_artists">Καλλιτέχνες</string>

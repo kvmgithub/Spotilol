@@ -948,7 +948,7 @@ object SongPlayer {
     /** The app is on screen (MainActivity onStart/onStop): background lookups wait otherwise. */
     @Volatile var inForeground = false
 
-    // ── Music video: removed in Spotilol UI (no YouTube clips). These keep the player
+    // ── Music video: removed in MySpotilol (no YouTube clips). These keep the player
     // screen's contract; nothing is ever available. ──
     data class VideoState(val available: Boolean = false, val on: Boolean = false, val ready: Boolean = false, val aspect: Float = 0f, val placed: Boolean = false)
     private val _video = mutableStateOf(VideoState())

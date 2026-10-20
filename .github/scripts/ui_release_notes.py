@@ -1,19 +1,16 @@
 #!/usr/bin/env python3
-"""Release notes of Spotilol UI, kept in CHANGELOG-UI.md (newest first).
+"""Versions and release notes of MySpotilol, kept in CHANGELOG-UI.md (Keep a Changelog, newest first).
 
-  unreleased CHANGELOG                  the "## Unveröffentlicht" section; exit 1 when missing or empty
-  compose SECTION_FILE VERSION SHA      a release body: the section plus the standard footer
-  body CHANGELOG VERSION SHA            the body of an already published VERSION
-  versions CHANGELOG                    the versions that have a section
-  mark CHANGELOG VERSION DATE NOTES     renames the unreleased section holding NOTES to "VERSION – DATE";
-                                        exit 2 when no such section exists (nothing to commit)
+  latest CHANGELOG               the newest version; fails unless versions only go down the file
+  code VERSION                   the Android versionCode of a SemVer version (MAJOR*1e6 + MINOR*1e3 + PATCH)
+  body CHANGELOG VERSION SHA     the release text of VERSION: its section plus the standard footer
+  versions CHANGELOG             every version that has a section
 """
 import re
 import sys
 from pathlib import Path
 
-UNRELEASED = "Unveröffentlicht"
-VERSION = re.compile(r"^(\d+\.\d+\.\d+)\s+–\s+\d{4}-\d{2}-\d{2}$")
+VERSION = re.compile(r"^\[(\d+)\.(\d+)\.(\d+)\] - \d{4}-\d{2}-\d{2}$")
 
 
 def sections(text):
@@ -31,68 +28,70 @@ def sections(text):
     return out
 
 
-def unreleased(text):
-    return next((body for heading, body in sections(text) if heading == UNRELEASED), "")
-
-
-def versioned(text, version):
+def versions(text):
+    """(version tuple, body) for every version section, in file order."""
+    out = []
     for heading, body in sections(text):
         match = VERSION.match(heading)
-        if match and match.group(1) == version:
-            return body
-    return None
+        if match:
+            out.append((tuple(int(n) for n in match.groups()), body))
+        elif heading != "[Unreleased]":
+            raise ValueError(f"unexpected heading '## {heading}': use '## [X.Y.Z] - YYYY-MM-DD' or '## [Unreleased]'")
+    return out
 
 
-def compose(section, version, sha):
+def name(version):
+    return ".".join(map(str, version))
+
+
+def latest(text):
+    found = versions(text)
+    if not found:
+        raise ValueError("no version section")
+    for newer, older in zip(found, found[1:]):
+        if newer[0] <= older[0]:
+            raise ValueError(f"{name(newer[0])} is listed above {name(older[0])}: newest first, each version higher")
+    if not found[0][1]:
+        raise ValueError(f"{name(found[0][0])} has no notes")
+    return name(found[0][0])
+
+
+def code(version):
+    major, minor, patch = (int(n) for n in version.split("."))
+    # ponytail: minor and patch below 1000; the legacy 0.x.10xx builds kept their own codes (1004-1010).
+    if minor >= 1000 or patch >= 1000:
+        raise ValueError(f"{version}: minor and patch must stay below 1000")
+    return major * 1_000_000 + minor * 1_000 + patch
+
+
+def body(text, version, sha):
+    section = next((b for v, b in versions(text) if name(v) == version), None)
+    if section is None:
+        raise ValueError(f"no section for {version}")
     return (
-        f"{section.strip()}\n\n---\n"
-        f"Spotilol UI {version} · Commit `{sha[:7]}` · Paket `com.project.lol.fork.ui`, installiert sich neben Spotilol Lite.\n"
-        "Pre-Release: Spotilol Lite meldet es nicht als Update. Automatisch geprüft (Tests, signierter Build); "
-        "Gerätetests sind davon getrennt. Prüfsummen in `SHA256SUMS.txt`.\n"
+        f"{section}\n\n---\n"
+        f"Commit `{sha[:7]}` · package `com.project.lol.fork.ui`, installs next to Spotilol Lite.\n"
+        "Pre-release: Spotilol Lite does not offer it as an update. Checked automatically (tests, signed build); "
+        "device testing is separate. Checksums in `SHA256SUMS.txt`.\n"
     )
-
-
-def mark(text, version, date, notes):
-    """The text with the unreleased section holding [notes] renamed, or None."""
-    wanted = notes.strip()
-    lines = text.splitlines(keepends=True)
-    for i, line in enumerate(lines):
-        if line.rstrip("\n") != f"## {UNRELEASED}":
-            continue
-        end = next((j for j in range(i + 1, len(lines)) if lines[j].startswith("## ")), len(lines))
-        if "".join(lines[i + 1:end]).strip() == wanted:
-            lines[i] = f"## {version} – {date}\n"
-            return "".join(lines)
-    return None
 
 
 def main(argv):
     command, args = argv[1], argv[2:]
-    if command == "unreleased":
-        section = unreleased(Path(args[0]).read_text())
-        if not section:
-            sys.exit(f"CHANGELOG-UI.md has no '## {UNRELEASED}' section with notes for this release")
-        print(section)
-    elif command == "compose":
-        print(compose(Path(args[0]).read_text(), args[1], args[2]), end="")
-    elif command == "body":
-        section = versioned(Path(args[0]).read_text(), args[1])
-        if section is None:
-            sys.exit(f"no section for {args[1]}")
-        print(compose(section, args[1], args[2]), end="")
-    elif command == "versions":
-        for heading, _ in sections(Path(args[0]).read_text()):
-            match = VERSION.match(heading)
-            if match:
-                print(match.group(1))
-    elif command == "mark":
-        path = Path(args[0])
-        result = mark(path.read_text(), args[1], args[2], Path(args[3]).read_text())
-        if result is None:
-            sys.exit(2)
-        path.write_text(result)
-    else:
-        sys.exit(f"unknown command {command}")
+    try:
+        if command == "latest":
+            print(latest(Path(args[0]).read_text()))
+        elif command == "code":
+            print(code(args[0]))
+        elif command == "body":
+            print(body(Path(args[0]).read_text(), args[1], args[2]), end="")
+        elif command == "versions":
+            for version, _ in versions(Path(args[0]).read_text()):
+                print(name(version))
+        else:
+            sys.exit(f"unknown command {command}")
+    except ValueError as error:
+        sys.exit(f"CHANGELOG-UI.md: {error}")
 
 
 if __name__ == "__main__":

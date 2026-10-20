@@ -33,7 +33,9 @@ import app.myspoti.engine.BuildConfig
 import app.myspoti.engine.R
 
 private const val SOURCE_URL = "https://github.com/kvmgithub/Spotilol/tree/myspoti-ui"
-private const val UPSTREAM_URL = "https://github.com/kota-zo/myspoti"
+private const val MYSPOTI_URL = "https://github.com/kota-zo/myspoti"
+private const val SPOTILOL_URL = "https://github.com/kvmgithub/Spotilol"
+private const val SPOTILOL_LITE_URL = "https://github.com/AdNenio/Spotilol-Lite"
 
 private fun openUrl(context: Context, url: String) {
     runCatching {
@@ -41,7 +43,7 @@ private fun openUrl(context: Context, url: String) {
     }
 }
 
-/** About: the version, the source code and the upstream credit (GPL-3.0). No donation prompts. */
+/** About: the version, the source code and the three projects the app is built from (GPL-3.0). No donation prompts. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AboutSheet(onDismiss: () -> Unit) {
@@ -66,7 +68,11 @@ fun AboutSheet(onDismiss: () -> Unit) {
             Text(stringResource(R.string.spotilol_about_body), color = Color(0xFFB3B3B3), fontSize = 13.sp,
                 modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 12.dp, bottom = 8.dp))
             AboutRow(stringResource(R.string.spotilol_about_source), stringResource(R.string.spotilol_about_source_detail)) { openUrl(context, SOURCE_URL) }
-            AboutRow(stringResource(R.string.spotilol_about_upstream), stringResource(R.string.spotilol_about_upstream_detail)) { openUrl(context, UPSTREAM_URL) }
+            Text(stringResource(R.string.spotilol_about_based_on), color = Color(0xFFB3B3B3), fontSize = 12.sp, fontWeight = FontWeight.Bold,
+                modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 14.dp, bottom = 2.dp))
+            AboutRow("Myspoti", stringResource(R.string.spotilol_about_myspoti_detail)) { openUrl(context, MYSPOTI_URL) }
+            AboutRow("Spotilol", stringResource(R.string.spotilol_about_spotilol_detail)) { openUrl(context, SPOTILOL_URL) }
+            AboutRow("Spotilol Lite", stringResource(R.string.spotilol_about_lite_detail)) { openUrl(context, SPOTILOL_LITE_URL) }
         }
     }
 }

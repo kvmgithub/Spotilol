@@ -54,7 +54,7 @@ cd base
 ./gradlew testDebugUnitTest :api:test :api-spotify:test :app:assembleDebug
 ```
 
-Release signing reads `APK_KEYSTORE`, `APK_KEY_PASSWORD` and `APK_KEY_ALIAS` (CI fills them from `APK_SIGNING_BUNDLE`), else `base/keystore/keystore.properties`. `.github/workflows/spotilol-ui.yml` builds every push to `myspoti-ui` and publishes a pre-release for commits marked `[publish]`. Such a commit needs a `## Unveröffentlicht` section at the top of `CHANGELOG-UI.md`: it becomes the release text, and CI renames it to the version afterwards (pull before the next push). Editing a published section updates that release's text on the next push.
+Release signing reads `APK_KEYSTORE`, `APK_KEY_PASSWORD` and `APK_KEY_ALIAS` (CI fills them from `APK_SIGNING_BUNDLE`), else `base/keystore/keystore.properties`. `.github/workflows/spotilol-ui.yml` builds every push to `myspoti-ui` and publishes a pre-release for commits whose subject line carries `[publish]`. Such a commit needs a `## Unveröffentlicht` section at the top of `CHANGELOG-UI.md`: it becomes the release text, and CI renames it to the version afterwards (pull before the next push). Editing a published section updates that release's text on the next push.
 
 ## Credits and license
 

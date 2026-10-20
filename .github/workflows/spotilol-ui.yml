@@ -27,9 +27,18 @@ jobs:
         working-directory: base
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - name: Publish or build only
+        # Only a commit whose subject line carries [publish] is released; the body may mention it.
+        id: mode
+        env:
+          HEAD_MESSAGE: ${{ github.event.head_commit.message }}
+        run: |
+          subject=$(printf '%s\n' "$HEAD_MESSAGE" | head -n 1)
+          case "$subject" in *"[publish]"*) echo "publish=true" >> "$GITHUB_OUTPUT";; *) echo "publish=false" >> "$GITHUB_OUTPUT";; esac
+          echo "subject: $subject"
       - name: Release notes for this build
         # Checked before the build: a release without notes is refused at once.
-        if: contains(github.event.head_commit.message, '[publish]')
+        if: steps.mode.outputs.publish == 'true'
         working-directory: ${{ github.workspace }}
         run: python3 .github/scripts/ui_release_notes.py unreleased CHANGELOG-UI.md > "$RUNNER_TEMP/section.md"
       - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
@@ -102,8 +111,8 @@ jobs:
           PY
           (cd release-assets && sha256sum *.apk > SHA256SUMS.txt && cat SHA256SUMS.txt)
       - name: Publish pre-release
-        # Only commits marked [publish] become a downloadable pre-release.
-        if: contains(github.event.head_commit.message, '[publish]')
+        # Only commits whose subject carries [publish] become a downloadable pre-release.
+        if: steps.mode.outputs.publish == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -114,7 +123,7 @@ jobs:
       - name: Record the release in CHANGELOG-UI.md
         # "## Unveröffentlicht" becomes "## <version> – <date>" on the branch. A push made with the
         # workflow token starts no new run. If the branch moved on, the rename is skipped with a warning.
-        if: contains(github.event.head_commit.message, '[publish]')
+        if: steps.mode.outputs.publish == 'true'
         working-directory: ${{ github.workspace }}
         run: |
           git fetch -q --depth=1 origin myspoti-ui

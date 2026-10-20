@@ -6,6 +6,12 @@ Each version section is the text of the GitHub pre-release tagged `ui-v<version>
 
 ## [Unreleased]
 
+## [0.6.1] - 2026-10-20
+
+### Fixed
+- Crossfade with the volume boost on: the fade ran before the limiter, which held a boosted song at its ceiling until the level dropped below the threshold, so the first half of the fade went unheard and the rest fell away at once. Fades, the crossfade and skip fades now act after the limiter while the boost is on; without the boost nothing changes.
+- The mini player's crossfade switch turns back on at the length used before switching off, also when it was chosen in Settings before 0.6.0 (it fell back to 6 s).
+
 ## [0.6.0] - 2026-10-20
 
 ### Added

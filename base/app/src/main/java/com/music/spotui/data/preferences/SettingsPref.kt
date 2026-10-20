@@ -93,7 +93,11 @@ object CrossfadePref {
     }
 
     /** The mini player's switch: off, or back on at the last length chosen. */
-    fun toggle(c: Context) = set(c, if (seconds > 0) 0 else prefs(c).getInt(KEY_LAST_ON, 6).coerceIn(1, MAX))
+    fun toggle(c: Context) {
+        // Kept when switching off too: a length chosen before the switch existed comes back.
+        if (seconds > 0) prefs(c).edit().putInt(KEY_LAST_ON, seconds).apply()
+        set(c, if (seconds > 0) 0 else prefs(c).getInt(KEY_LAST_ON, 6).coerceIn(1, MAX))
+    }
 }
 
 fun getCrossfadeSeconds(c: Context): Int =

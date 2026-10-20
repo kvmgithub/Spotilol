@@ -245,6 +245,24 @@
   };
 
   // Routes every media element the page played (and the player's own) into the graph, once.
+  // Local levels (fades, the crossfade, a volume set) with the boost on: after the limiter, on
+  // the graph's last gain, while the element stays on the player's own volume. On the element
+  // they came before the limiter, which held a boosted song at its ceiling until the level fell
+  // below the threshold: the first half of a fade was not heard, the rest dropped at once.
+  const boosted = el => !!boost && boost.routed.has(el);
+  const setLevel = (el, player, v) => {
+    const own = player && el === player._player ? ownLevel(player) : 1;
+    const level = Math.min(1, Math.max(SILENT, v));
+    if (!boosted(el) || own <= SILENT) { el.volume = level; return; }
+    el.volume = own;
+    boost.out.gain.setTargetAtTime(Math.min(1, level / own), boost.ctx.currentTime, 0.015);
+  };
+  const levelOf = el => el.volume * (boosted(el) ? boost.out.gain.value : 1);
+  const restoreOwn = (el, player) => {
+    el.volume = player && el === player._player ? ownLevel(player) : 1;
+    if (boosted(el)) boost.out.gain.setTargetAtTime(1, boost.ctx.currentTime, 0.015);
+  };
+
   const boostRoute = async () => {
     if (!boost) return;
     const player = await localPlayer().catch(() => null);
@@ -450,7 +468,7 @@
       const els = new Set([...(window.__mspMedia || []), ...document.querySelectorAll('audio, video'), ...await playerMedia()]);
       for (const el of els) {
         el.muted = false;
-        el.volume = a.on ? SILENT : (player && el === player._player ? ownLevel(player) : 1);
+        if (a.on) el.volume = SILENT; else restoreOwn(el, player);
       }
       return els.size;
     },
@@ -467,7 +485,7 @@
       if (!(el instanceof HTMLMediaElement)) return null;
       let playerVolume = null;
       try { playerVolume = await need().playback.getVolume(); } catch (e) { /* unknown */ }
-      return { paused: el.paused, muted: el.muted, volume: el.volume, level: el.volume, own: ownLevel(player), time: el.currentTime, readyState: el.readyState, ended: el.ended, playerVolume, active: await activeDevice() };
+      return { paused: el.paused, muted: el.muted, volume: el.volume, level: levelOf(el), own: ownLevel(player), time: el.currentTime, readyState: el.readyState, ended: el.ended, playerVolume, active: await activeDevice() };
     },
     // The media element's volume, on this phone only: no Spotify Connect command (refused on
     // some accounts, slow on a busy network) and nothing reported to Spotify, as the player's
@@ -479,8 +497,8 @@
       if (!(el instanceof HTMLMediaElement)) return null;
       cancelFade();
       // Never 0: see 'media.mute'.
-      el.volume = a.restore ? ownLevel(player) : Math.min(1, Math.max(SILENT, Number(a.level) || 0));
-      return el.volume;
+      if (a.restore) restoreOwn(el, player); else setLevel(el, player, Number(a.level) || 0);
+      return levelOf(el);
     },
 
     // A whole fade in one call: the page applies the steps itself, so the host sends the play
@@ -492,12 +510,12 @@
       if (!(el instanceof HTMLMediaElement)) return null;
       const steps = (Array.isArray(a.steps) ? a.steps : []).map(Number);
       const per = Math.max(1, Number(a.ms) || 12);
-      const set = v => { el.volume = Math.min(1, Math.max(SILENT, v)); };
+      const set = v => setLevel(el, player, v);
       // A ramp replaces the one before it (a crossfade's up-ramp must not be pulled back down
       // by steps still pending from its down-ramp).
       cancelFade();
       fadeTimers = steps.map((v, i) => setTimeout(() => set(v), i * per));
-      if (a.restore) fadeTimers.push(setTimeout(() => { el.volume = ownLevel(player); }, steps.length * per));
+      if (a.restore) fadeTimers.push(setTimeout(() => restoreOwn(el, player), steps.length * per));
       return true;
     },
 
@@ -513,9 +531,11 @@
         limiter.attack.value = 0.002;
         limiter.release.value = 0.2;
         const analyser = ctx.createAnalyser();
-        gain.connect(limiter).connect(ctx.destination);
+        // out: local fades and volume sets (see setLevel), after the limiter.
+        const out = ctx.createGain();
+        gain.connect(limiter).connect(out).connect(ctx.destination);
         gain.connect(analyser);
-        boost = { ctx, gain, limiter, analyser, level, routed: new WeakSet(), count: 0 };
+        boost = { ctx, gain, limiter, out, analyser, level, routed: new WeakSet(), count: 0 };
         boostProbe();
       }
       boost.level = level;

@@ -764,6 +764,7 @@ class SpotifyPlayer(private val bridge: Bridge, private val scope: CoroutineScop
             val v = value.coerceIn(0, CROSSFADE_MAX_SECONDS)
             if (field == v) return
             field = v
+            bridge.logger?.invoke("crossfade length ${v}s")
             // Turned off while a ramp runs: the sound comes back at once rather than at the end
             // of a fade nobody wants any more.
             if (v == 0) {
@@ -787,7 +788,7 @@ class SpotifyPlayer(private val bridge: Bridge, private val scope: CoroutineScop
     @Volatile private var crossfadeUntil = 0L
     /** The fail-safe that puts the level back if the page never moved on. */
     private var crossfadeJob: kotlinx.coroutines.Job? = null
-    /** The last song whose skipped crossfade was logged (see [tickCrossfade]). */
+    /** The last song whose crossfade window was logged (see [tickCrossfade]). */
     @Volatile private var crossfadeNoted: String? = null
 
     private fun disarmCrossfade() {
@@ -818,17 +819,16 @@ class SpotifyPlayer(private val bridge: Bridge, private val scope: CoroutineScop
         if (item.kind == ItemKind.AD || item.durationMs <= 0) return
         val window = secs * 1000L
         val remaining = item.durationMs - s.positionAt(now)
-        // Why a song inside its window gets no fade, once per song: the diagnostic log otherwise
-        // shows nothing at all when a crossfade does not happen.
-        fun skipped(why: String) {
-            if (remaining in 1..window && crossfadeNoted != item.uri) {
-                crossfadeNoted = item.uri
-                bridge.logger?.invoke("crossfade skipped on ${item.name}: $why")
-            }
+        // Once per song, inside its window: what the decision below sees. Without it a crossfade
+        // that does not happen leaves no trace in the diagnostic log.
+        if (remaining in 1..window && crossfadeNoted != item.uri) {
+            crossfadeNoted = item.uri
+            bridge.logger?.invoke("crossfade due on ${item.name}: ${remaining}ms left, active=${media?.active}, " +
+                "next=${s.next != null || upcoming().isNotEmpty()}, own=${media?.own}, level=${media?.level}")
         }
         // Another device is playing: this phone's element is not where the sound is, and a ramp
         // set on it would greet the user at 2% after a transfer back.
-        if (media?.active == false) { endCrossfade(restore = true); skipped("another device is active"); return }
+        if (media?.active == false) { endCrossfade(restore = true); return }
         if (crossfadeArmed) {
             // The next song is handled where it is reported (see [onState]). Here: the song was
             // seeked back out of the window, or the setting was shortened under the ramp.
@@ -837,10 +837,10 @@ class SpotifyPlayer(private val bridge: Bridge, private val scope: CoroutineScop
         }
         if (remaining <= 0 || remaining > window) return
         // Nothing after it: a fade-out into silence is not a crossfade.
-        if (s.next == null && upcoming().isEmpty()) { skipped("nothing after it in the queue"); return }
+        if (s.next == null && upcoming().isEmpty()) return
         val own = (media?.own ?: 1.0).coerceIn(0.0, 1.0)
         // Silent already (volume at 0): there is nothing to fade.
-        if (own <= 0.001) { skipped("page volume at 0"); return }
+        if (own <= 0.001) return
         armCrossfade(item.uri, remaining, own)
     }
 
@@ -1090,8 +1090,10 @@ class SpotifyPlayer(private val bridge: Bridge, private val scope: CoroutineScop
 
     /** Pulls the state once, e.g. right after the bridge is ready. */
     suspend fun refresh() {
-        onState(playerState(bridge.call("player.state") as? JsonObject))
-        _queue.value = queue(bridge.call("player.queue"))
+        // Quiet: the app pulls this every few seconds; logged, its answers filled the diagnostic
+        // log's ten minutes within one or two.
+        onState(playerState(bridge.call("player.state", quiet = true) as? JsonObject))
+        _queue.value = queue(bridge.call("player.queue", quiet = true))
     }
 
     companion object {

@@ -6,6 +6,15 @@ Each version section is the text of the GitHub pre-release tagged `ui-v<version>
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-10-20
+
+### Added
+- Crossfade switch in the mini player (the crossing curves next to the devices button): one tap turns it off, the next turns it back on at the last length chosen in Settings (6 s at first). Green while on.
+
+### Diagnostics
+- `crossfade due on <song>: …` once per song when it enters its fade window, with what decides the fade (time left, active device, next song, page volume); `crossfade length …` whenever the setting reaches the player.
+- The app's state polls no longer write every answer to the log, so the diagnostic log covers its full ten minutes again.
+
 ## [0.5.0] - 2026-10-20
 
 ### Added

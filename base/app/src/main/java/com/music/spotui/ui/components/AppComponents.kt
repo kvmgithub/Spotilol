@@ -275,6 +275,23 @@ fun MiniPlayer(navController: NavHostController) {
                     }
                 }
             }
+            // Crossfade on or off in one tap; on comes back at the last length chosen in Settings.
+            val crossfade = com.music.spotui.data.preferences.CrossfadePref.seconds
+            Icon(
+                painter = painterResource(R.drawable.spotilol_ic_crossfade),
+                tint = if (crossfade > 0) com.music.spotui.ui.theme.AppAccent else Color.White.copy(alpha = 0.8f),
+                modifier = Modifier.pressable(0.96f) {
+                    com.music.spotui.data.preferences.CrossfadePref.toggle(context)
+                    val now = com.music.spotui.data.preferences.CrossfadePref.seconds
+                    android.widget.Toast.makeText(
+                        context,
+                        if (now > 0) context.getString(R.string.spotilol_crossfade_on, now) else context.getString(R.string.spotilol_crossfade_off),
+                        android.widget.Toast.LENGTH_SHORT,
+                    ).show()
+                }.size(22.dp),
+                contentDescription = stringResource(R.string.spotilol_crossfade_switch),
+            )
+            Spacer(modifier = Modifier.width(18.dp))
             Icon(
                 painter = painterResource(id = if (SongPlayer.activeDevice.value != null) R.drawable.ic_devices else R.drawable.ic_devices),
                 tint = if (SongPlayer.activeDevice.value != null) com.music.spotui.ui.theme.AppAccent else Color.White.copy(alpha = 0.8f),

@@ -36,6 +36,10 @@
     <string name="spotilol_artist_discovered_on">Entdeckt in</string>
     <string name="spotilol_artist_playlists">Playlists des Künstlers</string>
 
+    <string name="spotilol_crossfade_switch">Überblenden ein- oder ausschalten</string>
+    <string name="spotilol_crossfade_on">Überblenden an (%1$d s)</string>
+    <string name="spotilol_crossfade_off">Überblenden aus</string>
+
     <!-- German for Myspoti beta.9 texts that upstream ships in English only. If upstream adds them to
          values-de/myspoti_strings.xml, drop the duplicates here (the build fails on duplicate names). -->
     <string name="ad_playing">Werbung</string>

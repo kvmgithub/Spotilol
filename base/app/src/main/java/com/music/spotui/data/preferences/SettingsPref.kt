@@ -75,6 +75,8 @@ fun setLibraryGridView(c: Context, v: Boolean) = prefs(c).edit().putBoolean(KEY_
  */
 object CrossfadePref {
     const val MAX = 12
+    /** The length the mini player's switch turns on: the last one chosen, 6 s at first. */
+    private const val KEY_LAST_ON = "crossfade_last_on"
     var seconds by androidx.compose.runtime.mutableStateOf(
         prefs(com.music.spotui.di.Graph.app).getInt(KEY_CROSSFADE, 0).coerceIn(0, MAX),
     )
@@ -84,9 +86,14 @@ object CrossfadePref {
     fun set(c: Context, value: Int) {
         val v = value.coerceIn(0, MAX)
         seconds = v
-        prefs(c).edit().putInt(KEY_CROSSFADE, v).apply()
+        val edit = prefs(c).edit().putInt(KEY_CROSSFADE, v)
+        if (v > 0) edit.putInt(KEY_LAST_ON, v)
+        edit.apply()
         applyCrossfade(v)
     }
+
+    /** The mini player's switch: off, or back on at the last length chosen. */
+    fun toggle(c: Context) = set(c, if (seconds > 0) 0 else prefs(c).getInt(KEY_LAST_ON, 6).coerceIn(1, MAX))
 }
 
 fun getCrossfadeSeconds(c: Context): Int =

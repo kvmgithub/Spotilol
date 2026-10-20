@@ -33,4 +33,7 @@
     <string name="spotilol_artist_featuring">Featuring %1$s</string>
     <string name="spotilol_artist_discovered_on">Discovered on</string>
     <string name="spotilol_artist_playlists">Artist playlists</string>
+    <string name="spotilol_crossfade_switch">Crossfade on or off</string>
+    <string name="spotilol_crossfade_on">Crossfade on (%1$d s)</string>
+    <string name="spotilol_crossfade_off">Crossfade off</string>
 </resources>

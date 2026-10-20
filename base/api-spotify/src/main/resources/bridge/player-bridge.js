@@ -397,7 +397,14 @@
       Object.defineProperty(el, 'playbackRate', {
         configurable: true,
         get() { return xf.ours && el === xf.el ? xf.pageRate : realRate(el); },
-        set(v) { xf.pageRate = Number(v); setRealRate(el, v); if (el === xf.el) xfPageRate(el); },
+        set(v) {
+          // The page re-applies its speed every few seconds: the same value changes nothing for it,
+          // so the reserve's speed stays. Another value (a podcast speed) is the page's to set.
+          if (el === xf.el && xf.ours && Number(v) === xf.pageRate) return;
+          xf.pageRate = Number(v);
+          setRealRate(el, v);
+          if (el === xf.el) xfPageRate(el);
+        },
       });
       Object.defineProperty(el, 'currentTime', {
         configurable: true,

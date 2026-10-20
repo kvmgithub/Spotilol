@@ -6,6 +6,11 @@ Each version section is the text of the GitHub pre-release tagged `ui-v<version>
 
 ## [Unreleased]
 
+## [0.7.2] - 2026-10-20
+
+### Fixed
+- Crossfade: Spotify's player sets its playback speed again about every ten seconds. The app took that as a change, dropped its own speed and gave up after three times, so the reserve stopped at 2–3 s. Setting the speed the player already has now changes nothing; only another speed (a podcast speed) still ends the crossfade for that episode.
+
 ## [0.7.1] - 2026-10-20
 
 ### Fixed

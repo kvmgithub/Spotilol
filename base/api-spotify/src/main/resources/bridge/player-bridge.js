@@ -135,19 +135,11 @@
     playbackId: s.playbackId || null,
   });
 
-  // The crossfade reads the song's kind, length and speed from here; with a reserve built, the
-  // position reported is the one heard (the page is that far ahead), at normal speed.
+  // The crossfade reads the song's kind, length and speed from here.
   const xfState = (s, out) => {
     xf.kind = out.track ? out.track.kind : null;
     xf.durationMs = s.duration || 0;
     xf.speed = s.speed || 1;
-    const lag = heardLagMs();
-    const el = xf.el;
-    if (lag > 0 && el && xfRemaining(el) !== null) {
-      out.positionMs = Math.max(0, Math.round(el.currentTime * 1000) - lag);
-      out.timestamp = Date.now();
-      out.speed = 1;
-    }
     return out;
   };
 
@@ -379,10 +371,47 @@
   const XF_K_MAX = 1.12;
   // A song that ends with less than this left at the last look ended by itself (else: a skip).
   const XF_NATURAL_S = 1.0;
+  // Within this of its end the page sees the element's real time (see xfMask).
+  const XF_END_REAL_S = 1.5;
   // A song whose speed the page put back this often is left alone (it would fight every change).
   const XF_MAX_RESETS = 3;
-  const xf = { seconds: 0, el: null, k: 1, ours: false, pitch: null, segs: [{ at: 0, k: 1 }], phase: 'build',
-    swapAt: 0, switchAt: -1e9, lastRem: Infinity, kind: null, durationMs: 0, speed: 1, planned: null, noted: '', resets: 0 };
+  const xf = { seconds: 0, el: null, k: 1, ours: false, pageRate: 1, pitch: null, segs: [{ at: 0, k: 1 }], phase: 'build',
+    swapAt: 0, switchAt: -1e9, lastRem: Infinity, kind: null, durationMs: 0, speed: 1, planned: null, noted: '',
+    resets: 0, sets: 0, masked: new WeakSet() };
+
+  // The element's own speed and time, past the masks below.
+  const RATE = Object.getOwnPropertyDescriptor(HTMLMediaElement.prototype, 'playbackRate');
+  const TIME = Object.getOwnPropertyDescriptor(HTMLMediaElement.prototype, 'currentTime');
+  const realRate = el => RATE.get.call(el);
+  const setRealRate = (el, v) => RATE.set.call(el, v);
+  const realTime = el => TIME.get.call(el);
+
+  // The page's player must not see the reserve being built: a speed it did not set, or a time
+  // running ahead of the clock, made it report its state about four times a second (to the
+  // page and to Spotify). Its element therefore shows the speed the page set and the time that
+  // is heard (the element's time less the reserve); what the page sets goes to the element.
+  const xfMask = el => {
+    if (xf.masked.has(el)) return;
+    xf.masked.add(el);
+    try {
+      Object.defineProperty(el, 'playbackRate', {
+        configurable: true,
+        get() { return xf.ours && el === xf.el ? xf.pageRate : realRate(el); },
+        set(v) { xf.pageRate = Number(v); setRealRate(el, v); if (el === xf.el) xfPageRate(el); },
+      });
+      Object.defineProperty(el, 'currentTime', {
+        configurable: true,
+        get() {
+          const t = realTime(el);
+          if (el !== xf.el) return t;
+          // The last moments show the element's own time: the page must see its song end.
+          if (isFinite(el.duration) && el.duration - t < XF_END_REAL_S) return t;
+          return Math.max(0, t - heardLag());
+        },
+        set(v) { TIME.set.call(el, v); },
+      });
+    } catch (e) { xfNote('unsupported', { why: 'element cannot be masked: ' + String(e && e.message || e).slice(0, 100) }); }
+  };
 
   const xfNote = (event, extra) => post(Object.assign({ type: 'xfade', event }, extra || {}));
   const r1 = x => Math.round(x * 10) / 10;
@@ -392,7 +421,7 @@
   const xfRemaining = el => {
     const d = el.duration;
     if (!isFinite(d) || d < 5 || !xf.durationMs || Math.abs(d * 1000 - xf.durationMs) > 3000) return null;
-    return Math.max(0, d - el.currentTime);
+    return Math.max(0, d - realTime(el));
   };
 
   // Our speed factor on the stream written from now on (1: none; a page-chosen speed is not ours).
@@ -444,17 +473,32 @@
     const el = xf.el;
     if (!el) return;
     if (k === 1) {
-      if (xf.ours) { el.playbackRate = 1; xf.ours = false; }
+      if (xf.ours) { setRealRate(el, xf.pageRate); xf.ours = false; }
       if (xf.pitch !== null) { el.preservesPitch = xf.pitch; xf.pitch = null; }
-      xf.k = el.playbackRate;
+      xf.k = realRate(el);
     } else {
       if (xf.pitch === null) xf.pitch = el.preservesPitch;
       el.preservesPitch = false;
-      el.playbackRate = k;
+      if (!xf.ours) xf.pageRate = realRate(el);
+      setRealRate(el, k);
       xf.k = k;
       xf.ours = true;
+      xf.sets++;
     }
     xfMark(xf.ours ? k : 1);
+    xfLay();
+  };
+
+  // The page set the speed itself (a new source starts at 1, a podcast speed): ours is over.
+  const xfPageRate = el => {
+    if (!boost) return;
+    if (xf.ours) {
+      xf.resets++;
+      if (xf.resets <= XF_MAX_RESETS) xfNote('reset', { by: 'page', speed: realRate(el), count: xf.resets });
+    }
+    xf.ours = false;
+    xf.k = realRate(el);
+    xfMark(1);
     xfLay();
   };
 
@@ -478,7 +522,8 @@
     const L = xfReserve();
     xfRate(1);
     const t = boost.ctx.currentTime;
-    if (xf.seconds === 0 || L < 0.3) { xfNote('end', { reserve: r1(L) }); return; }
+    const facts = { target: xf.seconds, speedSets: xf.sets, pageResets: xf.resets };
+    if (xf.seconds === 0 || L < 0.3) { xfNote('end', Object.assign({ reserve: r1(L) }, facts)); return; }
     const n = 64, fadeOut = new Float32Array(n), fadeIn = new Float32Array(n);
     for (let i = 0; i < n; i++) {
       const x = i / (n - 1);
@@ -497,7 +542,7 @@
     xf.phase = 'overlap';
     xf.swapAt = swap;
     xf.planned = null;
-    xfNote('overlap', { seconds: r1(L) });
+    xfNote('overlap', Object.assign({ seconds: r1(L) }, facts));
   };
 
   // Every timeupdate of the player's element: builds the reserve towards xf.seconds by the
@@ -512,17 +557,11 @@
       xf.segs = [{ at: xf.swapAt, k: xf.ours ? xf.k : 1 }];
     }
     // The page changed the speed itself (a new source starts at 1, a podcast speed).
-    if (Math.abs(el.playbackRate - xf.k) > 1e-6) {
-      if (xf.ours) xf.resets++;
-      xf.k = el.playbackRate;
-      xf.ours = false;
-      xfMark(1);
-      xfLay();
-    }
+    if (Math.abs(realRate(el) - xf.k) > 1e-6) xfPageRate(el);
     const rem = xfRemaining(el);
     if (rem !== null) xf.lastRem = rem;
     if (xf.resets >= XF_MAX_RESETS && xf.noted !== 'resets') { xf.noted = 'resets'; xfNote('unsupported', { why: 'the page keeps resetting the speed' }); }
-    if (xf.seconds > 0 && rem === null && xf.noted !== 'timeline') { xf.noted = 'timeline'; xfNote('unsupported', { why: 'element timeline is not the song' }); }
+    if (xf.seconds > 0 && rem === null && xf.noted !== 'timeline') { xf.noted = 'timeline'; xfNote('unsupported', { why: 'element timeline is not the song', duration: el.duration, songMs: xf.durationMs }); }
     const music = xf.kind === 'track' && (xf.speed || 1) === 1 && !window.__mspMuted && xf.resets < XF_MAX_RESETS;
     const target = music && rem !== null ? xf.seconds : 0;
     const C = xfReserve();
@@ -548,9 +587,12 @@
     if (xf.lastRem <= XF_NATURAL_S) xfOverlap(); else xfFlush('skip');
     xf.lastRem = Infinity;
     xf.resets = 0;
+    xf.sets = 0;
+    xf.noted = '';
   };
 
   const xfWatch = el => {
+    xfMask(el);
     const on = (type, fn) => el.addEventListener(type, () => { if (el === xf.el && boost) fn(el); });
     on('timeupdate', xfTick);
     on('ended', xfSwitch);
@@ -562,8 +604,8 @@
     on('playing', () => boost.ctx.resume().catch(() => {}));
   };
 
-  // How far what is heard lags the page, in ms (0 while a new song fades in over the old one).
-  const heardLagMs = () => (boost && xf.phase !== 'overlap') ? Math.round(xfReserve() * 1000) : 0;
+  // How far what is heard lags the element, in seconds (0 while a new song fades in over the old one).
+  const heardLag = () => (boost && xf.phase !== 'overlap') ? xfReserve() : 0;
 
   // "Is this page Spotify Connect's active device": a full device-list round trip, so it is
   // read at most once every ACTIVE_CACHE_MS and reused (a transfer happens minutes apart).

@@ -6,6 +6,14 @@ Each version section is the text of the GitHub pre-release tagged `ui-v<version>
 
 ## [Unreleased]
 
+## [0.7.1] - 2026-10-20
+
+### Fixed
+- Crossfade: while the reserve was built, Spotify's player saw its song run faster than the clock and reported its state about four times a second, to the app and to Spotify's servers. The player now sees the speed it set itself and the time that is heard; only the last 1.5 s of a song show the real time, so it still sees the song end.
+
+### Diagnostics
+- `page xfade` `overlap` and `end` lines carry the target length and how often the app and the page changed the speed during the song; `reset` lines show the page changing the speed itself.
+
 ## [0.7.0] - 2026-10-20
 
 Test release for a real crossfade.

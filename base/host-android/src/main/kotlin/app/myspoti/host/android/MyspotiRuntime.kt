@@ -57,7 +57,7 @@ object MyspotiRuntime {
                     else -> "anonymous"
                 }
                 val line = "status ready=${spotify.ready.value} session=$session " +
-                    "track=${s?.item?.name} paused=${s?.isPaused} buffering=${s?.isBuffering} url=${host.url.value.take(60)}"
+                    "track=${s?.item?.name} paused=${s?.isPaused} buffering=${s?.isBuffering} online=${network.online()} url=${host.url.value.take(60)}"
                 if (line != last) {
                     last = line
                     Logbook.log(line)
@@ -94,6 +94,9 @@ object MyspotiRuntime {
                 }
 
                 override fun onLost(n: android.net.Network) {
+                    // A late "lost" for the network the default already moved away from must not
+                    // leave the app offline on the new one.
+                    if (current != null && n != current) return
                     network.systemOnline = false
                     current = null
                     app.myspoti.spotify.security.BoundedHttp.pool.evictAll()

@@ -6,6 +6,23 @@ Each version section is the text of the GitHub pre-release tagged `ui-v<version>
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-10-20
+
+### Added
+- Artist pages show "Featuring <artist>" (This Is, the artist's radio), the artist's own playlists and "Discovered on", as in Spotify's apps.
+- A search for an artist's name lists their "Featuring" playlists right under the artist; the Playlists filter includes them too.
+
+### Changed
+- Volume boost: confirmed on a Pixel 9 Pro XL. Chromium passes Spotify's decrypted audio to the amplifier and applies the player's own volume there, so fades and ad muting keep working while boosted.
+
+### Fixed
+- A late "network lost" for the previous network no longer leaves the app offline on the new one; stall recovery and crossfade paused while it thought so.
+- Search no longer logs every query that a newer one replaced as a failure.
+
+### Diagnostics
+- `crossfade skipped on <song>: <reason>`, once per song, when a fade is due but does not run (another device active, nothing queued after it, page volume at 0).
+- The status line shows `online=` (the app's view of the network); the volume boost probe reports the player's volume with its result.
+
 ## [0.4.0] - 2026-10-20
 
 Test release for the volume boost. Whether it works depends on the phone's WebView passing Spotify's protected audio to Web Audio, which only a device test can show.

@@ -80,6 +80,7 @@ import com.music.spotui.ui.components.Loader
 import com.music.spotui.ui.navigation.Routes
 import com.music.spotui.ui.navigation.albumRoute
 import com.music.spotui.ui.navigation.artistRoute
+import com.music.spotui.ui.navigation.playlistRoute
 import com.music.spotui.ui.theme.AppBackground
 import com.music.spotui.ui.theme.AppPalette
 import com.music.spotui.ui.viewmodel.ArtistViewModel
@@ -495,6 +496,9 @@ private fun ArtistOverviewContent(
             }
         }
 
+        // ── Featuring <artist>: This Is, the artist's radio ──
+        playlistShelf({ stringResource(R.string.spotilol_artist_featuring, displayName) }, overview.featuring, navController)
+
         // ── Fans also like ──
         if (overview.relatedArtists.isNotEmpty()) {
             item { SectionHeader(stringResource(R.string.fans_also_like_section_title)) }
@@ -526,6 +530,10 @@ private fun ArtistOverviewContent(
                 }
             }
         }
+
+        // ── The artist's own playlists, then the ones listeners found them on ──
+        playlistShelf({ stringResource(R.string.spotilol_artist_playlists) }, overview.artistPlaylists, navController)
+        playlistShelf({ stringResource(R.string.spotilol_artist_discovered_on) }, overview.discoveredOn, navController)
     }
     // Title bar that fades in once the header has scrolled away (official app).
     val collapsed by remember { androidx.compose.runtime.derivedStateOf { listState.firstVisibleItemIndex > 0 } }
@@ -634,6 +642,42 @@ private fun SectionHeader(title: String) {
         fontWeight = FontWeight.Bold,
         modifier = Modifier.padding(16.dp, 20.dp, 16.dp, 8.dp),
     )
+}
+
+/** A titled row of playlist cards; nothing when [playlists] is empty. */
+private fun androidx.compose.foundation.lazy.LazyListScope.playlistShelf(
+    title: @Composable () -> String,
+    playlists: List<com.music.spotui.data.entity.LibraryEntry>,
+    navController: NavController,
+) {
+    if (playlists.isEmpty()) return
+    item { SectionHeader(title()) }
+    item {
+        LazyRow(contentPadding = androidx.compose.foundation.layout.PaddingValues(12.dp, 0.dp)) {
+            items(playlists.size) { i ->
+                PlaylistCard(playlists[i]) { navController.navigate(playlistRoute(playlists[i].spotifyId, playlists[i].name)) }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalGlideComposeApi::class)
+@Composable
+private fun PlaylistCard(playlist: com.music.spotui.data.entity.LibraryEntry, onClick: () -> Unit) {
+    Column(modifier = Modifier.pressable(0.96f) { onClick() }.width(140.dp).padding(4.dp)) {
+        GlideImage(
+            transition = CrossFade,
+            modifier = Modifier.size(132.dp).clip(RoundedCornerShape(6.dp)),
+            model = playlist.coverUri,
+            contentScale = ContentScale.Crop,
+            failure = placeholder(R.drawable.placeholder),
+            loading = placeholder(R.drawable.placeholder),
+            contentDescription = "",
+        )
+        Spacer(Modifier.height(6.dp))
+        Text(text = playlist.name, color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Medium, maxLines = 2, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+        Text(text = playlist.subtitle, color = Color.Gray, fontSize = 11.sp, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+    }
 }
 
 @OptIn(ExperimentalGlideComposeApi::class)

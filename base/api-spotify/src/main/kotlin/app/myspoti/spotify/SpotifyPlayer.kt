@@ -787,6 +787,8 @@ class SpotifyPlayer(private val bridge: Bridge, private val scope: CoroutineScop
     @Volatile private var crossfadeUntil = 0L
     /** The fail-safe that puts the level back if the page never moved on. */
     private var crossfadeJob: kotlinx.coroutines.Job? = null
+    /** The last song whose skipped crossfade was logged (see [tickCrossfade]). */
+    @Volatile private var crossfadeNoted: String? = null
 
     private fun disarmCrossfade() {
         crossfadeArmed = false
@@ -814,11 +816,19 @@ class SpotifyPlayer(private val bridge: Bridge, private val scope: CoroutineScop
         if (secs <= 0 || s == null || s.isPaused || _adPlaying.value) { endCrossfade(restore = true); return }
         val item = s.item ?: return
         if (item.kind == ItemKind.AD || item.durationMs <= 0) return
-        // Another device is playing: this phone's element is not where the sound is, and a ramp
-        // set on it would greet the user at 2% after a transfer back.
-        if (media?.active == false) { endCrossfade(restore = true); return }
         val window = secs * 1000L
         val remaining = item.durationMs - s.positionAt(now)
+        // Why a song inside its window gets no fade, once per song: the diagnostic log otherwise
+        // shows nothing at all when a crossfade does not happen.
+        fun skipped(why: String) {
+            if (remaining in 1..window && crossfadeNoted != item.uri) {
+                crossfadeNoted = item.uri
+                bridge.logger?.invoke("crossfade skipped on ${item.name}: $why")
+            }
+        }
+        // Another device is playing: this phone's element is not where the sound is, and a ramp
+        // set on it would greet the user at 2% after a transfer back.
+        if (media?.active == false) { endCrossfade(restore = true); skipped("another device is active"); return }
         if (crossfadeArmed) {
             // The next song is handled where it is reported (see [onState]). Here: the song was
             // seeked back out of the window, or the setting was shortened under the ramp.
@@ -827,10 +837,10 @@ class SpotifyPlayer(private val bridge: Bridge, private val scope: CoroutineScop
         }
         if (remaining <= 0 || remaining > window) return
         // Nothing after it: a fade-out into silence is not a crossfade.
-        if (s.next == null && upcoming().isEmpty()) return
+        if (s.next == null && upcoming().isEmpty()) { skipped("nothing after it in the queue"); return }
         val own = (media?.own ?: 1.0).coerceIn(0.0, 1.0)
         // Silent already (volume at 0): there is nothing to fade.
-        if (own <= 0.001) return
+        if (own <= 0.001) { skipped("page volume at 0"); return }
         armCrossfade(item.uri, remaining, own)
     }
 

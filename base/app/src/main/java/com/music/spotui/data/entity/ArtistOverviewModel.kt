@@ -17,6 +17,10 @@ data class ArtistOverviewModel(
     val popularReleases: List<AlbumsModel> = emptyList(),
     val appearsOn: List<AlbumsModel> = emptyList(),
     val relatedArtists: List<ArtistsModel> = emptyList(),
+    /** "Featuring <artist>": This Is, the artist's radio and other Spotify playlists. */
+    val featuring: List<LibraryEntry> = emptyList(),
+    val discoveredOn: List<LibraryEntry> = emptyList(),
+    val artistPlaylists: List<LibraryEntry> = emptyList(),
 )
 
 data class ArtistTrackUi(

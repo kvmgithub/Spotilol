@@ -8,4 +8,6 @@ data class SearchResults(
     val shows: List<PodcastModel> = emptyList(),
     val episodes: List<SongsModel> = emptyList(),
     val playlists: List<LibraryEntry> = emptyList(),
+    /** "Featuring <artist>" when the query names an artist: This Is, the artist's radio. */
+    val featured: List<LibraryEntry> = emptyList(),
 )

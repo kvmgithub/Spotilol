@@ -333,6 +333,8 @@ class Api constructor(
         if (query.isBlank()) { emit(Response.Success(SearchResults())); return@flow }
         if (!ready()) { emit(Response.Error(notSignedIn())); return@flow }
         val music = runCatching { api.search.all(query, limit = 20) }.getOrElse {
+            // A newer query replaced this one: not a failure.
+            if (it is CancellationException) throw it
             Log.e("Api", "searchEverything failed", it); emit(Response.Error(it.message ?: "error")); return@flow
         }
         val base = SearchResults(
@@ -342,14 +344,19 @@ class Api constructor(
             playlists = music.playlists.items.map(::playlistEntry),
         )
         emit(Response.Success(base))
-        val (shows, episodes) = coroutineScope {
+        // The query names an artist: their "Featuring" playlists (This Is, the artist's radio), as
+        // Spotify's own search shows them. The keyword playlist search rarely ranks those first.
+        val named = music.artists.items.firstOrNull { it.name.trim().equals(query.trim(), ignoreCase = true) }
+        val (shows, episodes, featured) = coroutineScope {
             val s = async { runCatching { api.search.shows(query, limit = 12).items }.getOrDefault(emptyList()) }
             val e = async { runCatching { api.search.episodes(query, limit = 12).items }.getOrDefault(emptyList()) }
-            s.await() to e.await()
+            val f = async { named?.let { a -> runCatching { api.catalog.artistPage(a.uri).featuring }.getOrDefault(emptyList()) }.orEmpty() }
+            Triple(s.await(), e.await(), f.await())
         }
-        if (shows.isNotEmpty() || episodes.isNotEmpty()) emit(Response.Success(base.copy(
+        if (shows.isNotEmpty() || episodes.isNotEmpty() || featured.isNotEmpty()) emit(Response.Success(base.copy(
             shows = shows.map { PodcastModel(it.uri.substringAfterLast(':'), it.title, it.subtitle.orEmpty(), cover(it.images)) },
             episodes = episodes.map(::episodeSong),
+            featured = featured.map(::playlistEntry),
         )))
     }
 
@@ -617,6 +624,9 @@ class Api constructor(
             popularReleases = page.popularReleases.map(::albumOf),
             appearsOn = page.appearsOn.map(::albumOf),
             relatedArtists = page.related.map(::artistOf),
+            featuring = page.featuring.map(::playlistEntry),
+            discoveredOn = page.discoveredOn.map(::playlistEntry),
+            artistPlaylists = page.playlists.map(::playlistEntry),
         )
         emit(Response.Success(model))
         ArtistCache.map[uri] = System.currentTimeMillis() to model

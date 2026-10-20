@@ -229,8 +229,9 @@
   // for, and at 1 the graph is neutral (gain 1, ratio 1). During an ad (window.__mspMuted) the
   // gain is 0 as well, whatever Chromium does with the element's own volume in the graph.
   //
-  // Whether Chromium hands Widevine-protected or cross-origin audio to Web Audio is not
-  // specified; silence is what it gives when it does not. A probe listens while an element
+  // Chromium hands Widevine-decrypted audio to Web Audio and applies the element's volume
+  // there (fades and ad muting keep working); a cross-origin source without CORS comes through
+  // as silence. A probe listens while an element
   // plays: {type: 'boost', sound: true} once per page when sound comes through, sound: false
   // after BOOST_SILENT_S seconds of playing in silence (the host then reloads the page).
   const BOOST_MAX = 2;
@@ -271,18 +272,21 @@
       if (!(el instanceof HTMLMediaElement) || !boost.routed.has(el)) return;
       const moving = !el.paused && el.currentTime !== last;
       last = el.currentTime;
-      if (!moving || window.__mspMuted || el.volume < 0.05 || boost.gain.gain.value === 0) { silent = 0; return; }
+      if (!moving) { silent = 0; return; }
       boost.analyser.getFloatTimeDomainData(buf);
       let peak = 0;
       for (const v of buf) peak = Math.max(peak, Math.abs(v));
+      const level = Math.round(el.volume * 1000) / 1000;
       if (peak > 0.0001) {
         silent = 0;
-        if (!heard) { heard = true; post({ type: 'boost', sound: true, src: srcKind(el), state: boost.ctx.state }); }
+        if (!heard) { heard = true; post({ type: 'boost', sound: true, src: srcKind(el), state: boost.ctx.state, level }); }
         return;
       }
+      // Silence counts only where sound is due (Chromium applies the element's volume in the graph).
+      if (window.__mspMuted || el.volume < 0.05 || boost.gain.gain.value === 0) { silent = 0; return; }
       if (++silent < BOOST_SILENT_S) return;
       clearInterval(timer);
-      post({ type: 'boost', sound: false, src: srcKind(el), state: boost.ctx.state });
+      post({ type: 'boost', sound: false, src: srcKind(el), state: boost.ctx.state, level });
     }, 1000);
   };
 

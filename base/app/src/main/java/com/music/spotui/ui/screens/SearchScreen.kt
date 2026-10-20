@@ -425,7 +425,7 @@ private fun filterSearchResults(results: SearchResults, filter: SearchFilter): L
     SearchFilter.Songs -> results.songs.map { SearchRow.Song(it) }
     SearchFilter.Artists -> results.artists.map { SearchRow.Artist(it) }
     SearchFilter.Albums -> results.albums.map { SearchRow.Album(it) }
-    SearchFilter.Playlists -> results.playlists.map { SearchRow.Playlist(it) }
+    SearchFilter.Playlists -> (results.featured + results.playlists).distinctBy { it.spotifyId }.map { SearchRow.Playlist(it) }
     SearchFilter.Podcasts, SearchFilter.Profiles -> emptyList()
 }
 
@@ -470,6 +470,12 @@ private fun mixSearchResults(results: SearchResults): List<SearchRow> {
         if (artists.hasNext()) out += SearchRow.Artist(artists.next())
         if (albums.hasNext()) out += SearchRow.Album(albums.next())
         if (playlists.hasNext()) out += SearchRow.Playlist(playlists.next())
+    }
+    // "Featuring <artist>" (This Is, the artist's radio) right under the artist the query names.
+    val featured = results.featured.filter { f -> results.playlists.take(5).none { it.spotifyId == f.spotifyId } }
+    if (featured.isNotEmpty()) {
+        val at = out.indexOfFirst { it is SearchRow.Artist }.let { if (it < 0) 0 else it + 1 }
+        out.addAll(at, featured.map { SearchRow.Playlist(it) })
     }
     return out
 }

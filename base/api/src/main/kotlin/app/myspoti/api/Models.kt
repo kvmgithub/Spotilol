@@ -167,4 +167,10 @@ data class ArtistPage(
     val popularReleases: List<Album>,
     val appearsOn: List<Album>,
     val related: List<Artist>,
+    /** "Featuring": Spotify's own playlists around the artist (This Is, the artist's radio). */
+    val featuring: List<Playlist> = emptyList(),
+    /** "Discovered on": popular playlists the artist's listeners found them on. */
+    val discoveredOn: List<Playlist> = emptyList(),
+    /** The artist's own playlists. */
+    val playlists: List<Playlist> = emptyList(),
 )

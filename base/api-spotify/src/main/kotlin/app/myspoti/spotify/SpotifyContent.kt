@@ -164,6 +164,9 @@ class SpotifyCatalog(private val gql: Gql, private val http: app.myspoti.spotify
             popularReleases = a.list("discography.popularReleasesAlbums.items").mapNotNull { album(it) },
             appearsOn = a.list("relatedContent.appearsOn.items").mapNotNull(::release),
             related = a.list("relatedContent.relatedArtists.items").mapNotNull(::artist),
+            featuring = a.list("relatedContent.featuringV2.items").mapNotNull { playlist(it.at("data")) },
+            discoveredOn = a.list("relatedContent.discoveredOnV2.items").mapNotNull { playlist(it.at("data")) },
+            playlists = a.list("profile.playlistsV2.items").mapNotNull { playlist(it.at("data")) },
         )
     }
 

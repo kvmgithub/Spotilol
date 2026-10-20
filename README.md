@@ -9,6 +9,7 @@ Base: [kota-zo/myspoti](https://github.com/kota-zo/myspoti) 2.0.0-beta.9 (`f25dd
 - Package `com.project.lol.fork.ui`, label **Spotilol UI**, signed with the Spotilol fork key.
 - Spotilol Lite (`com.project.lol.fork`) stays installed and unchanged. Spotilol UI needs its own sign-in; Lite's saved profiles are not shared.
 - APKs are published as pre-releases tagged `ui-v<version>`. Pre-releases never become "latest", so Spotilol Lite's update check ignores them. This variant has no update checker of its own.
+- What changed in each release: [CHANGELOG-UI.md](CHANGELOG-UI.md) (German), also shown on each GitHub release. `CHANGELOG.md` is Myspoti's own history, kept as upstream ships it.
 
 ## Scope compared to Myspoti
 
@@ -53,7 +54,7 @@ cd base
 ./gradlew testDebugUnitTest :api:test :api-spotify:test :app:assembleDebug
 ```
 
-Release signing reads `APK_KEYSTORE`, `APK_KEY_PASSWORD` and `APK_KEY_ALIAS` (CI fills them from `APK_SIGNING_BUNDLE`), else `base/keystore/keystore.properties`. `.github/workflows/spotilol-ui.yml` builds every push to `myspoti-ui` and publishes a pre-release for commits marked `[publish]`.
+Release signing reads `APK_KEYSTORE`, `APK_KEY_PASSWORD` and `APK_KEY_ALIAS` (CI fills them from `APK_SIGNING_BUNDLE`), else `base/keystore/keystore.properties`. `.github/workflows/spotilol-ui.yml` builds every push to `myspoti-ui` and publishes a pre-release for commits marked `[publish]`. Such a commit needs a `## Unveröffentlicht` section at the top of `CHANGELOG-UI.md`: it becomes the release text, and CI renames it to the version afterwards (pull before the next push). Editing a published section updates that release's text on the next push.
 
 ## Credits and license
 

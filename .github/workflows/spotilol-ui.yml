@@ -2,6 +2,9 @@
 # Builds on every push to myspoti-ui, signs with the fork key (APK_SIGNING_BUNDLE) and
 # publishes a pre-release tagged ui-v<version> for commits marked [publish]. Pre-releases never become "latest", so
 # Spotilol Lite's update check (releases/latest) ignores them.
+# Release notes come from CHANGELOG-UI.md: a [publish] commit needs a "## Unveröffentlicht" section,
+# which becomes the release text and is then renamed to the version. The notes job keeps the text of
+# every published release in step with its section.
 name: Spotilol UI
 on:
   push:
@@ -24,6 +27,11 @@ jobs:
         working-directory: base
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - name: Release notes for this build
+        # Checked before the build: a release without notes is refused at once.
+        if: contains(github.event.head_commit.message, '[publish]')
+        working-directory: ${{ github.workspace }}
+        run: python3 .github/scripts/ui_release_notes.py unreleased CHANGELOG-UI.md > "$RUNNER_TEMP/section.md"
       - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
         with:
           distribution: temurin
@@ -100,9 +108,26 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           tag="ui-v${APK_VERSION_NAME}"
-          printf 'Spotilol UI test build %s from `%s`.\n\nMyspoti 2.0.0-beta.8 interface with Spotilol security scope. Package `com.project.lol.fork.ui` installs next to Spotilol Lite (`com.project.lol.fork`) and needs its own sign-in.\n\nPre-release: Spotilol Lite update checks ignore it.\n' "$APK_VERSION_NAME" "$GITHUB_SHA" > "$RUNNER_TEMP/notes.md"
+          python3 ../.github/scripts/ui_release_notes.py compose "$RUNNER_TEMP/section.md" "$APK_VERSION_NAME" "$GITHUB_SHA" > "$RUNNER_TEMP/notes.md"
           gh release create "$tag" release-assets/* --target "$GITHUB_SHA" --title "Spotilol UI ${APK_VERSION_NAME}" \
             --notes-file "$RUNNER_TEMP/notes.md" --prerelease --latest=false
+      - name: Record the release in CHANGELOG-UI.md
+        # "## Unveröffentlicht" becomes "## <version> – <date>" on the branch. A push made with the
+        # workflow token starts no new run. If the branch moved on, the rename is skipped with a warning.
+        if: contains(github.event.head_commit.message, '[publish]')
+        working-directory: ${{ github.workspace }}
+        run: |
+          git fetch -q --depth=1 origin myspoti-ui
+          git worktree add -q "$RUNNER_TEMP/notes-tree" FETCH_HEAD
+          cd "$RUNNER_TEMP/notes-tree"
+          status=0
+          python3 "$GITHUB_WORKSPACE/.github/scripts/ui_release_notes.py" mark CHANGELOG-UI.md \
+            "$APK_VERSION_NAME" "$(TZ=Europe/Berlin date +%F)" "$RUNNER_TEMP/section.md" || status=$?
+          if [ "$status" = 2 ]; then echo "::warning::No matching unreleased section on the branch; heading left as is"; exit 0; fi
+          [ "$status" = 0 ] || exit "$status"
+          git -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' \
+            commit -qam "Release notes: Spotilol UI $APK_VERSION_NAME"
+          git push -q origin HEAD:myspoti-ui || echo "::warning::Could not record $APK_VERSION_NAME in CHANGELOG-UI.md (branch moved on)"
       - name: Publish failure log
         if: failure()
         env:
@@ -130,3 +155,28 @@ jobs:
       - name: Remove signing material
         if: always()
         run: rm -f "$RUNNER_TEMP/release.p12"
+
+  notes:
+    # Every published ui-v release shows its section of CHANGELOG-UI.md (and the standard footer).
+    if: github.repository_owner == 'kvmgithub'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - name: Check the notes tool
+        run: python3 .github/scripts/test_ui_release_notes.py
+      - name: Update published release notes
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          for version in $(python3 .github/scripts/ui_release_notes.py versions CHANGELOG-UI.md); do
+            tag="ui-v$version"
+            sha=$(gh release view "$tag" --json targetCommitish --jq .targetCommitish 2>/dev/null) || { echo "$tag: not published"; continue; }
+            python3 .github/scripts/ui_release_notes.py body CHANGELOG-UI.md "$version" "$sha" > "$RUNNER_TEMP/body.md"
+            current=$(gh release view "$tag" --json body --jq .body)
+            if [ "$current" = "$(cat "$RUNNER_TEMP/body.md")" ]; then echo "$tag: up to date"; continue; fi
+            gh release edit "$tag" --notes-file "$RUNNER_TEMP/body.md"
+            echo "$tag: notes updated"
+          done

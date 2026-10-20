@@ -1,28 +1,6 @@
 # Changelog
 
-## Spotilol UI 0.2 — 2026-10-20
-
-Merged Myspoti 2.0.0-beta.9 (`f25ddfe`) within Spotilol's scope.
-
-- Taken: page ad managers switched off at runtime and the device registration left unaltered (the ad-format stripping was the suspected cause of `402 COMMAND_FAILED` on free accounts); X-Requested-With suppressed; renderer crash rebuilds the page; per-install browser identity following the WebView; persistent client device id; relayed requests with the page's own browser headers; login waits for a real token; crossfade; Recents; show/episode pages and podcast player; playlist add/remove; artist menu; image, lyrics, navigation-bar and motion fixes.
-- Adapted: relayed requests carry cookies only when the page's fetch uses `credentials: 'include'`; Set-Cookie stays stripped; engine log lines (Logbook) go through the shared redactor.
-- Left out: podcast downloads, device name in Spotify's device lists, update settings and checks, diagnostic-report export row, the disabled audio proxy.
-
-## Spotilol UI 0.1 — 2026-10-19
-
-First variant build on Myspoti 2.0.0-beta.8 (`5b247b3`): package `com.project.lol.fork.ui`, next to Spotilol Lite.
-
-- Spotilol security rules: listener-only bridge without fallback, bounded relay without redirects or cookies, exact-host navigation, player-only Widevine, bounded direct requests, shared log redaction.
-- Spotilol blocking scope: Spotify ad hosts, ad media, `gabo-receiver-service` events, pixels and trackers.
-- Removed: SpotiFLAC downloads, Android Auto, YouTube music videos, third-party lyrics and translation, in-app updater, donation prompts, widget, Play services QR scanner (ML Kit logging); Jam joins by invite link.
-- Added: encrypted account profiles, switchable diagnostics (the redacted log of the last 10 minutes opens from Settings → App, no floating log button).
-- Settings scroll their last rows above the mini player and tabs; texts no longer mention downloads or Myspoti.
-
-Automated checks (JVM tests, signed release build) pass in CI; real-device testing is separate.
-
-# Upstream Myspoti history
-
-Full detail: [docs/CHANGELOG-full.md](docs/CHANGELOG-full.md).
+Each release on GitHub shows its section below. The app shows it too when it offers the update. Every detail: [docs/CHANGELOG-full.md](docs/CHANGELOG-full.md).
 
 ## 2.0.0-beta.9
 

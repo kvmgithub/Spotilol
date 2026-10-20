@@ -204,9 +204,8 @@ private fun AccentRow() {
 }
 
 /**
- * "Crossfade": the length of the fade at the end of a song. The label says what it is: the two
- * songs never overlap (the page plays one media element), so this is a fade, not a true
- * crossfade. The default is 0: off, as before.
+ * "Crossfade": how long the end of a song sounds under the start of the next (the page's audio
+ * graph keeps that much in reserve, see the bridge's "crossfade"). The default is 0: off.
  */
 @Composable
 private fun CrossfadeRow() {

@@ -69,9 +69,9 @@ fun setLibraryGridView(c: Context, v: Boolean) = prefs(c).edit().putBoolean(KEY_
 /**
  * Crossfade length in seconds, 0 = off (the default: nothing changes unless asked for).
  *
- * It is a fade, not an overlap: the page plays one media element, so the next song cannot
- * start before this one ends. The song fades out over its last N seconds, the next one fades
- * in. The value is Compose state, so the settings row redraws when it changes.
+ * The end of a song fades out while the next one fades in (the page's audio graph keeps the
+ * last N seconds in reserve, see the bridge's "crossfade"). The value is Compose state, so the
+ * settings row and the mini player's switch redraw when it changes.
  */
 object CrossfadePref {
     const val MAX = 12

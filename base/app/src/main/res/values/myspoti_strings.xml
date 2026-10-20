@@ -359,8 +359,8 @@
     <string name="share_as_image">Share as image</string>
     <string name="settings_autoplay_title">Autoplay</string>
     <string name="settings_autoplay_detail">When your music ends, keep playing similar songs</string>
-    <string name="settings_crossfade_title">Crossfade (tracks fade, they do not overlap)</string>
-    <string name="settings_crossfade_detail">A track fades out over its last seconds, the next one fades in. They never play at once: one player, one audio stream.</string>
+    <string name="settings_crossfade_title">Crossfade</string>
+    <string name="settings_crossfade_detail">The ending song fades out while the next one already fades in. To make this possible, the app builds a short reserve while a song plays; after a skip or a jump close to the end it may not reach the full length.</string>
     <string name="settings_crossfade_off">Off</string>
     <string name="settings_crossfade_seconds">%1$ds</string>
     <string name="settings_rotation_title">Screen rotation</string>

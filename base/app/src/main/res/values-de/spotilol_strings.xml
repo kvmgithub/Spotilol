@@ -64,8 +64,8 @@
     <string name="add_to_playlist_empty">Du hast keine Playlist, zu der sich dieser Titel hinzufügen lässt</string>
     <string name="add_to_playlist_no_match">Keine Playlist passt zu „%1$s“</string>
     <string name="undo">Rückgängig</string>
-    <string name="settings_crossfade_title">Überblenden (ausblenden, ohne Überlappung)</string>
-    <string name="settings_crossfade_detail">Ein Titel wird in seinen letzten Sekunden leiser, der nächste wird lauter. Beide laufen nie gleichzeitig: ein Player, ein Audiostream.</string>
+    <string name="settings_crossfade_title">Überblenden</string>
+    <string name="settings_crossfade_detail">Der endende Titel wird leiser, während der nächste schon lauter wird. Dafür baut die App während eines Titels einen kurzen Vorrat auf; nach einem Sprung kurz vor das Ende reicht er nicht für die volle Länge.</string>
     <string name="settings_crossfade_off">Aus</string>
     <string name="settings_crossfade_seconds">%1$d s</string>
     <string name="show_follow">Folgen</string>

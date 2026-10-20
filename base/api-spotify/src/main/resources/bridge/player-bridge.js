@@ -117,7 +117,7 @@
   };
 
   const lastReal = items => (items || []).filter(i => kind(i) !== 'ad');
-  const mapState = s => s && {
+  const mapState = s => s && xfState(s, {
     track: track(s.item),
     contextUri: s.context ? s.context.uri : null,
     contextName: s.context && s.context.metadata ? s.context.metadata.context_description || null : null,
@@ -133,6 +133,22 @@
     speed: s.speed,
     restrictions: s.restrictions || {},
     playbackId: s.playbackId || null,
+  });
+
+  // The crossfade reads the song's kind, length and speed from here; with a reserve built, the
+  // position reported is the one heard (the page is that far ahead), at normal speed.
+  const xfState = (s, out) => {
+    xf.kind = out.track ? out.track.kind : null;
+    xf.durationMs = s.duration || 0;
+    xf.speed = s.speed || 1;
+    const lag = heardLagMs();
+    const el = xf.el;
+    if (lag > 0 && el && xfRemaining(el) !== null) {
+      out.positionMs = Math.max(0, Math.round(el.currentTime * 1000) - lag);
+      out.timestamp = Date.now();
+      out.speed = 1;
+    }
+    return out;
   };
 
   const mapQueue = q => q && {
@@ -221,13 +237,15 @@
   let fadeTimers = [];
   const cancelFade = () => { fadeTimers.forEach(clearTimeout); fadeTimers = []; };
 
-  // --- volume boost ---------------------------------------------------------
+  // --- audio graph: volume boost and crossfade -------------------------------
   //
-  // Above 100 %: the page's media elements play through Web Audio, a gain and then a limiter
-  // (a compressor at -1 dBFS, ratio 20). An element routed into Web Audio cannot go back to
-  // direct output before the page reloads, so nothing is built until a boost above 1 is asked
-  // for, and at 1 the graph is neutral (gain 1, ratio 1). During an ad (window.__mspMuted) the
-  // gain is 0 as well, whatever Chromium does with the element's own volume in the graph.
+  // The page's media elements play through Web Audio once a boost above 100 % or a crossfade
+  // is asked for: gain (the boost; 0 during an ad) -> [delay -> gA] + [gB] -> limiter (a
+  // compressor at -1 dBFS, ratio 20 while boosted, neutral otherwise) -> out (local fades) ->
+  // speakers. An element routed into Web Audio cannot go back to direct output before the page
+  // reloads, so nothing is built before either is asked for; at 100 % without a crossfade the
+  // graph is neutral (delay 0, gA 1, gB 0, ratio 1). During an ad (window.__mspMuted) the gain
+  // is 0 as well, whatever Chromium does with the element's own volume in the graph.
   //
   // Chromium hands Widevine-decrypted audio to Web Audio and applies the element's volume
   // there (fades and ad muting keep working); a cross-origin source without CORS comes through
@@ -236,6 +254,7 @@
   // after BOOST_SILENT_S seconds of playing in silence (the host then reloads the page).
   const BOOST_MAX = 2;
   const BOOST_SILENT_S = 10;
+  // The graph (named after its first use): {ctx, gain, delay, gA, gB, limiter, out, analyser, ...}.
   let boost = null;
 
   const srcKind = el => {
@@ -274,11 +293,14 @@
       try {
         boost.ctx.createMediaElementSource(el).connect(boost.gain);
         boost.count++;
+        xfWatch(el);
       } catch (e) {
         post({ type: 'boost', error: String(e && e.message || e).slice(0, 200) });
       }
     }
-    if (boost.ctx.state === 'suspended') boost.ctx.resume().catch(() => {});
+    if (player && player._player instanceof HTMLMediaElement) xf.el = player._player;
+    // Suspended while the player is paused (see xfWatch): a crossfade reserve must not play on.
+    if (boost.ctx.state === 'suspended' && (!xf.el || !xf.el.paused)) boost.ctx.resume().catch(() => {});
   };
 
   const boostProbe = () => {
@@ -291,6 +313,7 @@
       const moving = !el.paused && el.currentTime !== last;
       last = el.currentTime;
       if (!moving) { silent = 0; return; }
+      if (boost.ctx.state === 'suspended') { boost.ctx.resume().catch(() => {}); silent = 0; return; }
       boost.analyser.getFloatTimeDomainData(buf);
       let peak = 0;
       for (const v of buf) peak = Math.max(peak, Math.abs(v));
@@ -307,6 +330,240 @@
       post({ type: 'boost', sound: false, src: srcKind(el), state: boost.ctx.state, level });
     }, 1000);
   };
+
+  // The graph, built once per page (see "audio graph").
+  const ensureGraph = () => {
+    if (boost) return boost;
+    const ctx = new AudioContext({ latencyHint: 'playback' });
+    const gain = ctx.createGain();
+    const delay = ctx.createDelay(XF_MAX_S + 4);
+    const gA = ctx.createGain();
+    const gB = ctx.createGain();
+    gB.gain.value = 0;
+    const mix = ctx.createGain();
+    const limiter = ctx.createDynamicsCompressor();
+    limiter.knee.value = 0;
+    limiter.attack.value = 0.002;
+    limiter.release.value = 0.2;
+    limiter.threshold.value = 0;
+    limiter.ratio.value = 1;
+    // out: local fades and volume sets (see setLevel), after the limiter.
+    const out = ctx.createGain();
+    const analyser = ctx.createAnalyser();
+    gain.connect(delay).connect(gA).connect(mix);
+    gain.connect(gB).connect(mix);
+    mix.connect(limiter).connect(out).connect(ctx.destination);
+    gain.connect(analyser);
+    boost = { ctx, gain, delay, gA, gB, mix, limiter, out, analyser, level: 1, routed: new WeakSet(), count: 0 };
+    boostProbe();
+    return boost;
+  };
+
+  // --- crossfade --------------------------------------------------------------
+  //
+  // The page plays one song at a time, so the end of one cannot sound under the start of the
+  // next. The graph keeps a reserve instead. While a song plays, the element runs k times
+  // faster (pitch not preserved), and the delay is laid out so that its read position moves
+  // through every stretch of what was written at 1/k of the speed that stretch was written at:
+  // tempo and pitch come out exactly as recorded, and what is heard falls behind the page by
+  // (k - 1) seconds of song per second. By the song's end the reserve holds its last N seconds.
+  // When the next song starts (at normal speed), the delayed path plays the old song's end and
+  // fades out while the direct path fades the new song in, equal power, over the reserve; once
+  // the delayed path reaches the new song, the delay drops to 0 where both paths carry the same
+  // sound, and the reserve is built again over the new song.
+  //
+  // A pause suspends the context, so the reserve neither plays on nor gets lost. A seek or a
+  // skip drops it (the sound jumps to where the page is). What is heard lags the page by the
+  // reserve: mapState reports the heard position, so the app's slider and lyrics follow the ear.
+  const XF_MAX_S = 12;
+  const XF_K_MAX = 1.12;
+  // A song that ends with less than this left at the last look ended by itself (else: a skip).
+  const XF_NATURAL_S = 1.0;
+  // A song whose speed the page put back this often is left alone (it would fight every change).
+  const XF_MAX_RESETS = 3;
+  const xf = { seconds: 0, el: null, k: 1, ours: false, pitch: null, segs: [{ at: 0, k: 1 }], phase: 'build',
+    swapAt: 0, switchAt: -1e9, lastRem: Infinity, kind: null, durationMs: 0, speed: 1, planned: null, noted: '', resets: 0 };
+
+  const xfNote = (event, extra) => post(Object.assign({ type: 'xfade', event }, extra || {}));
+  const r1 = x => Math.round(x * 10) / 10;
+
+  // Content seconds left in the song the element plays, or null when the element's timeline is
+  // not the song's (then nothing is built: the reserve would be planned on a wrong end).
+  const xfRemaining = el => {
+    const d = el.duration;
+    if (!isFinite(d) || d < 5 || !xf.durationMs || Math.abs(d * 1000 - xf.durationMs) > 3000) return null;
+    return Math.max(0, d - el.currentTime);
+  };
+
+  // Our speed factor on the stream written from now on (1: none; a page-chosen speed is not ours).
+  const xfMark = k => {
+    const now = boost.ctx.currentTime;
+    const last = xf.segs[xf.segs.length - 1];
+    if (last.k === k) return;
+    if (last.at >= now) last.k = k; else xf.segs.push({ at: now, k });
+  };
+
+  // The delay from now on, from the speeds the stream was written at (see above).
+  const xfLay = () => {
+    const p = boost.delay.delayTime, now = boost.ctx.currentTime;
+    let t = now, d = p.value, s = now - d;
+    p.cancelScheduledValues(now);
+    p.setValueAtTime(d, now);
+    while (xf.segs.length > 1 && xf.segs[1].at <= s) xf.segs.shift();
+    for (let i = 0; i < xf.segs.length; i++) {
+      const k = xf.segs[i].k, next = xf.segs[i + 1];
+      if (!next) {
+        // Still being written at this speed: read on at 1/k until the delay's limit.
+        if (k > 1) {
+          const slope = 1 - 1 / k, H = Math.max(0, (XF_MAX_S + 3 - d) / slope);
+          if (H > 0) p.linearRampToValueAtTime(d + slope * H, t + H);
+        }
+        return;
+      }
+      t += (next.at - s) * k;
+      s = next.at;
+      d = t - s;
+      p.linearRampToValueAtTime(d, t);
+    }
+  };
+
+  // Seconds of song between what the page plays and what is heard.
+  const xfReserve = () => {
+    if (!boost) return 0;
+    const now = boost.ctx.currentTime, s = now - boost.delay.delayTime.value;
+    let c = 0;
+    for (let i = 0; i < xf.segs.length; i++) {
+      const a = Math.max(s, xf.segs[i].at), b = i + 1 < xf.segs.length ? xf.segs[i + 1].at : now;
+      if (b > a) c += (b - a) * xf.segs[i].k;
+    }
+    return c;
+  };
+
+  // Only a speed set here is ever put back: a podcast speed chosen in the page stays.
+  const xfRate = k => {
+    const el = xf.el;
+    if (!el) return;
+    if (k === 1) {
+      if (xf.ours) { el.playbackRate = 1; xf.ours = false; }
+      if (xf.pitch !== null) { el.preservesPitch = xf.pitch; xf.pitch = null; }
+      xf.k = el.playbackRate;
+    } else {
+      if (xf.pitch === null) xf.pitch = el.preservesPitch;
+      el.preservesPitch = false;
+      el.playbackRate = k;
+      xf.k = k;
+      xf.ours = true;
+    }
+    xfMark(xf.ours ? k : 1);
+    xfLay();
+  };
+
+  // The reserve dropped: the sound jumps to where the page is.
+  const xfFlush = why => {
+    if (!boost) return;
+    const had = xfReserve(), t = boost.ctx.currentTime;
+    for (const p of [boost.delay.delayTime, boost.gA.gain, boost.gB.gain]) p.cancelScheduledValues(t);
+    boost.delay.delayTime.setValueAtTime(0, t);
+    boost.gA.gain.setValueAtTime(1, t);
+    boost.gB.gain.setValueAtTime(0, t);
+    xf.segs = [{ at: t, k: 1 }];
+    xf.phase = 'build';
+    xf.planned = null;
+    xfRate(1);
+    if (had > 0.05) xfNote('flush', { why, reserve: r1(had) });
+  };
+
+  // The song ended by itself: its last seconds in the reserve fade out under the next one.
+  const xfOverlap = () => {
+    const L = xfReserve();
+    xfRate(1);
+    const t = boost.ctx.currentTime;
+    if (xf.seconds === 0 || L < 0.3) { xfNote('end', { reserve: r1(L) }); return; }
+    const n = 64, fadeOut = new Float32Array(n), fadeIn = new Float32Array(n);
+    for (let i = 0; i < n; i++) {
+      const x = i / (n - 1);
+      fadeOut[i] = Math.cos(x * Math.PI / 2);
+      fadeIn[i] = Math.sin(x * Math.PI / 2);
+    }
+    boost.gA.gain.cancelScheduledValues(t);
+    boost.gB.gain.cancelScheduledValues(t);
+    boost.gA.gain.setValueCurveAtTime(fadeOut, t, L);
+    boost.gB.gain.setValueCurveAtTime(fadeIn, t, L);
+    // The delayed path reaches the new song after L seconds: there the delay drops to 0.
+    const swap = t + L;
+    boost.delay.delayTime.setValueAtTime(0, swap);
+    boost.gA.gain.setValueAtTime(1, swap);
+    boost.gB.gain.setValueAtTime(0, swap);
+    xf.phase = 'overlap';
+    xf.swapAt = swap;
+    xf.planned = null;
+    xfNote('overlap', { seconds: r1(L) });
+  };
+
+  // Every timeupdate of the player's element: builds the reserve towards xf.seconds by the
+  // song's end, at the lowest speed that gets there (at most XF_K_MAX).
+  const xfTick = () => {
+    const el = xf.el;
+    if (!boost || !el || !boost.routed.has(el) || el.paused) return;
+    const now = boost.ctx.currentTime;
+    if (xf.phase === 'overlap') {
+      if (now < xf.swapAt) return;
+      xf.phase = 'build';
+      xf.segs = [{ at: xf.swapAt, k: xf.ours ? xf.k : 1 }];
+    }
+    // The page changed the speed itself (a new source starts at 1, a podcast speed).
+    if (Math.abs(el.playbackRate - xf.k) > 1e-6) {
+      if (xf.ours) xf.resets++;
+      xf.k = el.playbackRate;
+      xf.ours = false;
+      xfMark(1);
+      xfLay();
+    }
+    const rem = xfRemaining(el);
+    if (rem !== null) xf.lastRem = rem;
+    if (xf.resets >= XF_MAX_RESETS && xf.noted !== 'resets') { xf.noted = 'resets'; xfNote('unsupported', { why: 'the page keeps resetting the speed' }); }
+    if (xf.seconds > 0 && rem === null && xf.noted !== 'timeline') { xf.noted = 'timeline'; xfNote('unsupported', { why: 'element timeline is not the song' }); }
+    const music = xf.kind === 'track' && (xf.speed || 1) === 1 && !window.__mspMuted && xf.resets < XF_MAX_RESETS;
+    const target = music && rem !== null ? xf.seconds : 0;
+    const C = xfReserve();
+    // Reserve C grows by (k - 1) seconds per second, for rem / k more seconds: k = rem / (rem - (N - C)).
+    const need = target - C;
+    let k = need <= 0.02 ? 1 : (rem > need ? rem / (rem - need) : XF_K_MAX);
+    k = Math.min(XF_K_MAX, Math.max(1, k));
+    if (k === 1 ? !xf.ours : (xf.ours && Math.abs(k - xf.k) < 0.002)) return;
+    xfRate(k);
+    const key = xf.durationMs + ':' + Math.round(el.duration);
+    if (k > 1 && xf.planned !== key) {
+      xf.planned = key;
+      xfNote('build', { speed: Math.round(k * 1000) / 1000, target, reserve: r1(C), left: Math.round(rem) });
+    }
+  };
+
+  const xfAtEnd = el => el.ended || xf.lastRem <= XF_NATURAL_S || performance.now() - xf.switchAt < 2000;
+
+  // A new source on the element: the song ended by itself, or was skipped.
+  const xfSwitch = () => {
+    if (!boost || performance.now() - xf.switchAt < 2000) return;
+    xf.switchAt = performance.now();
+    if (xf.lastRem <= XF_NATURAL_S) xfOverlap(); else xfFlush('skip');
+    xf.lastRem = Infinity;
+    xf.resets = 0;
+  };
+
+  const xfWatch = el => {
+    const on = (type, fn) => el.addEventListener(type, () => { if (el === xf.el && boost) fn(el); });
+    on('timeupdate', xfTick);
+    on('ended', xfSwitch);
+    on('emptied', xfSwitch);
+    on('loadstart', xfSwitch);
+    on('seeking', () => { if (performance.now() - xf.switchAt > 2000) xfFlush('seek'); });
+    on('pause', () => { if (!xfAtEnd(el)) boost.ctx.suspend().catch(() => {}); });
+    on('play', () => boost.ctx.resume().catch(() => {}));
+    on('playing', () => boost.ctx.resume().catch(() => {}));
+  };
+
+  // How far what is heard lags the page, in ms (0 while a new song fades in over the old one).
+  const heardLagMs = () => (boost && xf.phase !== 'overlap') ? Math.round(xfReserve() * 1000) : 0;
 
   // "Is this page Spotify Connect's active device": a full device-list round trip, so it is
   // read at most once every ACTIVE_CACHE_MS and reused (a transfer happens minutes apart).
@@ -519,31 +776,28 @@
       return true;
     },
 
-    // The volume boost (see "volume boost"): {level: 1..2} -> {level, routed, state}.
+    // The volume boost (see "audio graph"): {level: 1..2} -> {level, routed, state}.
     'media.boost': async a => {
       const level = Math.min(BOOST_MAX, Math.max(1, Number(a.level) || 1));
       if (!boost && level <= 1) return { level, routed: 0, state: 'off' };
-      if (!boost) {
-        const ctx = new AudioContext({ latencyHint: 'playback' });
-        const gain = ctx.createGain();
-        const limiter = ctx.createDynamicsCompressor();
-        limiter.knee.value = 0;
-        limiter.attack.value = 0.002;
-        limiter.release.value = 0.2;
-        const analyser = ctx.createAnalyser();
-        // out: local fades and volume sets (see setLevel), after the limiter.
-        const out = ctx.createGain();
-        gain.connect(limiter).connect(out).connect(ctx.destination);
-        gain.connect(analyser);
-        boost = { ctx, gain, limiter, out, analyser, level, routed: new WeakSet(), count: 0 };
-        boostProbe();
-      }
+      ensureGraph();
       boost.level = level;
       boost.gain.gain.value = window.__mspMuted ? 0 : level;
       boost.limiter.threshold.value = level > 1 ? -1 : 0;
       boost.limiter.ratio.value = level > 1 ? 20 : 1;
       await boostRoute();
       return { level, routed: boost.count, state: boost.ctx.state };
+    },
+
+    // The crossfade (see "crossfade"): {seconds: 0..12} -> {seconds, routed, state}.
+    'media.crossfade': async a => {
+      xf.seconds = Math.min(XF_MAX_S, Math.max(0, Math.round(Number(a.seconds) || 0)));
+      if (!boost && xf.seconds === 0) return { seconds: 0, routed: 0, state: 'off' };
+      ensureGraph();
+      await boostRoute();
+      xf.planned = null;
+      xfTick();
+      return { seconds: xf.seconds, routed: boost.count, state: boost.ctx.state };
     },
 
     'volume.get': () => need().playback.getVolume(),

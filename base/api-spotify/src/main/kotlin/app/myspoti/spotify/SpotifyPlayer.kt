@@ -143,6 +143,7 @@ class SpotifyPlayer(private val bridge: Bridge, private val scope: CoroutineScop
                 }
                 if (audioQuality != "auto") applyAudioQuality()
                 if (boost > 1.0) applyBoost()
+                if (crossfadeSeconds > 0) applyCrossfade()
                 // The page keeps its volume: an app closed during a muted ad must not stay silent.
                 runCatching { if (volume() == 0.0) setVolume(wantedVolume?.takeIf { v -> v > 0.0 } ?: 1.0) }
                 // A reloaded page during an ad break plays the ad again: muted again at once.
@@ -354,7 +355,7 @@ class SpotifyPlayer(private val bridge: Bridge, private val scope: CoroutineScop
             lastMedia = media
             val s = _state.value
             preloadNextSong(s, media)
-            tickCrossfade(s, media, now)
+            // The crossfade runs in the page's audio graph ("media.crossfade"), not on these ticks.
             if (tick % VOLUME_CHECK_TICKS == 0) guardVolume(s, media)
             if (_adPlaying.value) {
                 val ad = adState
@@ -765,6 +766,7 @@ class SpotifyPlayer(private val bridge: Bridge, private val scope: CoroutineScop
             if (field == v) return
             field = v
             bridge.logger?.invoke("crossfade length ${v}s")
+            scope.launch { applyCrossfade() }
             // Turned off while a ramp runs: the sound comes back at once rather than at the end
             // of a fade nobody wants any more.
             if (v == 0) {
@@ -788,8 +790,6 @@ class SpotifyPlayer(private val bridge: Bridge, private val scope: CoroutineScop
     @Volatile private var crossfadeUntil = 0L
     /** The fail-safe that puts the level back if the page never moved on. */
     private var crossfadeJob: kotlinx.coroutines.Job? = null
-    /** The last song whose crossfade window was logged (see [tickCrossfade]). */
-    @Volatile private var crossfadeNoted: String? = null
 
     private fun disarmCrossfade() {
         crossfadeArmed = false
@@ -804,72 +804,6 @@ class SpotifyPlayer(private val bridge: Bridge, private val scope: CoroutineScop
         if (!crossfadeArmed) return
         disarmCrossfade()
         if (restore) runCatching { restoreLevel() }
-    }
-
-    /**
-     * Called each watch tick: arms the fade-out when the song is inside its last
-     * [crossfadeSeconds]. The ramp ends with the song (the window is what is left of it), so a
-     * late tick only shortens the fade, it never runs past the next song.
-     */
-    private suspend fun tickCrossfade(s: PlayerState?, media: Media?, now: Long) {
-        val secs = crossfadeSeconds
-        // Off, or nothing to fade out of: an armed ramp is lifted (never left down).
-        if (secs <= 0 || s == null || s.isPaused || _adPlaying.value) { endCrossfade(restore = true); return }
-        val item = s.item ?: return
-        if (item.kind == ItemKind.AD || item.durationMs <= 0) return
-        val window = secs * 1000L
-        val remaining = item.durationMs - s.positionAt(now)
-        // Once per song, inside its window: what the decision below sees. Without it a crossfade
-        // that does not happen leaves no trace in the diagnostic log.
-        if (remaining in 1..window && crossfadeNoted != item.uri) {
-            crossfadeNoted = item.uri
-            bridge.logger?.invoke("crossfade due on ${item.name}: ${remaining}ms left, active=${media?.active}, " +
-                "next=${s.next != null || upcoming().isNotEmpty()}, own=${media?.own}, level=${media?.level}")
-        }
-        // Another device is playing: this phone's element is not where the sound is, and a ramp
-        // set on it would greet the user at 2% after a transfer back.
-        if (media?.active == false) { endCrossfade(restore = true); return }
-        if (crossfadeArmed) {
-            // The next song is handled where it is reported (see [onState]). Here: the song was
-            // seeked back out of the window, or the setting was shortened under the ramp.
-            if (item.uri != crossfadeUri || remaining > window) endCrossfade(restore = true)
-            return
-        }
-        if (remaining <= 0 || remaining > window) return
-        // Nothing after it: a fade-out into silence is not a crossfade.
-        if (s.next == null && upcoming().isEmpty()) return
-        val own = (media?.own ?: 1.0).coerceIn(0.0, 1.0)
-        // Silent already (volume at 0): there is nothing to fade.
-        if (own <= 0.001) return
-        armCrossfade(item.uri, remaining, own)
-    }
-
-    private suspend fun armCrossfade(uri: String, remainingMs: Long, own: Double) {
-        val steps = (remainingMs / CROSSFADE_STEP_MS).toInt().coerceIn(2, CROSSFADE_MAX_STEPS)
-        val per = (remainingMs / steps).coerceAtLeast(1L)
-        // A linear ramp in amplitude, ending on CROSSFADE_FLOOR of the page's own level: the last
-        // step lands on the song's end, so the fade is over exactly when the song is.
-        val levels = (1..steps).map { i ->
-            (own * (1.0 - (1.0 - CROSSFADE_FLOOR) * i / steps)).coerceAtLeast(CROSSFADE_SILENT)
-        }
-        crossfadeArmed = true
-        crossfadeUri = uri
-        crossfadeUntil = System.currentTimeMillis() + remainingMs + CROSSFADE_FAILSAFE_MS
-        crossfadeJob?.cancel()
-        // The hard floor: whatever the page does (a stall, a lost state, a reload, a song that
-        // repeats), the sound is back a few seconds after the ramp was due. A volume left down
-        // is the one failure the user cannot work around.
-        crossfadeJob = scope.launch {
-            delay(remainingMs + CROSSFADE_FAILSAFE_MS)
-            if (crossfadeArmed) {
-                bridge.logger?.invoke("crossfade left the sound down ${(remainingMs + CROSSFADE_FAILSAFE_MS) / 1000}s: volume restored")
-                endCrossfade(restore = true)
-            }
-        }
-        bridge.logger?.invoke("crossfade: ${remainingMs / 1000.0}s out on ${_state.value?.item?.name}")
-        // One call: the page runs the whole ramp itself (see [fade]).
-        runCatching { fade(levels, ms = per) }
-            .onFailure { endCrossfade(restore = true) }
     }
 
     /** The next song is on: a short ramp back to the user's volume. */
@@ -1064,10 +998,25 @@ class SpotifyPlayer(private val bridge: Bridge, private val scope: CoroutineScop
     }
 
     private suspend fun applyBoost() {
+        if (webAudioOff) return
         runCatching { bridge.call("media.boost", buildJsonObject { put("level", boost) }) }
             .onSuccess { bridge.logger?.invoke("boost $boost: $it") }
             .onFailure { bridge.logger?.invoke("boost $boost not set: ${it.message}") }
     }
+
+    /**
+     * The page's crossfade (see "crossfade" in the bridge): a reserve built over each song, faded
+     * out under the next one. Needs the same Web Audio graph as the boost.
+     */
+    private suspend fun applyCrossfade() {
+        if (webAudioOff || !bridge.ready.value) return
+        runCatching { bridge.call("media.crossfade", buildJsonObject { put("seconds", crossfadeSeconds) }) }
+            .onSuccess { bridge.logger?.invoke("crossfade ${crossfadeSeconds}s: $it") }
+            .onFailure { bridge.logger?.invoke("crossfade ${crossfadeSeconds}s not set: ${it.message}") }
+    }
+
+    /** No sound came through Web Audio on this phone: boost and crossfade stay off until restart. */
+    @Volatile private var webAudioOff = false
 
     /**
      * The probe heard nothing while the page played (protected or cross-origin audio that
@@ -1077,7 +1026,8 @@ class SpotifyPlayer(private val bridge: Bridge, private val scope: CoroutineScop
     private fun onBoost(msg: JsonObject) {
         // Also at 100 %: a page that has built the graph stays routed through it, silent or not.
         if ((msg["sound"] as? JsonPrimitive)?.booleanOrNull != false) return
-        bridge.logger?.invoke("boost off: no sound through Web Audio, the page reloads")
+        bridge.logger?.invoke("boost and crossfade off: no sound through Web Audio, the page reloads")
+        webAudioOff = true
         boost = 1.0
         _boostSilent.tryEmit(Unit)
         scope.launch { reloadAndPlayOn(lastTrackState, next = false) }
@@ -1148,24 +1098,8 @@ class SpotifyPlayer(private val bridge: Bridge, private val scope: CoroutineScop
         const val FADE_BACK_MAX_MS = 2_500L
         /** Crossfade: the setting's range (seconds, 0 = off). */
         const val CROSSFADE_MAX_SECONDS = 12
-        /**
-         * Where a crossfade's ramp down ends, as a share of the page player's own level. Not 0:
-         * the page keeps a floor on the element (see [FADE_STEPS]), and a media element set to 0
-         * is paused by Chromium.
-         */
-        const val CROSSFADE_FLOOR = 0.02
         /** The floor the bridge itself keeps on a media element. */
         const val CROSSFADE_SILENT = 0.001
-        /** One ramp step per that many ms; the page runs them itself (see [fade]). */
-        private const val CROSSFADE_STEP_MS = 100L
-        /** A 12 s ramp at 100 ms a step; more steps would not be heard. */
-        private const val CROSSFADE_MAX_STEPS = 60
-        /**
-         * How long after the ramp was due the level is put back whatever the page did: a song
-         * that stalled, a state lost in a reload, a repeated track. A volume left down is the
-         * failure a user cannot work around.
-         */
-        const val CROSSFADE_FAILSAFE_MS = 6_000L
         /** The next song's ramp up: short, it is already playing. Ends on the own level. */
         val CROSSFADE_IN = listOf(0.2, 0.45, 0.7, 0.9)
         const val CROSSFADE_IN_STEP_MS = 100L

@@ -6,6 +6,19 @@ Each version section is the text of the GitHub pre-release tagged `ui-v<version>
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-10-20
+
+Test release for a real crossfade.
+
+### Changed
+- Crossfade now overlaps: the end of a song fades out while the next one already plays and fades in, as in Spotify's apps. The Web Player has only one player, so the app builds a reserve while a song plays: Spotify plays it 3–12 % faster, the app's audio path slows it back down (tempo and pitch unchanged), and the song's last seconds wait in the reserve until the next one starts.
+- What is heard lags Spotify by up to the crossfade length; the position, the slider and the lyrics follow what is heard. Pause and play act at once.
+- Skips and seeks change at once, without a crossfade. After a jump close to the end of a song, the reserve may not reach the full length.
+- Crossfade uses the same audio path as the volume boost; if no sound comes through it on a phone, both stay off until the app restarts.
+
+### Diagnostics
+- `page xfade: …` lines: `build` (speed and target per song), `overlap` (seconds crossfaded), `flush` (reserve dropped by a skip or seek), `unsupported` (why a song is not crossfaded).
+
 ## [0.6.1] - 2026-10-20
 
 ### Fixed

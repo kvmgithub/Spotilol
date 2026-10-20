@@ -359,8 +359,8 @@
     <string name="share_as_image">Partager en image</string>
     <string name="settings_autoplay_title">Lecture automatique</string>
     <string name="settings_autoplay_detail">Quand votre musique se termine, continuer avec des titres similaires</string>
-    <string name="settings_crossfade_title">Fondu enchaîné (sans chevauchement)</string>
-    <string name="settings_crossfade_detail">Un morceau s\'efface sur ses dernières secondes, le suivant remonte. Les deux ne jouent jamais en même temps : un seul lecteur, un seul flux audio.</string>
+    <string name="settings_crossfade_title">Fondu enchaîné</string>
+    <string name="settings_crossfade_detail">Le morceau qui se termine baisse pendant que le suivant monte déjà. L\'application constitue pour cela une courte réserve pendant la lecture ; après un saut près de la fin, elle peut être plus courte.</string>
     <string name="settings_crossfade_off">Désactivé</string>
     <string name="settings_crossfade_seconds">%1$d s</string>
     <string name="settings_rotation_title">Rotation de l\'écran</string>

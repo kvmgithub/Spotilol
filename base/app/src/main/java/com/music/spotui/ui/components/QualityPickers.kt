@@ -34,11 +34,11 @@ import com.music.spotui.data.preferences.setStreamingQuality
 
 /** The streaming levels of the Web Player, one choice; saved and applied at once. */
 @Composable
-fun StreamingQualityPicker(modifier: Modifier = Modifier) {
+fun StreamingQualityPicker(modifier: Modifier = Modifier, cellular: Boolean = false, title: Int = R.string.quality_streaming_title) {
     val ctx = LocalContext.current
-    var current by remember { mutableStateOf(getStreamingQuality(ctx)) }
+    var current by remember(cellular) { mutableStateOf(getStreamingQuality(ctx, cellular)) }
     QualityGroup(
-        title = stringResource(R.string.quality_streaming_title),
+        title = stringResource(title),
         detail = stringResource(R.string.quality_streaming_detail),
         options = listOf(
             Option(StreamingQuality.AUTO, R.string.quality_streaming_auto, R.string.quality_streaming_auto_detail),
@@ -47,7 +47,7 @@ fun StreamingQualityPicker(modifier: Modifier = Modifier) {
             Option(StreamingQuality.HIGH, R.string.quality_streaming_high, R.string.quality_streaming_high_detail),
         ),
         selected = current,
-        onSelect = { current = it; setStreamingQuality(ctx, it) },
+        onSelect = { current = it; setStreamingQuality(ctx, it, cellular) },
         modifier = modifier,
     )
 }

@@ -83,11 +83,7 @@ fun FollowListScreen(navController: NavController, userId: String, followers: Bo
             }
         }
         when {
-            list == null -> item {
-                Box(Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator(color = AppAccent)
-                }
-            }
+            list == null -> item { com.music.spotui.ui.components.SkeletonList(count = 8, round = true) }
             list.isEmpty() -> item {
                 Text(stringResource(R.string.profile_list_empty), color = Color(0xFFB3B3B3), fontSize = 15.sp,
                     modifier = Modifier.padding(16.dp))

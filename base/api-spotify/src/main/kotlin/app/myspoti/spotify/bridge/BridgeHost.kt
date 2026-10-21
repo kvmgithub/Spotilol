@@ -1,6 +1,7 @@
 package app.myspoti.spotify.bridge
 
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
@@ -32,11 +33,11 @@ object BridgeScript {
 }
 
 /**
- * Audio ads. Spotify's server puts them in the player's queue (track-playback state machine),
- * each with an audio file in a format of its own. The player registers itself without those
- * formats ([withoutAdFormats]), so an ad comes with nothing to play; the ad audio host is
- * refused as well. The player then halts at the end of the song before the ad, and
- * [app.myspoti.spotify.SpotifyPlayer] starts the next song.
+ * Audio ads. Spotify's server puts them in the player's queue: the track-playback state machine
+ * it sends to the page about three minutes ahead, where the song before the ad `advance`s to an
+ * ad state at its end. [withoutAds] sends that end to the song after the ad instead, before the
+ * page sees the machine, so the page never reaches an ad. The ad audio host is refused as well,
+ * and [app.myspoti.spotify.SpotifyPlayer] reloads the page if an ad still becomes current.
  */
 object AdBlock {
     /**
@@ -71,6 +72,94 @@ object AdBlock {
         if (!host.endsWith(".spotify.com") || "spclient" !in host) return false
         val path = "/" + rest.substringAfter('/', "").substringBefore('?')
         return blockedPaths.any { path.startsWith(it) }
+    }
+
+    /**
+     * A track-playback reply (a state machine) with its ads left out, or null when it leads to no
+     * ad. Measured on 20/10 (desktop, free account): a refused ad now stays current for good, and
+     * every skip or play is refused while it is ("ad_disallow"); only a reload left it. Spotify's
+     * state machine ties the ad to the song before it: that song's `advance` (its natural end)
+     * goes to the ad, and then `advance` is sent where its `skip_next` goes, so the page plays the
+     * next song at the end of this one, as after a skip. Measured: the next song started 60 ms
+     * after the end, and Spotify accepted every state the page reported (200). When `skip_next`
+     * leads to the ad as well (an ad already left out once), nothing here can help and the reply
+     * is left as it is; an ad that is already the current state cannot be left out either.
+     */
+    fun withoutAds(body: String): Pair<String, List<String>>? {
+        if ("\"AD\"" !in body) return null
+        val root = runCatching { Json.parseToJsonElement(body).jsonObject }.getOrNull() ?: return null
+        val notes = mutableListOf<String>()
+        val out = root.toMutableMap()
+        for (key in listOf("state_machine", "previous_state_machine")) {
+            val machine = root[key] as? JsonObject ?: continue
+            machineWithoutAds(machine, notes)?.let { out[key] = it }
+        }
+        if (out == root) return null
+        return JsonObject(out).toString() to notes
+    }
+
+    /**
+     * A song whose two ways on — its end and its skip — both lead to an ad: Spotify does that once
+     * an ad was left out by [withoutAds]. [nextUri] (the song the page shows as next) is then
+     * played just before the song ends: a plain play command, which Spotify answers with a new
+     * queue the ad is no longer reached from. Measured on 20/10 (desktop, free account): played
+     * 1 s before the end, the next song started at once, every report was answered 200, and the
+     * songs after it went on without an ad.
+     */
+    data class AdAhead(val songUid: String?, val songUri: String?, val nextUri: String)
+
+    /** The last [AdAhead] the host saw in Spotify's replies; the player plays on and clears it. */
+    val ahead = MutableStateFlow<AdAhead?>(null)
+
+    /** The [AdAhead] in a track-playback reply (after [withoutAds]), or null. */
+    fun adAhead(body: String): AdAhead? = runCatching {
+        if ("\"AD\"" !in body) return null
+        val root = Json.parseToJsonElement(body).jsonObject
+        val machine = root["state_machine"] as? JsonObject ?: return null
+        val tracks = machine["tracks"] as? JsonArray ?: return null
+        val states = machine["states"] as? JsonArray ?: return null
+        fun index(o: JsonObject?, key: String) = (o?.get(key) as? JsonPrimitive)?.contentOrNull?.toIntOrNull()
+        fun trackOf(state: Int) = index(states.getOrNull(state) as? JsonObject, "track")?.let { tracks.getOrNull(it) as? JsonObject }
+        fun isAd(state: Int) = (trackOf(state)?.get("content_type") as? JsonPrimitive)?.contentOrNull == "AD"
+        fun uriOf(state: Int) = ((trackOf(state)?.get("metadata") as? JsonObject)?.get("uri") as? JsonPrimitive)?.contentOrNull
+        val current = index(root["updated_state_ref"] as? JsonObject, "state_index") ?: return null
+        if (isAd(current)) return null
+        val state = states.getOrNull(current) as? JsonObject ?: return null
+        val transitions = state["transitions"] as? JsonObject ?: return null
+        fun to(key: String) = index(transitions[key] as? JsonObject, "state_index")
+        val end = to("advance") ?: return null
+        if (!isAd(end) || to("skip_next")?.let { !isAd(it) } == true) return null
+        val next = to("show_next")?.takeIf { !isAd(it) }?.let(::uriOf) ?: return null
+        AdAhead((state["track_uid"] as? JsonPrimitive)?.contentOrNull, uriOf(current), next)
+    }.getOrNull()
+
+    private fun machineWithoutAds(machine: JsonObject, notes: MutableList<String>): JsonObject? {
+        val tracks = machine["tracks"] as? JsonArray ?: return null
+        val states = machine["states"] as? JsonArray ?: return null
+        fun trackOf(state: Int) = ((states.getOrNull(state) as? JsonObject)?.get("track") as? JsonPrimitive)
+            ?.contentOrNull?.toIntOrNull()?.let { tracks.getOrNull(it) as? JsonObject }
+        fun isAd(state: Int) = (trackOf(state)?.get("content_type") as? JsonPrimitive)?.contentOrNull == "AD"
+        fun nameOf(state: Int) = ((trackOf(state)?.get("metadata") as? JsonObject)?.get("name") as? JsonPrimitive)?.contentOrNull
+        fun indexOf(transition: JsonObject) = (transition["state_index"] as? JsonPrimitive)?.contentOrNull?.toIntOrNull()
+        var changed = false
+        val rewritten = states.mapIndexed { i, element ->
+            val state = element as? JsonObject ?: return@mapIndexed element
+            val transitions = state["transitions"] as? JsonObject ?: return@mapIndexed element
+            if (isAd(i)) return@mapIndexed element
+            // Only a skip is a state the server knows: `show_next` points at a display-only state,
+            // and a page sent there had every report refused (502 unknown_state_ref) and stopped.
+            val target = (transitions["skip_next"] as? JsonObject)?.takeIf { t -> indexOf(t)?.let { !isAd(it) } == true }
+            val next = transitions.toMutableMap()
+            for (key in listOf("advance", "skip_next")) {
+                val t = transitions[key] as? JsonObject ?: continue
+                if (indexOf(t)?.let(::isAd) != true) continue
+                if (target == null) { notes += "$key after ${nameOf(i)}: an ad, and no song to send it to"; continue }
+                next[key] = JsonObject(target.toMutableMap().apply { t["paused"]?.let { put("paused", it) } })
+                notes += "$key after ${nameOf(i)}: ${indexOf(target)?.let(::nameOf)} instead of an ad"
+            }
+            if (next == transitions) element else { changed = true; JsonObject(state.toMutableMap().apply { put("transitions", JsonObject(next)) }) }
+        }
+        return if (changed) JsonObject(machine.toMutableMap().apply { put("states", JsonArray(rewritten)) }) else null
     }
 
     /** The player's registration (POST track-playback/v1/devices), to rewrite with [withDeviceName]. */

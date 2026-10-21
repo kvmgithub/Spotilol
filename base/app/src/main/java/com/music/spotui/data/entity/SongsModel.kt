@@ -37,6 +37,12 @@ data class SongsModel(
     val playedPositionMs : Long = 0L,
     /** Raw Spotify id of the show the episode belongs to. */
     val showId : String = "",
+    /**
+     * This row's own id in a Spotify playlist. The same song twice in a playlist has the same
+     * [id] and [spotifyTrackId] but two row ids, and a removal must name the row, not the song.
+     * Empty outside playlists and in older caches.
+     */
+    val rowUid : String = "",
 ){
     constructor() : this(-1 ,"" ,"" ,"" ,"" ,"", "")
 

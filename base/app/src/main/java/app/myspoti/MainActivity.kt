@@ -115,6 +115,7 @@ class MainActivity : AppCompatActivity() {
 
     // The clip player follows the app on screen: paused with its side jobs in the background.
     override fun onStart() {
+        app.myspoti.host.android.MainThreadWatch.start()
         super.onStart()
         com.music.spotui.video.MusicVideoController.onForeground()
         // Asked for over adb (TestControlReceiver's "screenon"): One UI ignores the huge
@@ -125,6 +126,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onStop() {
         super.onStop()
+        app.myspoti.host.android.MainThreadWatch.stop()
         if (!isChangingConfigurations) com.music.spotui.video.MusicVideoController.onBackground()
     }
 
@@ -174,6 +176,10 @@ class MainActivity : AppCompatActivity() {
             MyspotiRuntime.host.url.collect { url ->
                 val backOnPlayer = url.startsWith("https://open.spotify.com") && !url.contains("/login")
                 if (!(showingLogin && backOnPlayer)) return@collect
+                // Spotify's desktop player is not shown while the session is confirmed: the app's
+                // waiting screen is, behind the page made transparent (reported: it flashed).
+                connecting = true
+                MyspotiRuntime.host.veil(true)
                 // The address is not a session — and it comes back to open.spotify.com as soon as the
                 // user leaves the app to read the sign-in e-mail. Hiding the page here showed an
                 // anonymous player: an app that looked signed in with nothing playable (reported).
@@ -195,6 +201,7 @@ class MainActivity : AppCompatActivity() {
                     android.util.Log.d(LOG, "no session ${SESSION_WAIT_MS / 1000}s after the player came back: sign-in page restored")
                     // The page may now be the anonymous player: send it back to the e-mail step so the
                     // user is not left where nothing plays.
+                    connecting = false
                     if (!showingLogin) showLogin() else MyspotiRuntime.host.openLogin()
                 }
             }
@@ -277,7 +284,17 @@ class MainActivity : AppCompatActivity() {
         }
         when (intent.action) {
             Intent.ACTION_VIEW -> {
-                val uri = spotifyUri(intent.data?.toString() ?: return) ?: return
+                val link = intent.data?.toString() ?: return
+                // A collaborative-playlist invitation (…?pt=) or a spotify.link short link: kept / resolved there.
+                if (com.music.spotui.data.api.InviteLinks.handle(link)) return
+                val uri = spotifyUri(link) ?: return
+                // A shared list (or artist, podcast) opens on its page, as in the official app
+                // (reported: a shared playlist started playing and was never shown). A song or an
+                // episode still plays.
+                if (uri.split(':').getOrNull(1) in setOf("playlist", "album", "artist", "show")) {
+                    com.music.spotui.data.api.InviteLinks.page.value = uri
+                    return
+                }
                 lifecycleScope.launch {
                     MyspotiRuntime.api.ready.first { it }
                     runCatching { MyspotiRuntime.api.player.play(uri) }

@@ -20,6 +20,17 @@ data class EditablePlaylist(
 }
 
 object EditablePlaylists {
+    /** Ids of the playlists this account can change, read at most every [IDS_TTL_MS]. */
+    @Volatile private var ids: Set<String>? = null
+    @Volatile private var idsAt = 0L
+    private const val IDS_TTL_MS = 5 * 60_000L
+
+    suspend fun ids(): Set<String> {
+        val now = System.currentTimeMillis()
+        ids?.takeIf { now - idsAt < IDS_TTL_MS }?.let { return it }
+        return runCatching { load().mapTo(HashSet()) { it.id } }.getOrNull()?.also { ids = it; idsAt = now } ?: ids.orEmpty()
+    }
+
     /** The user's own and collaborative playlists, in library order, folders flattened. */
     suspend fun load(): List<EditablePlaylist> =
         runCatching { MyspotiRuntime.api.playlists.editable() }.getOrDefault(emptyList()).map {

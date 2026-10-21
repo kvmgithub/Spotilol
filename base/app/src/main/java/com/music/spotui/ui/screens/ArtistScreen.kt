@@ -149,6 +149,7 @@ private fun ArtistOverviewContent(
     if (showArtistMenu) com.music.spotui.ui.components.ArtistOptionsSheet(
         artistId = overview.id,
         artistName = displayName,
+        artistImage = overview.avatarImage.ifBlank { overview.headerImage },
         onDismiss = { showArtistMenu = false },
     )
 

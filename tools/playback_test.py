@@ -34,6 +34,17 @@ BAD = [
 ]
 
 SERIAL = None
+# PT_SAFE=1 (unattended runs on the user's own phone): no HOME/sleep/wake key (they light the screen),
+# no force-stop of other apps, no pull_back scenario (launches the Spotify app, transfers playback to
+# another device). The screen stays as the user left it.
+SAFE = bool(os.environ.get("PT_SAFE"))
+# PT_HEADLESS=1 (default off): the owner is on the phone, so nothing may reach the foreground or the
+# input system. The app is started as a foreground service only (no activity), and the media keys
+# of key() are sent as the debug receiver's commands (next, previous, resume, pause) instead of
+# `input keyevent`; every other key is dropped. Implies PT_SAFE.
+HEADLESS = bool(os.environ.get("PT_HEADLESS"))
+if HEADLESS:
+    SAFE = True
 
 
 def adb(*args, check=True, timeout=60):
@@ -267,7 +278,19 @@ class Run:
             raise Fail("log: " + " | ".join(bad[:4]))
 
 
+KEY_COMMANDS = {87: "next", 88: "previous", 126: "resume", 127: "pause"}
+
+
 def key(code):
+    if HEADLESS:
+        for c in (code if isinstance(code, list) else [code]):
+            if c in KEY_COMMANDS:
+                test(KEY_COMMANDS[c])
+        return
+    if SAFE:
+        code = [c for c in (code if isinstance(code, list) else [code]) if c not in (3, 26, 223, 224)]  # HOME wakes the screen too
+        if not code:
+            return
     adb("shell", "input", "keyevent", *[str(c) for c in (code if isinstance(code, list) else [code])])
 
 
@@ -282,6 +305,10 @@ NEXT, PREV, PLAY, PAUSE, HOME, SLEEP, WAKE = 87, 88, 126, 127, 3, 223, 224
 
 
 def launch():
+    if HEADLESS:
+        # The playback service alone (no activity, nothing in front): the engine runs without a screen.
+        adb("shell", "am", "start-foreground-service", "-n", PKG + "/app.myspoti.host.android.PlaybackService")
+        return
     adb("shell", "monkey", "-p", PKG, "-c", "android.intent.category.LAUNCHER", "1")
 
 
@@ -318,6 +345,18 @@ def s_rapid_next(r, ctx):
     exp = p["upcoming"][4] if len(p["upcoming"]) > 4 else None
     key([NEXT] * 5)
     r.healthy(exp, "rapid next x5", settle=15)
+
+
+def s_rapid_swipe(r, ctx):
+    # Reported (beta.9): fast taps on the player's "next" left the screen on the second song
+    # for seconds while the page went on. The app's own button path, then what the app shows.
+    p = probe()
+    exp = p["upcoming"][4] if len(p["upcoming"]) > 4 else None
+    for _ in range(5):
+        test("swipenext")
+        time.sleep(0.12)
+    r.healthy(exp, "rapid swipe next x5", settle=15)
+    same_on_screen(r, "after the taps")
 
 
 def s_previous_start(r, ctx):
@@ -414,8 +453,14 @@ def s_frozen(r, ctx):
 
 def s_mute(r, ctx):
     cur = probe()["track"]["uri"]
-    n = bridge("media.mute", {"on": True})
-    p = probe()
+    # Muted and read in one page call: a mute the app did not ask for is undone by its own
+    # silence watchdog ("no silence until a restart") within a tick, so a separate probe could
+    # read the restored level and fail a mute that worked (seen once in 6 runs).
+    p = evaluate("""(async () => {
+      const n = await window.Myspoti.call(-1, 'media.mute', {on: true});
+      return {n, media: await window.Myspoti.call(-1, 'media.state', {})};
+    })()""")
+    n = p.get("n")
     if not isinstance(p.get("media"), dict) or p["media"]["volume"] > 0.01:
         raise Fail(f"media.mute on: element not silenced ({n} set, {p.get('media')})")
     # Silenced, a song that restarts must still play (Chromium pauses muted hidden media).
@@ -547,6 +592,21 @@ def s_ad_previous(r, ctx):
     same_on_screen(r, "after the ad")
 
 
+def s_ad_pick(r, ctx):
+    # Reported (beta.9): a song picked, an ad in its place, then the old queue went on.
+    r.healthy(None, "before the pick", allow_track_change=True)
+    p = probe()
+    tracks = ctx.get("tracks") or []
+    exp = next((t for t in reversed(tracks) if t != p["track"]["uri"] and t not in p["upcoming"][:2]), None)
+    if not exp:
+        raise Fail("no other song to pick")
+    test("play", track=exp + "|", context=ctx["playlist"])
+    time.sleep(0.15)
+    fake_ad()
+    r.healthy(exp, "song picked, then an ad", settle=45)
+    same_on_screen(r, "after the ad")
+
+
 def s_reload_taps(r, ctx):
     p = probe()
     exp = p["upcoming"][1] if len(p["upcoming"]) > 1 else None
@@ -561,6 +621,7 @@ SCENARIOS = [
     ("play_playlist", s_play_playlist, ()),
     ("next", s_next, ()),
     ("rapid_next", s_rapid_next, ()),
+    ("rapid_swipe", s_rapid_swipe, ()),
     ("previous_start", s_previous_start, ()),
     ("previous_middle", s_previous_middle, ()),
     ("seek", s_seek, ()),
@@ -571,6 +632,8 @@ SCENARIOS = [
     ("reload_taps", s_reload_taps, ("transport failed",)),
     ("ad_taps", s_ad_taps, ()),
     ("ad_previous", s_ad_previous, ()),
+    # The fake ad hides the picked song from the app, which asks for it again: provoked.
+    ("ad_pick", s_ad_pick, ("play not taken",)),
     ("frozen", s_frozen, ("call timeout", "page not answering", "command failed", "transport failed")),
     ("background", s_background, ()),
     ("cold_start", s_cold_start, ()),
@@ -587,15 +650,18 @@ def main():
     ap.add_argument("--playlist", default=PLAYLIST)
     a = ap.parse_args()
     SERIAL = a.serial
-    for p in OTHERS:
-        adb("shell", "am", "force-stop", p, check=False)
-    adb("shell", "input", "keyevent", str(WAKE))
+    if not SAFE:
+        for p in OTHERS:
+            adb("shell", "am", "force-stop", p, check=False)
+        adb("shell", "input", "keyevent", str(WAKE))
     log = Log()
     if not adb("shell", "pidof", PKG, check=False):
         launch()
     wait_ready()
     only = set(filter(None, a.only.split(",")))
     skip = set(filter(None, a.skip.split(",")))
+    if SAFE:
+        skip.add("pull_back")  # starts the Spotify app on the phone and transfers playback to another device
     ctx = {"playlist": a.playlist}
     results = []
     r = Run(log)

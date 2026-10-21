@@ -80,9 +80,7 @@ private fun ScreenHeader(title: String, navController: NavController) {
 }
 
 @Composable
-private fun Loading() = Box(Modifier.fillMaxWidth().padding(40.dp), contentAlignment = Alignment.Center) {
-    CircularProgressIndicator(color = AppAccent)
-}
+private fun Loading() = com.music.spotui.ui.components.SkeletonList(count = 7)
 
 @Composable
 private fun SectionTitle(text: String) =

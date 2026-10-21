@@ -304,10 +304,7 @@ fun SongOptionsSheet(
                 MenuRow(Icons.Outlined.Speed, stringResource(R.string.playback_speed)) { showSpeed = true }
             }
             MenuRow(Icons.Outlined.Share, stringResource(R.string.context_menu_share), enabled = hasId) {
-                val send = Intent(Intent.ACTION_SEND)
-                    .setType("text/plain")
-                    .putExtra(Intent.EXTRA_TEXT, "https://open.spotify.com/track/${song.spotifyTrackId}")
-                context.startActivity(Intent.createChooser(send, context.getString(R.string.action_share_label)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                SpotifyCode.show(ShareTarget("spotify:track:${song.spotifyTrackId}", song.title, song.singer, song.coverUri))
                 onDismiss()
             }
             if (nowPlaying) {

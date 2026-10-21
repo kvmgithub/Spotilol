@@ -90,14 +90,9 @@ fun ProfileScreen(navController: NavController, userId: String, userName: String
         }
         item {
             Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth().padding(16.dp)) {
-                GlideImage(
-                    transition = CrossFade,
-                    model = spotifyImageUrl(p?.images?.best(300)?.url),
-                    contentDescription = null,
-                    contentScale = ContentScale.Crop,
-                    failure = placeholder(R.drawable.placeholder),
-                    loading = placeholder(R.drawable.placeholder),
-                    modifier = Modifier.size(150.dp).clip(CircleShape),
+                com.music.spotui.ui.components.ProfileAvatar(
+                    url = spotifyImageUrl(p?.images?.best(300)?.url),
+                    name = p?.name ?: userName, size = 150.dp,
                 )
                 Spacer(Modifier.height(14.dp))
                 com.music.spotui.ui.components.FitText(p?.name ?: userName, fontSize = 28.sp, minSize = 18.sp,
@@ -142,11 +137,7 @@ fun ProfileScreen(navController: NavController, userId: String, userName: String
             }
         }
         when {
-            p == null && !failed -> item {
-                Box(Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator(color = AppAccent)
-                }
-            }
+            p == null && !failed -> item { com.music.spotui.ui.components.SkeletonList(count = 5) }
             p == null -> item {
                 com.music.spotui.ui.components.ErrorRetry(stringResource(R.string.page_load_failed)) { attempt++ }
             }

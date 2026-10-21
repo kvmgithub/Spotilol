@@ -451,11 +451,7 @@ private fun ProfileSheet(onOpen: (route: String) -> Unit = {}, onDismiss: () -> 
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()
                 .clickable(enabled = myId != null) { myId?.let { onOpen(com.music.spotui.ui.navigation.profileRoute(it, name)) } }
                 .padding(horizontal = 20.dp, vertical = 8.dp)) {
-                if (avatar != null) GlideImage(
-                    transition = CrossFade,
-                    model = avatar, contentDescription = null, contentScale = ContentScale.Crop,
-                    modifier = Modifier.size(48.dp).clip(CircleShape),
-                )
+                com.music.spotui.ui.components.ProfileAvatar(url = avatar, name = name, size = 48.dp)
                 Text(name.ifBlank { stringResource(R.string.spotify_account) }, color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold,
                     modifier = Modifier.padding(start = 14.dp))
                 if (com.music.spotui.data.api.SupportReminder.level != com.music.spotui.data.api.SupportReminder.Level.NONE)

@@ -15,6 +15,8 @@ import kotlinx.coroutines.launch
 class MyspotiApplication : Application() {
     override fun onCreate() {
         super.onCreate()
+        // A crash or a freeze of the last run, back in this run's diagnostic report.
+        app.myspoti.host.android.LastExit.install(this)
         app.myspoti.power.EnergySettings.init(this)
         // Spotify session (hidden Web Player + API), caches, downloads, data saver.
         Graph.init(this)

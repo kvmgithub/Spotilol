@@ -21,6 +21,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.mutableStateOf
@@ -53,6 +54,53 @@ fun App() {
 
     UpdatePrompt()
     SupportPrompt()
+    // The playlists at the top of the library, fetched ahead on Wi-Fi (see PagePrefetch).
+    LaunchedEffect(Unit) { com.music.spotui.data.api.PagePrefetch.start() }
+
+    // A collaborative-playlist invitation was opened (see InviteLinks): its playlist page offers "Join".
+    val invite by com.music.spotui.data.api.InviteLinks.pending.collectAsState()
+    LaunchedEffect(invite) {
+        val i = invite?.takeIf { !it.opened } ?: return@LaunchedEffect
+        app.myspoti.host.android.MyspotiRuntime.api.ready.first { it }
+        i.opened = true
+        navController.navigate(com.music.spotui.ui.navigation.playlistRoute(i.playlistId))
+    }
+
+    // A Blend invitation was opened (see InviteLinks): who invites, and "Join", over the app.
+    val blendLink by com.music.spotui.data.api.InviteLinks.blend.collectAsState()
+    blendLink?.let { link ->
+        com.music.spotui.ui.screens.BlendInviteSheet(link, navController) {
+            if (com.music.spotui.data.api.InviteLinks.blend.value === link) com.music.spotui.data.api.InviteLinks.blend.value = null
+        }
+    }
+
+    // Genius's explanations of the song playing, read while it starts: ready when the lyrics open.
+    val geniusLang = com.music.spotui.ui.components.readerLanguage()
+    val playingUri = com.music.spotui.di.SongPlayer.nowPlaying.value.uri
+    LaunchedEffect(playingUri) {
+        if (!playingUri.startsWith("spotify:track:")) return@LaunchedEffect
+        kotlinx.coroutines.delay(2_000) // the song's own loads first
+        val st = com.music.spotui.di.Graph.currentSongState
+        com.music.spotui.data.api.GeniusMeaning.prefetch(playingUri.substringAfterLast(':'), st.title.value, st.singer.value, geniusLang)
+    }
+    // A shared link to a list / artist / podcast: its page, over whatever was open.
+    val pageLink by com.music.spotui.data.api.InviteLinks.page.collectAsState()
+    LaunchedEffect(pageLink) {
+        val uri = pageLink ?: return@LaunchedEffect
+        com.music.spotui.data.api.InviteLinks.page.value = null
+        val id = uri.substringAfterLast(':')
+        com.music.spotui.ui.navigation.PlayerSheet.close()
+        runCatching {
+            navController.navigate(when (uri.split(':')[1]) {
+                "playlist" -> com.music.spotui.ui.navigation.playlistRoute(id)
+                "album" -> com.music.spotui.ui.navigation.albumRoute("", "", id)
+                "artist" -> com.music.spotui.ui.navigation.artistRoute("artist", id)
+                else -> com.music.spotui.ui.navigation.showRoute(id)
+            })
+        }
+    }
+    val shareTarget by com.music.spotui.ui.components.SpotifyCode.request.collectAsState()
+    shareTarget?.let { t -> com.music.spotui.ui.components.SpotifyCodeSheet(t) { com.music.spotui.ui.components.SpotifyCode.request.value = null } }
 
     androidx.compose.foundation.layout.Box(Modifier.fillMaxSize()) {
         Scaffold(

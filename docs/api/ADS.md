@@ -87,3 +87,57 @@ Engine rules:
 
 - Whether blocked ads come back sooner (rhythm after a failed ad), over a 1-hour session.
 - Video ads and podcast ad slots, which may use other hosts.
+
+## Measured again (2026-10-20): a refused ad no longer moves on
+
+Setup: free account, desktop Chrome, the app's current bridge, about two hours of listening.
+
+- The page's ad-manager latch (`ads.off`) does not stop audio ads: one ad after ~17 min with the latch
+  on, one after ~19 min without it. The server queues them whatever the page's managers say.
+- With the ad MP3 refused (aborted, or answered `403` as on Android), the ad now stays current for
+  good: buffering at 0:00, 20 min in one run. `inStreamApi.skipToNext()`, `player.next` and
+  `player.play` on the next song are all refused (`ad_disallow`). The 2026-10-16 behaviour (error,
+  next song within a second) is gone.
+- A page reload leaves it: the new page registers a new device, which the ad does not follow, and
+  playing the context again starts a song within a second. This is the app's last resort.
+- The "Test ad" (`spotify:ad:test`) seen in device logs was `tools/playback_test.py`'s own fake.
+
+## Where the ad sits in the state machine
+
+The ad arrives in a `PUT track-playback/v1/devices/{device}/state` reply when the song before it
+starts (about 3 min ahead). The song's state has these transitions:
+
+| transition | first try | after an ad was left out |
+|---|---|---|
+| `advance` (natural end) | the ad state | the ad state |
+| `skip_next` | the next song | the ad state |
+| `show_next` (shown as next) | the next song | the next song |
+
+The ad state itself has no transitions and `ad_disallow` restrictions.
+
+## What the engine does now
+
+Three steps, measured on desktop (free account, 20/10, ~1 h 30 of listening, 5 ad tries):
+
+1. `AdBlock.withoutAds` rewrites every reply that leads to an ad before the page sees it: the
+   `advance` of a song that leads to an ad goes where its `skip_next` goes. The next song started
+   60 ms after the end of the song, and every state the page reported was answered `200`.
+   `show_next` is not a usable target: it points at a display-only state, and a page sent there
+   had every report refused (`502 unknown_state_ref`) and stopped playing.
+2. When `skip_next` leads to the ad as well (Spotify's next try, after an ad was left out once),
+   `AdBlock.adAhead` names the song the page shows as next, and the player plays it 1 s before
+   the song ends (`player.play` in the same context). A new play puts the due ad first, but an ad
+   at the start of a play, its audio refused, moves on by itself: the next song came within about a
+   second (three tries, at the end and in the middle of a song), every report was `200`, the songs
+   after it went on with no ad, and songs the user had queued stayed queued. A "next" while an ad
+   is due is sent the same way, since Spotify points the skip at the ad too and a page that steps
+   onto an ad stays on it. The UI shows an ad only after 2 s, so this one never shows.
+   Seen on a tester's phone: while Spotify refuses licences (429, after fast skipping), the song
+   after the ad cannot start and the ad stays until the limit is over.
+3. The ad audio host stays refused, and the reload stays as the last resort for an ad that is
+   already the current state.
+
+On Android the replies pass through `ControlRelay`, which applies steps 1 and 2. The desktop CDP
+host does not rewrite replies yet.
+
+Over the measured session: no ad heard or shown, no reload.

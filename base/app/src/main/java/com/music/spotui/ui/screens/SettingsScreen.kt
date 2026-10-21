@@ -33,6 +33,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -67,7 +68,15 @@ fun SettingsScreen(navController: NavController) {
         }
         Column(Modifier.fillMaxWidth().weight(1f).verticalScroll(rememberScrollState()).navigationBarsPadding()) {
             Section(R.string.settings_section_playback)
-            StreamingQualityPicker()
+            StreamingQualityPicker(title = R.string.quality_streaming_wifi_title)
+            StreamingQualityPicker(cellular = true, title = R.string.quality_streaming_cell_title)
+            var canvasWifiOnly by remember { mutableStateOf(com.music.spotui.data.preferences.isCanvasWifiOnly(ctx)) }
+            OptionRow(
+                label = stringResource(R.string.canvas_wifi_only),
+                detail = stringResource(R.string.canvas_wifi_only_detail),
+                checked = canvasWifiOnly,
+                onChecked = { canvasWifiOnly = it; com.music.spotui.data.preferences.setCanvasWifiOnly(ctx, it) },
+            )
             OptionRow(
                 label = stringResource(R.string.settings_autoplay_title),
                 detail = stringResource(R.string.settings_autoplay_detail),
@@ -75,6 +84,26 @@ fun SettingsScreen(navController: NavController) {
                 onChecked = { com.music.spotui.data.preferences.AutoplayPref.set(ctx, it) },
             )
             CrossfadeRow()
+            var keepPlaying by remember { mutableStateOf(app.myspoti.host.android.PlaybackService.keepsPlayingOnClose(ctx)) }
+            OptionRow(
+                label = stringResource(R.string.settings_keep_playing_title),
+                detail = stringResource(R.string.settings_keep_playing_detail),
+                checked = keepPlaying,
+                onChecked = { keepPlaying = it; app.myspoti.host.android.PlaybackService.setKeepsPlayingOnClose(ctx, it) },
+            )
+            // Lyrics: word by word (karaoke) first, or line by line with Spotify's first.
+            var wordSync by remember { mutableStateOf(com.music.spotui.data.preferences.isLyricsWordSync(ctx)) }
+            OptionRow(
+                label = stringResource(R.string.lyrics_word_sync_title),
+                detail = stringResource(if (wordSync) R.string.lyrics_word_sync_on else R.string.lyrics_word_sync_off),
+                checked = wordSync,
+                onChecked = {
+                    wordSync = it
+                    com.music.spotui.data.preferences.setLyricsWordSync(ctx, it)
+                    com.music.spotui.data.api.LyricsApi.wordSync = it
+                    com.music.spotui.data.api.LyricsApi.forgetAll()
+                },
+            )
             Divider()
 
             Section(R.string.settings_section_downloads)
@@ -161,7 +190,11 @@ fun SettingsScreen(navController: NavController) {
             CheckUpdateRow()
             // The hidden Web Player stuck or crashed: rebuild it without leaving the app.
             Column(
-                Modifier.fillMaxWidth().clickable { app.myspoti.host.android.MyspotiRuntime.host.reload() }
+                Modifier.fillMaxWidth().clickable {
+                    app.myspoti.host.android.MyspotiRuntime.host.reload()
+                    // Reported: nothing said the restart happened.
+                    android.widget.Toast.makeText(ctx, ctx.getString(R.string.restart_player_done), android.widget.Toast.LENGTH_SHORT).show()
+                }
                     .padding(horizontal = 20.dp, vertical = 10.dp),
             ) {
                 Text(stringResource(R.string.restart_player_title), color = Color.White, fontSize = 16.sp)
@@ -180,7 +213,9 @@ fun SettingsScreen(navController: NavController) {
                 Text(stringResource(R.string.diagnostic_export_title), color = Color.White, fontSize = 16.sp)
                 Text(stringResource(R.string.diagnostic_export_detail), color = Color(0xFFB3B3B3), fontSize = 12.sp)
             }
-            Spacer(Modifier.height(96.dp))
+            // Clear of the mini player and the navigation bar, as every other page (96 dp left the
+            // last rows, "Restart the player" among them, under the mini player).
+            Spacer(Modifier.height(com.music.spotui.ui.components.bottomBarsSpace()))
         }
     }
 }

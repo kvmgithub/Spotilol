@@ -26,6 +26,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Fullscreen
+import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material.icons.filled.FullscreenExit
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.OndemandVideo
@@ -107,9 +108,46 @@ private val OverMedia = Color.Black.copy(alpha = 0.6f)
 /** Spotify's "Passer à la vidéo" / "Passer à l'audio" pill. */
 @Composable
 fun VideoSwitchPill(on: Boolean, modifier: Modifier = Modifier) {
+    Row(verticalAlignment = Alignment.CenterVertically, modifier = modifier) {
+        SwitchPill(on)
+        // With the video on: the clip's own sound instead of the song's (the song still plays, unheard).
+        if (on) {
+            val clip = MusicVideoController.clipSound.value
+            val context = androidx.compose.ui.platform.LocalContext.current
+            Spacer(Modifier.width(8.dp))
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier
+                    .height(32.dp)
+                    .clip(RoundedCornerShape(50))
+                    .background(OverMedia)
+                    .clickable {
+                        MusicVideoController.setClipSound(!clip)
+                        // What changed, said once per tap: the label alone did not tell (reported).
+                        android.widget.Toast.makeText(context, if (clip) R.string.clip_sound_off_hint else R.string.clip_sound_on_hint, android.widget.Toast.LENGTH_LONG).show()
+                    }
+                    .padding(start = 10.dp, end = 12.dp),
+            ) {
+                Icon(
+                    Icons.Default.VolumeUp,
+                    contentDescription = null,
+                    tint = if (clip) com.music.spotui.ui.theme.AppAccent else Color.White,
+                    modifier = Modifier.size(16.dp),
+                )
+                Spacer(Modifier.width(6.dp))
+                // The sound heard now: the song's, or the clip's own.
+                Text(stringResource(if (clip) R.string.clip_sound_clip else R.string.clip_sound_song), color = if (clip) com.music.spotui.ui.theme.AppAccent else Color.White,
+                    fontSize = 13.sp, fontWeight = FontWeight.Bold, maxLines = 1)
+            }
+        }
+    }
+}
+
+@Composable
+private fun SwitchPill(on: Boolean) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
-        modifier = modifier
+        modifier = Modifier
             .height(32.dp)
             .clip(RoundedCornerShape(50))
             .background(OverMedia)

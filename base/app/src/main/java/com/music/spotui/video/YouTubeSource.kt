@@ -93,7 +93,8 @@ object YouTubeSource {
 
     data class Hit(val url: String, val name: String, val uploader: String, val durationSec: Long)
 
-    private fun folded(s: String) = java.text.Normalizer.normalize(s, java.text.Normalizer.Form.NFD)
+    // "$" read as "s" in names: "Bu$hi" is the channel "BUSHI", "A$AP" is "ASAP".
+    private fun folded(s: String) = java.text.Normalizer.normalize(s.replace('$', 's'), java.text.Normalizer.Form.NFD)
         .replace(Regex("""\p{M}+"""), "").lowercase(Locale.ROOT)
 
     private fun norm(s: String) = folded(s)
@@ -282,9 +283,12 @@ object YouTubeSource {
      * the artists' own (or their VEVO / Topic), or a verified channel (label, radio)
      * whose title says it is a clip.
      */
-    fun isTrustedClip(info: StreamInfo, artist: String): Boolean {
+    fun isTrustedClip(info: StreamInfo, artist: String, spotifyHasVideo: Boolean = false): Boolean {
         val name = info.name.orEmpty()
         if (excluded.containsMatchIn(name) || notAClip.containsMatchIn(name)) return false
+        // Spotify itself has the clip: a label's channel (unverified, its upload filed as an
+        // ordinary video) can be the one; the soundtrack check still decides.
+        if (spotifyHasVideo) return true
         val hit = Hit(info.url, name, info.uploaderName.orEmpty(), info.duration)
         val own = artist.split(",").map { it.trim() }.filter { it.isNotEmpty() }.any { sameArtist(hit, it) }
         return own || (info.isUploaderVerified && looksLikeClip(name))

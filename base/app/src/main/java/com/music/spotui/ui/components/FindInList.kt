@@ -27,18 +27,31 @@ import androidx.compose.ui.unit.sp
 import java.text.Normalizer
 import java.util.Locale
 
-private fun fold(s: String) = Normalizer.normalize(s, Normalizer.Form.NFD)
-    .replace(Regex("""\p{M}+"""), "").lowercase(Locale.ROOT)
+private val MARKS = Regex("""\p{M}+""")
+private val SPACES = Regex("""\s+""")
+
+/**
+ * Titles and names folded once (lower case, no accents) and kept: a playlist search folds each
+ * row's fields on every key typed. The patterns were compiled again for every field of every row
+ * and held the main thread over a second a key on a big playlist (reported: typing in the search
+ * froze the player until the app crashed).
+ */
+private const val FOLDED_KEEP = 20_000
+private val folded = object : LinkedHashMap<String, String>(1024, 0.75f, true) {
+    override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, String>?) = size > FOLDED_KEEP
+}
+private fun fold(s: String): String = if (s.isEmpty()) s else synchronized(folded) {
+    folded.getOrPut(s) { Normalizer.normalize(s, Normalizer.Form.NFD).replace(MARKS, "").lowercase(Locale.ROOT) }
+}
 
 /**
  * "Find in…" match: every word of [query] appears in one of [fields], ignoring case and
  * accents ("beyonce hal" finds "Halo" by Beyoncé). A blank query matches everything.
  */
 fun matchesFind(query: String, vararg fields: String): Boolean {
-    val words = fold(query).split(Regex("""\s+""")).filter { it.isNotEmpty() }
+    val words = fold(query).split(SPACES).filter { it.isNotEmpty() }
     if (words.isEmpty()) return true
-    val text = fields.joinToString(" ") { fold(it) }
-    return words.all { it in text }
+    return words.all { w -> fields.any { fold(it).contains(w) } }
 }
 
 /** The "Find in…" field at the top of a list of songs. */

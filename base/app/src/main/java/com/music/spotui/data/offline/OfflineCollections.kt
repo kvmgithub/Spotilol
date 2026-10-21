@@ -154,6 +154,21 @@ object OfflineCollections {
         }
     }
 
+    /**
+     * One downloaded list changed from the app (a song added to it): read again and synced at
+     * once, so the new song is on the phone without opening the list (Wi-Fi rule as above).
+     */
+    fun refreshOne(context: Context, uri: String) {
+        val c = collections[uri] ?: return
+        scope.launch {
+            delay(1_500) // Spotify's own copy of the list catches up first.
+            if (!OfflineStore.isOnline(context)) return@launch
+            if (com.music.spotui.data.DataSaver.metered) { waitForWifi(); return@launch }
+            val page = withTimeoutOrNull(60_000) { loadComplete(c) } ?: return@launch
+            withContext(Dispatchers.Main) { sync(page) }
+        }
+    }
+
     private suspend fun loadComplete(c: OfflineCollection): ContextPageModel? {
         val api = Graph.api
         val id = c.uri.substringAfterLast(":")

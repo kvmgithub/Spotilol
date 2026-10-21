@@ -46,7 +46,7 @@ import kotlinx.coroutines.launch
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ArtistOptionsSheet(artistId: String, artistName: String, onDismiss: () -> Unit) {
+fun ArtistOptionsSheet(artistId: String, artistName: String, artistImage: String = "", onDismiss: () -> Unit) {
     val context = LocalContext.current
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val uri = "spotify:artist:$artistId"
@@ -67,11 +67,7 @@ fun ArtistOptionsSheet(artistId: String, artistName: String, onDismiss: () -> Un
             HorizontalDivider(color = Color(0xFF3E3E3E), thickness = 0.5.dp)
             Spacer(Modifier.height(8.dp))
             ArtistMenuRow(Icons.Default.Share, stringResource(R.string.share_link), enabled = artistId.isNotBlank()) {
-                val send = Intent(Intent.ACTION_SEND).apply {
-                    type = "text/plain"
-                    putExtra(Intent.EXTRA_TEXT, "https://open.spotify.com/artist/$artistId")
-                }
-                context.startActivity(Intent.createChooser(send, context.getString(R.string.action_share_label)))
+                SpotifyCode.show(ShareTarget("spotify:artist:$artistId", artistName, coverUri = artistImage))
                 onDismiss()
             }
             ArtistMenuRow(

@@ -16,7 +16,7 @@ import kotlinx.serialization.json.Json
 import java.io.File
 
 /**
- * The last home feed, library and Liked Songs, kept on disk: after a restart the screens
+ * The last home feed, library and Liked Songs (and a few playlist pages), kept on disk: after a restart the screens
  * show them at once, while the hidden Web Player is still starting, then refresh.
  * Private app storage; cleared on logout ([clear]).
  */
@@ -33,6 +33,20 @@ object ScreenCache {
     val home = Entry("home", HomeFeedModel.serializer())
     val libraryRoot = Entry("library_root", ListSerializer(LibraryEntry.serializer()))
     val liked = Entry("liked", ListSerializer(SongsModel.serializer()))
+
+    /** A playlist page fetched ahead (see PagePrefetch), one file per playlist. */
+    fun page(id: String) = Entry("page_$id", com.music.spotui.data.entity.ContextPageModel.serializer())
+
+    /** When the page of [id] was last saved; null when there is none. */
+    fun pageSavedAt(id: String): Long? = File(dir, "page_$id.json").takeIf { it.exists() }?.lastModified()
+
+    /** Keeps the [keep] most recent pages on storage and deletes the others. */
+    fun prunePages(keep: Int) {
+        io.launch {
+            dir.listFiles { f -> f.name.startsWith("page_") && f.name.endsWith(".json") }
+                ?.sortedByDescending { it.lastModified() }?.drop(keep)?.forEach { it.delete() }
+        }
+    }
 
     class Entry<T>(private val name: String, private val serializer: KSerializer<T>) {
         private val file get() = AtomicFile(File(dir, "$name.json"))

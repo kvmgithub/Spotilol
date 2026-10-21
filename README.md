@@ -4,7 +4,7 @@
 [![License: GPL-3.0](https://img.shields.io/github/license/kota-zo/myspoti)](LICENSE)
 [![Discord](https://img.shields.io/badge/Discord-join-5865F2?logo=discord&logoColor=white)](https://discord.gg/jXKnGVFnGS)
 
-**Spotify on Android, free account, no ads.** A native Jetpack Compose client with synced lyrics and official music videos.
+**Spotify without ads, with downloads, on a free account.** Your own Spotify account, playlists and Wrapped, in a native Android app that blocks the ads and lets you download your music in lossless quality.
 
 <p align="center">
   <img src="docs/screenshots/banner.jpg" alt="Myspoti: home, player, artist and album screens" width="100%">
@@ -14,37 +14,82 @@
   <a href="https://github.com/kota-zo/myspoti/releases/latest"><b>⬇ Download the latest APK</b></a>
 </p>
 
-The official Spotify Web Player runs in a hidden WebView and does the actual playback, with the phone's DRM and Spotify's own reporting. The native UI drives it, so plays count on your account exactly as they do in a browser. You always sign in yourself, on Spotify's own login page.
-
 <p align="center">
   <a href="https://ko-fi.com/kotazo"><img src="https://storage.ko-fi.com/cdn/kofi6.png?v=6" alt="Support Myspoti on Ko-fi" height="56"></a>
   <a href="https://github.com/sponsors/kota-zo"><img src="https://img.shields.io/badge/Sponsor_on_GitHub-%E2%9D%A4-ea4aaa?style=for-the-badge&logo=githubsponsors&logoColor=white" alt="Sponsor kota-zo on GitHub" height="56"></a>
 </p>
 
-## Features
+## Why Myspoti
 
-- **No ads.** The ad audio is refused, so the player skips each ad within a second. It works with a free account: no Premium, no patched Spotify app, and the DRM is left untouched.
-- Home (with Music, Podcasts and Audiobooks filters), search (songs, artists, albums, playlists, podcasts, episodes), **New releases**, Spotify's real **Browse** categories, library (folders, sorting, drag to reorder), artist, album and playlist pages, with Spotify's official labels.
-- **Podcasts and audiobooks**: shows, episodes, chapters, Your Episodes, playback speed.
-- **Jam**: join a Jam with an invite link.
-- Synced lyrics: Spotify first, then [LRCLIB](https://lrclib.net); optionally Apple Music (word by word), NetEase and Genius.
-- **Your recap**: your top tracks, artists and albums, counting Spotify, downloads and local files. It stays on your phone.
-- Official music videos, when one exists. The video plays muted, in sync with the song. The app only uses YouTube videos marked as official clips, and shows nothing when no clip exists.
-- Spotify Connect, media notification, lock screen, Bluetooth and Android Auto.
-- **Offline downloads.** Download a song, an album, a playlist or your Liked Songs, then play them without a connection. The audio comes lossless (FLAC, 16-bit or 24-bit hi-res when it exists), or as Tidal's own AAC for the smallest files: the very recording, found on Tidal (or Qobuz) by its exact ISRC, through the same signed servers as [SpotiFLAC Mobile](https://github.com/zarzet/SpotiFLAC-Mobile)'s extensions, after a one-off verification in Settings. Each file is checked against the recording's official preview (looked up by ISRC), so a live take, a remix or a cover is rejected. Files stay in Myspoti's private storage.
-- **Sound quality and Settings.** Streaming quality (Automatic, Low, Normal, High) and download quality are picked at the first start and kept in one Settings page, with data saver, battery, display and language.
-- **Connect with your headphones.** Their name shows instead of "This phone", one tap sends the sound back to the speaker, and a quality badge shows what plays now. The music pauses when headphones or Bluetooth go away.
-- English, French and Italian.
+### 🚫 Spotify with no ads, on a free account
+No audio ads, no video ads, no banners, and no 30-second break between songs. Myspoti switches off the ad breaks of Spotify's own player, so a free account plays like Premium: pick any song, skip as much as you want. No Premium, no modified Spotify app, nothing to root.
 
-## How it works
+### ⬇️ Download your music, in lossless
+Download a song, an album, a playlist or all your Liked Songs, and listen with no connection: on the plane, in the metro, with no data. The audio is better than Spotify's own: **lossless FLAC** (CD quality, or 24-bit hi-res when it exists), or small AAC files if you prefer. Each song is the very same recording, found by its ISRC on Tidal or Qobuz and checked before it is kept (after a one-off verification in Settings). Downloaded playlists stay in step: songs you add on Spotify download by themselves.
 
-The app is split in two:
+### ✨ And everything you expect from Spotify, and more
+Your home, search, library, playlists, podcasts, Spotify Connect and Android Auto, plus **word-by-word lyrics**, **official music videos** and **song meanings from Genius**.
 
-- **`:api`** is the contract the UI talks to: plain Kotlin models and interfaces (player, search, catalog, library, playlists, home, podcasts, users, lyrics, devices, Jam).
-- **`:api-spotify`** implements it on Spotify's Web Player. Playback stays in the official player, in a hidden WebView (`:host-android`), driven by a small bridge script. Catalog, search and library calls go straight to Spotify's servers, which is faster. When Spotify ships a new Web Player, the app reads its new operation list from the public files by itself.
-- **`:host-cdp`** runs the same API on desktop Chrome: the whole API is tested against the real Web Player, without a phone.
+## What is it?
 
-Details for developers: [`base/api-spotify/README.md`](base/api-spotify/README.md) and [`docs/api`](docs/api).
+Myspoti is a Spotify app for Android that you install yourself. You sign in with your usual Spotify account, on Spotify's own login page: Myspoti never sees your password. A free account is enough.
+
+Under the hood, the official Spotify Web Player plays the music, hidden inside the app, with your phone's DRM. Myspoti draws its own screens on top and drives it. Your plays are reported to Spotify exactly as in a browser: they count for the artists, in your history and in your Wrapped.
+
+## Get started
+
+1. Download the APK from the [latest release](https://github.com/kota-zo/myspoti/releases/latest) and open it (Android 10 or later). Android asks once to allow installs from your browser or file manager.
+2. Tap **Log in with Spotify** and sign in.
+3. Pick the sound quality, allow what you want (notifications, Bluetooth, local files…), and you are in.
+
+New versions are offered inside the app: one tap downloads and installs them.
+
+## What you get
+
+**Listening**
+- No ads (see above).
+- Home, search, Browse, New releases, Your Library with folders, artist, album, playlist and profile pages, with Spotify's own content.
+- Pick any song: shuffle, Smart Shuffle, the queue (drag to reorder), repeat, crossfade, sleep timer.
+- Podcasts and audiobooks, with their own player (speed, ±15 s, mark as played).
+- Spotify Connect, Jam, Bluetooth with your headphones' name, lock screen, notification, widget and Android Auto.
+
+**Lyrics and videos**
+- Synced lyrics, word by word when a source has the timing (or line by line, your choice in Settings), with translation.
+- **Song meanings from Genius**: a light bulb for the story of the song, and a long press on an underlined line for its explanation, translated into your language.
+- **Official music videos**, in sync with the song, in full screen if you like. Play them silently over the song, or hear the clip's own sound while the song keeps counting on Spotify.
+
+**Your playlists**
+- Create, edit (name, description, cover), sort, make public, private or collaborative.
+- **Add songs** from a Spotify search inside the playlist, with suggestions.
+- **Collaborative playlists**: invite friends with a link, see who is in, and who added each song.
+- Share any song, album, artist or playlist as a **Spotify Code** (scannable in the Spotify app) or a link.
+
+**Offline**
+- Download songs, albums, playlists and Liked Songs, in **lossless FLAC** (CD or hi-res) or small AAC. The very recording is found by its ISRC on Tidal or Qobuz and checked before it is kept.
+- Downloads are encrypted and stay in Myspoti. Lists you downloaded stay in step with Spotify.
+- Your local audio files too.
+
+**And also**
+- Your recap: your top songs, artists and albums, kept on your phone.
+- 7 languages: English, French, German, Spanish, Italian, Portuguese and Greek.
+- Data saver, battery saver, AMOLED black, accent colour.
+
+## New since 1.1
+
+Version 2.0 is a new app, rebuilt from the ground up.
+
+- 🚀 **A new engine**: faster screens, quicker skips, and playback that recovers by itself when Spotify's player stumbles.
+- 🚫 **Ads stopped at the source** instead of skipped.
+- 🎧 **Lossless downloads** (FLAC, hi-res) instead of YouTube audio, encrypted on your phone.
+- 🎤 **Word-by-word lyrics**, from more sources, with **Genius song meanings**.
+- 🎬 **Music videos with their own sound**, in full screen, in better quality.
+- 👥 **Collaborative playlists**, an **Add songs** screen, and full playlist editing.
+- 🔀 **Smart Shuffle**, a draggable queue, crossfade.
+- 🎙️ **Podcasts and audiobooks** are back, with their own player and downloads.
+- 📷 **Spotify Codes** to share, and profiles, Recents, Browse and New releases.
+- 🌍 **Four new languages**, in-app updates and a diagnostic report you can send in one tap.
+
+Every change is in the [changelog](CHANGELOG.md).
 
 ## Screenshots
 
@@ -52,38 +97,44 @@ Details for developers: [`base/api-spotify/README.md`](base/api-spotify/README.m
 |:---:|:---:|:---:|:---:|
 | <img src="docs/screenshots/home.jpg" width="200" alt="Home"> | <img src="docs/screenshots/player.jpg" width="200" alt="Player"> | <img src="docs/screenshots/artist.jpg" width="200" alt="Artist"> | <img src="docs/screenshots/album.jpg" width="200" alt="Album"> |
 
+## Questions
+
+**Is it safe for my account?** Myspoti talks to Spotify the way its web player does, and you sign in on Spotify's own page. Blocking ads is still against Spotify's Terms of Use (see the disclaimer below).
+
+**"Spotify refused to play this"?** Some new or free accounts get refused by Spotify. Settings → **Export a diagnostic report** and send it on [Discord](https://discord.gg/jXKnGVFnGS) or in an [issue](https://github.com/kota-zo/myspoti/issues): it holds the app's recent log (what Spotify answered) and your phone's model, never your password or your login tokens.
+
+**Do downloads count in my Wrapped?** No. Songs played from a download are not reported to Spotify; they count in Myspoti's own recap only. Streamed songs and music videos count as usual.
+
+**What leaves my phone?** Your plays go to Spotify. Lyrics are looked up on lyrics sites, song meanings on Genius, translations on Google Translate, music videos on YouTube, and downloads on the Tidal or Qobuz sources. Nothing is sent to the developer.
+
 ## Not included
 
-- No DRM circumvention. No Amazon stream decryption.
-- No Spotify audio download. Offline downloads are resolved from lossless catalogues through the open-backends community of SpotiFLAC; a track with no lossless source is simply marked unavailable.
-- Downloaded songs played on the phone are not reported to Spotify: they do not count in Wrapped or in artists' play counts. They are kept in Myspoti's own Recap only. No ad is marked as heard.
-
-## Credits
-
-- [SpotiFLAC](https://github.com/spotbye/SpotiFLAC) (MIT) — the lossless resolving idea, its community backend protocol and the gated-session flow.
-- [Spotui](https://github.com/Spotui/Spotui) (GPL-3.0) — the Kotlin port of the resolver, the signed-session verification screen and the DASH-to-FLAC remux that Myspoti builds on.
-- [SpotiFLAC Mobile](https://github.com/zarzet/SpotiFLAC-Mobile) (MIT) and its [extensions](https://github.com/zarzet/SpotiFLAC-Extension) (Apache-2.0) — the signed download sessions and the Tidal / Qobuz download requests.
-
-Full notices: [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md).
+- No DRM circumvention, and no Spotify audio download: offline songs come from lossless catalogues, and a song with no lossless source is marked unavailable.
+- No ad is ever marked as heard.
 
 ## Disclaimer
 
 Blocking ads goes against Spotify's Terms of Use, and Spotify may suspend accounts that do it. Use this app at your own risk. If you can, support artists with Premium or by buying their music.
 
+Not affiliated with or endorsed by Spotify. Spotify is a trademark of Spotify AB.
+
 ## Support
 
-Myspoti is free, has no ads and is made in my spare time. If you enjoy it, you can support it on [Ko-fi](https://ko-fi.com/kotazo) or [GitHub Sponsors](https://github.com/sponsors/kota-zo), also from **About** in the app's profile menu. Nothing in the app is locked behind a donation.
+Myspoti is free, has no ads and is made in my spare time. If you enjoy it, you can support it on [Ko-fi](https://ko-fi.com/kotazo) or [GitHub Sponsors](https://github.com/sponsors/kota-zo), also from **About** in the app. Nothing is locked behind a donation.
 
-<p align="center">
-  <a href="https://ko-fi.com/kotazo"><img src="https://storage.ko-fi.com/cdn/kofi6.png?v=6" alt="Support Myspoti on Ko-fi" height="56"></a>
-  <a href="https://github.com/sponsors/kota-zo"><img src="https://img.shields.io/badge/Sponsor_on_GitHub-%E2%9D%A4-ea4aaa?style=for-the-badge&logo=githubsponsors&logoColor=white" alt="Sponsor kota-zo on GitHub" height="56"></a>
-</p>
+News, help and ideas: the [Discord server](https://discord.gg/jXKnGVFnGS). Bugs and requests: [GitHub issues](https://github.com/kota-zo/myspoti/issues).
 
-News, help and ideas: join the [Discord server](https://discord.gg/jXKnGVFnGS). Bugs and requests are also welcome in [GitHub issues](https://github.com/kota-zo/myspoti/issues).
+## For developers
 
-## Build
+The Android project is in `base/`, split in two:
 
-The Android project is in `base/`. Requirements: JDK 17+ and the Android SDK (compileSdk 37).
+- **`:api`** is the contract the UI talks to: plain Kotlin models and interfaces (player, search, catalog, library, playlists, home, podcasts, users, lyrics, devices, Jam).
+- **`:api-spotify`** implements it on Spotify's Web Player. Playback stays in the official player, in a hidden WebView (`:host-android`), driven by a small bridge script. Catalog, search and library calls go straight to Spotify's servers. When Spotify ships a new Web Player, the app reads its new operation list by itself.
+- **`:host-cdp`** runs the same API on desktop Chrome, so the whole API is tested against the real Web Player without a phone.
+
+More: [`base/api-spotify/README.md`](base/api-spotify/README.md) and [`docs/api`](docs/api).
+
+Requirements: JDK 17+ and the Android SDK (compileSdk 37).
 
 ```bash
 cd base
@@ -98,17 +149,19 @@ google-chrome --user-data-dir="$HOME/.myspoti-chrome" --remote-debugging-port=92
 ./gradlew :host-cdp:test -Pcdp=http://localhost:9222
 ```
 
-Every push builds and tests on GitHub Actions. A `v*` tag publishes a signed APK in Releases; the app finds it, downloads it and installs it through Android's installer.
+Every push builds and tests on GitHub Actions. A `v*` tag publishes a signed APK in Releases.
 
 ## Credits
 
-- UI derived from [Spotui](https://github.com/Spotui/Spotui) / [Metrolist](https://github.com/MetrolistGroup/Metrolist) (GPL-3.0).
-- [NewPipeExtractor](https://github.com/TeamNewPipe/NewPipeExtractor) (GPL-3.0).
-- [Material Icons](https://github.com/google/material-design-icons) (Apache 2.0).
-- [Figtree](https://github.com/erikdkennedy/figtree) font (SIL OFL 1.1, see `base/licenses/`).
+- UI derived from [Spotui](https://github.com/Spotui/Spotui) / [Metrolist](https://github.com/MetrolistGroup/Metrolist) (GPL-3.0); Spotui also gave the Kotlin port of the lossless resolver, the verification screen and the DASH-to-FLAC remux.
+- [SpotiFLAC](https://github.com/spotbye/SpotiFLAC) (MIT): the lossless resolving idea and its community backend protocol.
+- [SpotiFLAC Mobile](https://github.com/zarzet/SpotiFLAC-Mobile) (MIT) and its [extensions](https://github.com/zarzet/SpotiFLAC-Extension) (Apache-2.0): the signed download sessions and the Tidal / Qobuz requests.
+- [NewPipeExtractor](https://github.com/TeamNewPipe/NewPipeExtractor) (GPL-3.0): music videos.
+- Lyrics: [LRCLIB](https://lrclib.net), LyricsPlus, lrc.red, Kugou and NetEase; song meanings: [Genius](https://genius.com).
+- [Material Icons](https://github.com/google/material-design-icons) (Apache 2.0) and the [Figtree](https://github.com/erikdkennedy/figtree) font (SIL OFL 1.1, see `base/licenses/`).
+
+Full notices: [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md).
 
 ## License
 
 GPL-3.0.
-
-Not affiliated with or endorsed by Spotify. Spotify is a trademark of Spotify AB.

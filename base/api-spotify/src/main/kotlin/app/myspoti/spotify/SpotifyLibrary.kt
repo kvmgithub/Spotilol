@@ -9,6 +9,8 @@ import app.myspoti.api.MediaKind
 import app.myspoti.api.Page
 import app.myspoti.api.Playlist
 import app.myspoti.api.PlaylistAccess
+import app.myspoti.api.PlaylistMember
+import app.myspoti.api.RowAdder
 import app.myspoti.api.PlaylistSort
 import app.myspoti.api.Playlists
 import app.myspoti.api.SavedTrack
@@ -166,6 +168,8 @@ class SpotifyLibrary(private val bridge: Bridge, private val gql: Gql) : Library
     }
 }
 
+private const val ADDED_BY_PAGE = 300
+
 class SpotifyPlaylists(private val gql: Gql, private val bridge: Bridge, private val http: SpotifyHttp) : Playlists {
     override suspend fun playlist(uri: Uri): Playlist =
         playlist(gql.query("fetchPlaylist", vars(
@@ -195,7 +199,10 @@ class SpotifyPlaylists(private val gql: Gql, private val bridge: Bridge, private
                         owner = item.str("owner.displayName") ?: item.str("owner.name"),
                         images = item.list("images").mapNotNull { i -> i.str("url")?.let { Image(it, i.int("width"), i.int("height")) } },
                         trackCount = item.int("totalLength") ?: 0,
-                        editable = item.bool("isOwnedBySelf") ?: item.bool("canAdd") ?: false,
+                        // Owned, or open to this account (a collaborator: not the owner, yet can add).
+                        // `isOwnedBySelf ?: canAdd` never read canAdd for a collaborator (false is not
+                        // null): the playlist they joined stayed read-only in the app (reported).
+                        editable = item.bool("isOwnedBySelf") == true || item.bool("canAdd") == true,
                     )
                 }
             }
@@ -226,8 +233,22 @@ class SpotifyPlaylists(private val gql: Gql, private val bridge: Bridge, private
     override suspend fun access(uri: Uri): PlaylistAccess =
         PlaylistAccess.of((bridge.service("PlaylistPermissionsAPI", "getBasePermission", JsonPrimitive(uri)) as? JsonPrimitive)?.content)
 
+    /**
+     * As the Web Player's "Make private": the playlist also leaves the profile (made private with
+     * the base permission alone, it stayed listed on the profile, unlike in the official apps).
+     * Made public again it is not put back on the profile, as there either ([setPublished]).
+     */
     override suspend fun setAccess(uri: Uri, access: PlaylistAccess) {
+        if (access == PlaylistAccess.PRIVATE && published(uri)) setPublished(uri, false)
         bridge.service("PlaylistPermissionsAPI", "setBasePermission", JsonPrimitive(uri), JsonPrimitive(access.permission))
+    }
+
+    /** The library's own "public" flag on the playlist: listed on the profile. */
+    override suspend fun published(uri: Uri): Boolean =
+        (bridge.service("RootlistAPI", "getPublishedState", JsonPrimitive(uri)) as? JsonPrimitive)?.content == "true"
+
+    override suspend fun setPublished(uri: Uri, published: Boolean) {
+        bridge.service("RootlistAPI", "setPublishedState", JsonPrimitive(uri), JsonPrimitive(published))
     }
 
     override suspend fun setCover(uri: Uri, jpeg: ByteArray?) {
@@ -254,6 +275,62 @@ class SpotifyPlaylists(private val gql: Gql, private val bridge: Bridge, private
 
     override suspend fun unfollow(uri: Uri) {
         bridge.service("RootlistAPI", "remove", json(listOf(mapOf("uri" to uri))))
+    }
+
+    /**
+     * The page's `claimPermissions` (spclient `POST playlist-permission/v1/playlist/{id}/permission-grant/token/{pt}/claim`,
+     * no body, answers `{userPermission:{permissionLevel,revision},capabilities}`); open.spotify.com does the same when
+     * it is opened with `?pt=`. Claiming does not say whether the playlist is in the rootlist, so it is followed when not.
+     */
+    override suspend fun join(uri: Uri, invitationToken: String): PlaylistAccess {
+        val claimed = bridge.service("PlaylistPermissionsAPI", "claimPermissions", JsonPrimitive(uri), JsonPrimitive(invitationToken))
+        val inLibrary = (bridge.service("RootlistAPI", "contains", JsonArray(listOf(JsonPrimitive(uri)))) as? JsonArray)
+            ?.firstOrNull()?.jsonPrimitive?.boolean == true
+        if (!inLibrary) follow(uri)
+        return PlaylistAccess.of(claimed.str("userPermission.permissionLevel"))
+    }
+
+    /**
+     * The page's `getPermissionGrant(uri, "CONTRIBUTOR")` (spclient `POST playlist-permission/v1/playlist/{id}/permission-grant`,
+     * `{"permission":{"permissionLevel":"CONTRIBUTOR"},"ttlMs":604800000}`, answers `{token, permissionGrantOptions, createdAt}`):
+     * what the web player's "Invite collaborators" shares as `open.spotify.com/playlist/{id}?pt={token}`.
+     */
+    override suspend fun collaboratorInvite(uri: Uri): String {
+        val grant = bridge.service("PlaylistPermissionsAPI", "getPermissionGrant", JsonPrimitive(uri), JsonPrimitive("CONTRIBUTOR"))
+        val token = grant.str("token")?.takeIf { it.isNotBlank() } ?: error("no invitation token")
+        return "https://open.spotify.com/playlist/${uri.substringAfterLast(':')}?pt=$token"
+    }
+
+    /**
+     * The page's `getMembers(uri)`: `{members:[{permissionLevel, isOwner, user:{displayName, images:[{url}],
+     * uri, username}, songsAdded}]}` — the faces shown on a collaborative playlist.
+     */
+    override suspend fun members(uri: Uri): List<PlaylistMember> =
+        bridge.service("PlaylistPermissionsAPI", "getMembers", JsonPrimitive(uri)).list("members").mapNotNull { m ->
+            val username = m.str("user.username") ?: return@mapNotNull null
+            PlaylistMember(username, m.str("user.displayName") ?: username,
+                m.list("user.images").firstNotNullOfOrNull { it.str("url") }, m.bool("isOwner") == true)
+        }.sortedByDescending { it.isOwner }
+
+    /**
+     * The page's `PlaylistAPI.getContents(uri, {offset, limit})`: each row carries `uid` and
+     * `addedBy {username}`. Read a page at a time to the end (a few hundred rows a request).
+     */
+    override suspend fun addedBy(uri: Uri): List<RowAdder> {
+        val out = ArrayList<RowAdder>()
+        var offset = 0
+        while (offset < 10_000) {
+            val page = bridge.service("PlaylistAPI", "getContents", JsonPrimitive(uri),
+                json(mapOf("offset" to offset, "limit" to ADDED_BY_PAGE)))
+            val items = page.list("items")
+            items.forEach { r ->
+                val who = r.str("addedBy.username") ?: return@forEach
+                out += RowAdder(r.str("uid").orEmpty(), r.str("uri").orEmpty(), who)
+            }
+            if (items.size < ADDED_BY_PAGE) break
+            offset += items.size
+        }
+        return out
     }
 
     /** Pages through the whole playlist (100 rows a request), then sorts it on the client. */
@@ -286,9 +363,12 @@ class SpotifyPlaylists(private val gql: Gql, private val bridge: Bridge, private
         gql.query("moveItemsInPlaylist", vars("playlistUri" to uri, "uids" to uids, "newPosition" to position))
     }
 
-    /** The "Recommended songs" list under an own playlist (playlistextender). */
-    override suspend fun recommended(uri: Uri, limit: Int): List<Track> {
-        val body = json(mapOf("playlistURI" to uri, "trackSkipIDs" to emptyList<String>(), "numResults" to limit)).toString()
+    /**
+     * The "Recommended songs" list under an own playlist (playlistextender). An empty playlist
+     * gets some too, from its name (checked live). [skip]: tracks not to suggest again.
+     */
+    override suspend fun recommended(uri: Uri, limit: Int, skip: List<Uri>): List<Track> {
+        val body = json(mapOf("playlistURI" to uri, "trackSkipIDs" to skip.map { it.substringAfterLast(':') }, "numResults" to limit)).toString()
         val (code, text) = http.send("POST", "https://spclient.wg.spotify.com/playlistextender/extendp/", body, contentType = "application/json")
         if (code != 200) throw app.myspoti.spotify.gql.HttpException(code, text.take(200))
         return Bridge.json.parseToJsonElement(text).list("recommendedTracks").mapNotNull { t ->

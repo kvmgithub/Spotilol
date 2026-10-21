@@ -17,6 +17,10 @@ private const val KEY_CROSSFADE = "crossfade_seconds"
 fun isLyricsExtraSources(c: Context): Boolean = prefs(c).getBoolean(KEY_LYRICS_EXTRA, false)
 fun setLyricsExtraSources(c: Context, v: Boolean) = prefs(c).edit().putBoolean(KEY_LYRICS_EXTRA, v).apply()
 
+/** Lyrics timed word by word first (karaoke); off: line by line, Spotify's first. */
+fun isLyricsWordSync(c: Context): Boolean = prefs(c).getBoolean("lyrics_word_sync", true)
+fun setLyricsWordSync(c: Context, v: Boolean) = prefs(c).edit().putBoolean("lyrics_word_sync", v).apply()
+
 private fun prefs(c: Context) = c.getSharedPreferences(PREF, Context.MODE_PRIVATE)
 
 /** The bottom bar: fading into the list (the default), or solid black. Read by the bar as state. */

@@ -466,10 +466,47 @@ Rootlist and liked-songs-artist pushes carried only fields 1, 2 and 9. Simplest 
 rule: on any playlist push, re-fetch that playlist (or the rootlist / `libraryV3`) unless
 the revision equals the one already held.
 
+## Blend ("Mix à plusieurs")
+
+The Web Player has Blend routes (`/blend/invitation`, `/blend/taste-match/{id}`), all on one
+spclient service, `https://spclient.wg.spotify.com/blend-invitation` (no GraphQL operation,
+no page service). Checked live on the free test account (token and client-token as for any
+spclient call):
+
+| Call | Answer |
+|---|---|
+| `POST /v1/generate` (empty body) | `201 {"invite":"https://open.spotify.com/blend/taste-match/{id}?si=…&fallback=getapp&blendDecoration=…"}` |
+| `GET /v3/view-invitation/{id}` | `200 {page_type, members, recipient{name,username,image_url,hash}, playlist_uri, title, subtitle, members_title, button_text, footnote}` |
+| `PUT /v2/join/{id}` (empty body) | `200 {"playlist_uri":"spotify:playlist:37i9dQZF1E…"}` |
+
+`page_type`: `PENDING_INVITATION` (own invitation, nobody joined), `READY_TO_JOIN_EMPTY_BLEND` /
+`READY_TO_JOIN_ALREADY_CREATED_BLEND` (someone else's, open), `MAX_MEMBERS`, `ALREADY_JOINED`
+(then `playlist_uri` is set), `DELETED`. The Blend playlist only exists once a second account
+has joined: joining one's own invitation returned a `playlist_uri` that `fetchPlaylist` answers
+"not found" and that sits in the rootlist as a `placeholder` item (removed again with
+`RootlistAPI.remove`). An invitation cannot be revoked. A real Blend is an ordinary playlist
+(`format: "blend"` in `fetchPlaylist`), opened, played and listed like any other. A link
+`open.spotify.com/blend/taste-match/{id}` opened in the app shows the invitation (view, then join).
+
+The Blend page itself (members, taste match, rename, leave) uses calls the Web Player has no
+screen for; they are the ones Spotify's mobile apps make for that page. The two reads were
+checked live on a real two-member Blend (21/10), and rename; leave was not sent yet:
+
+| Call | Answer |
+|---|---|
+| `GET /v3/get-invitation/{playlistId}` | `200 {title, button_text, invitation_link, members[{name, image_url, hash, username}]}` (`image_url` may be `""`) |
+| `GET /v3/data-stories/{playlistId}` | `200 {intro_story{title1{text,text_color}, subtitle1, background_color, audio_uri}, stories[{story_type, title, subtitle, body, image, background_color, button{navigation_uri}}]}` |
+| `PUT blend-writer/v1/rename/{playlistId}` `{"name":…}` | `200`, empty body (checked with the Blend's own name) |
+| `PUT /v1/leave` `{"playlist_uri":"spotify:playlist:…"}` | not sent yet |
+
+`blend-writer` is a sibling of `blend-invitation` on the same host. The texts (titles, button
+words, story lines) come translated in the account's language.
+
 ## Gaps (not captured)
 
-- Remove tracks from a playlist (expected `playlist/v2/playlist/{id}/changes` with a `REM`
-  op, or a GraphQL `removeFromPlaylist`; unknown).
+- Remove tracks from a playlist: GraphQL `removeFromPlaylist {playlistUri, uids}` removes
+  exactly the rows named by `uid` (checked live: the same song twice has two uids, removing
+  one leaves the other). Never address a row by its track uri.
 - Reorder tracks (`MOV`, or `addToPlaylist`/move with `fromUid`; unknown).
 - Delete a playlist (for an own playlist the Web Player probably only does the rootlist
   `REM`; not confirmed).

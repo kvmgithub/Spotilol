@@ -32,6 +32,7 @@ import com.music.spotui.data.entity.SongsModel
 import com.music.spotui.di.Graph
 import com.music.spotui.di.SongPlayer
 import kotlinx.coroutines.async
+import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
@@ -152,6 +153,7 @@ class Api constructor(
             durationMs = t.durationMs.toInt(),
             addedAt = t.addedAt.orEmpty(),
             playable = t.playable,
+            rowUid = t.uid.orEmpty(),
         )
         return SongsModel(
             id = stableId("track:$id"),
@@ -167,6 +169,7 @@ class Api constructor(
             addedAt = t.addedAt.orEmpty(),
             playable = t.playable,
             artistIds = t.artists.map { it.uri.substringAfterLast(':') },
+            rowUid = t.uid.orEmpty(),
         )
     }
 
@@ -821,20 +824,43 @@ class Api constructor(
             ownerAvatar = cover(pl.ownerImages),
             ownerUri = pl.ownerUri.orEmpty(),
             metaLine = saves,
+            isBlend = pl.isBlend,
         )
+        // The first page gives the total: the rest is asked for PLAYLIST_PARALLEL pages at a time
+        // and shown in order as it lands, at most every PLAYLIST_EMIT_MS. One page after the
+        // other, each followed by the whole list shown and registered again, a 6000-song
+        // playlist took about two minutes (tester report).
         val songs = ArrayList<SongsModel>()
-        var offset = 0
         var failed = false
-        while (true) {
-            val result = if (offset == 0) firstPage.await() else runCatching { api.playlists.tracks(uri, offset, 100) }
-            val page = result.getOrElse { failed = true; null } ?: break
-            songs += page.items.map(::songOf)
+        val first = firstPage.await().getOrElse { failed = true; null }
+        fun publish(done: Boolean): Response<ContextPageModel> {
             SongPlayer.registerContext(songs.map { it.url }, uri)
             val total = songs.sumOf { it.durationMs.toLong() }
             val meta = listOf(saves, if (total > 0) durationLabel(total) else "").filter { it.isNotBlank() }.joinToString(" • ")
-            val done = page.nextOffset == null
-            emit(Response.Success(header.copy(metaLine = meta, tracks = songs.toList(), complete = done)))
-            offset = page.nextOffset ?: break
+            return Response.Success(header.copy(metaLine = meta, tracks = songs.toList(), complete = done))
+        }
+        if (first != null) {
+            songs += first.items.map(::songOf)
+            val offsets = generateSequence(first.nextOffset) { (it + PLAYLIST_PAGE).takeIf { n -> n < first.total } }.toList()
+            emit(publish(done = offsets.isEmpty()))
+            if (offsets.isNotEmpty()) {
+                val gate = kotlinx.coroutines.sync.Semaphore(PLAYLIST_PARALLEL)
+                coroutineScope {
+                    val jobs = offsets.map { o -> async(Dispatchers.IO) { gate.withPermit { runCatching { api.playlists.tracks(uri, o, PLAYLIST_PAGE) }.getOrNull() } } }
+                    var lastEmit = System.currentTimeMillis()
+                    for ((i, job) in jobs.withIndex()) {
+                        val page = job.await()
+                        if (page == null) { failed = true; jobs.drop(i + 1).forEach { it.cancel() }; break }
+                        songs += page.items.map(::songOf)
+                        val last = i == jobs.lastIndex
+                        if (last || System.currentTimeMillis() - lastEmit >= PLAYLIST_EMIT_MS) {
+                            emit(publish(done = last)); lastEmit = System.currentTimeMillis()
+                        }
+                    }
+                }
+                // A page that failed: what came before it stays, marked complete so nothing waits.
+                if (failed && songs.isNotEmpty()) emit(publish(done = true))
+            }
         }
         if (failed && songs.isEmpty()) emit(Response.Error(context.getString(R.string.couldnt_load, pl.name)))
     }
@@ -865,7 +891,7 @@ class Api constructor(
             emit(Response.Success(songs.toList()))
             offset = page.nextOffset ?: break
         }
-        if (songs.isEmpty()) emit(Response.Error("Couldn't load this playlist"))
+        if (songs.isEmpty()) emit(Response.Error(context.getString(R.string.page_load_failed)))
     }
 
     // ── Library ──
@@ -920,7 +946,7 @@ class Api constructor(
         HomeCache.libraryRoot?.let { emit(Response.Success(it)) } ?: emit(Response.Loading())
         if (!ready()) { if (HomeCache.libraryRoot == null) emit(Response.Error(notSignedIn())); return@flow }
         runCatching { listOf(likedEntry()) + libraryLevel(null).mapNotNull(::entryOf) }.fold(
-            onSuccess = { HomeCache.libraryRoot = it; ScreenCache.libraryRoot.write(it); emit(Response.Success(it)) },
+            onSuccess = { HomeCache.libraryRoot = it; ScreenCache.libraryRoot.write(it); PagePrefetch.schedule(it); emit(Response.Success(it)) },
             onFailure = { Log.e("Api", "getLibraryRoot failed", it); if (HomeCache.libraryRoot == null) emit(Response.Error(it.message ?: "error")) },
         )
     }
@@ -968,7 +994,7 @@ class Api constructor(
                 LikedCache.tracks = songs
                 emit(Response.Success(songs))
             },
-            onFailure = { emit(Response.Error("Couldn't load Liked Songs")) },
+            onFailure = { emit(Response.Error(context.getString(R.string.couldnt_load, context.getString(R.string.collection_liked_songs_title)))) },
         )
     }
 
@@ -1018,3 +1044,8 @@ class Api constructor(
         return nameMatches.firstOrNull(::artistMatches) ?: candidates.firstOrNull(::artistMatches) ?: nameMatches.firstOrNull() ?: candidates.first()
     }
 }
+
+/** Songs per playlist page, pages asked for at once, and the most often a growing list is shown again. */
+private const val PLAYLIST_PAGE = 100
+private const val PLAYLIST_PARALLEL = 4
+private const val PLAYLIST_EMIT_MS = 350L

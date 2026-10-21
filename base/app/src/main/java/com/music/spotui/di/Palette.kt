@@ -11,6 +11,8 @@ import com.bumptech.glide.request.transition.Transition
 
 class Palette {
     companion object {
+        /** The tint when a cover gives none (none loaded). */
+        val NEUTRAL = Color(0xFF2A2A2A)
         // Cover colours already computed (process-wide): a screen opening on a known
         // cover gets its colour in the first frame instead of popping in afterwards.
         private val colors = java.util.Collections.synchronizedMap(object : java.util.LinkedHashMap<String, Color>(64, 0.75f, true) {
@@ -48,7 +50,9 @@ class Palette {
             .into(object : CustomTarget<Bitmap>() {
                 override fun onResourceReady(resource: Bitmap, transition: Transition<in Bitmap>?) {
                     Palette.from(resource).generate { palette ->
-                        val dominantColor = palette?.darkVibrantSwatch?.rgb
+                        // Not every cover has a dark vibrant swatch: without one the colour of the song
+                        // before stayed (reported: the tint "doesn't change" between some songs).
+                        val dominantColor = palette?.let { it.darkVibrantSwatch ?: it.darkMutedSwatch ?: it.dominantSwatch ?: it.vibrantSwatch }?.rgb
                         dominantColor?.let {
                             // Convert RGB color integer to ARGB color integer with full opacity
                             val argbColor = Color(it or (0xFF shl 24))
@@ -60,6 +64,9 @@ class Palette {
                 override fun onLoadCleared(placeholder: Drawable?) {
                     // Handle cleanup here if necessary
                 }
+
+                // No cover (failed load): a neutral tint, never the song before's.
+                override fun onLoadFailed(errorDrawable: Drawable?) { onColorExtracted(NEUTRAL) }
             })
     }
     fun extractSecondColorFromCoverUrl(context: Context, imageUrl: String, onColorExtracted: (Color) -> Unit) {
@@ -78,7 +85,7 @@ class Palette {
                     Palette
                         .from(scaledBitmap)
                         .generate { palette ->
-                        val lightVibrantColor = palette?.mutedSwatch?.rgb
+                        val lightVibrantColor = palette?.let { it.mutedSwatch ?: it.darkMutedSwatch ?: it.dominantSwatch ?: it.vibrantSwatch }?.rgb
                         lightVibrantColor?.let {
                             // Convert RGB color integer to ARGB color integer with full opacity
                             val argbColor = Color(it or (0xFF shl 24))
@@ -90,6 +97,9 @@ class Palette {
                 override fun onLoadCleared(placeholder: Drawable?) {
                     // Handle cleanup here if necessary
                 }
+
+                // No cover (failed load): a neutral tint, never the song before's.
+                override fun onLoadFailed(errorDrawable: Drawable?) { onColorExtracted(NEUTRAL) }
             })
     }
 }

@@ -329,7 +329,7 @@
     const ctx = new AudioContext({ latencyHint: 'playback' });
     const gain = ctx.createGain();
     const paths = [0, 1].map(i => {
-      const path = { delay: ctx.createDelay(XF_MAX_S + 4), g: ctx.createGain() };
+      const path = { delay: ctx.createDelay(XF_MAX_S + 4), g: ctx.createGain(), dm: [{ t: 0, v: 0 }] };
       path.g.gain.value = i === 0 ? 1 : 0;
       return path;
     });
@@ -440,12 +440,33 @@
     if (last.at >= now) last.k = k; else xf.segs.push({ at: now, k });
   };
 
+  // Each path's delay as scheduled here (dm: the events from the last cut on). A delay is never
+  // read back from the AudioParam: its value is what the audio thread rendered last, so right
+  // after a change it is still the old one. Read that way, a flush or the new song's delay 0
+  // was written back over at once, and the reserve stayed at its old length.
+  const dAt = (path, t) => {
+    const m = path.dm;
+    let i = m.length - 1;
+    while (i > 0 && m[i].t > t) i--;
+    const a = m[i], b = m[i + 1];
+    return b && b.ramp ? a.v + (b.v - a.v) * Math.max(0, t - a.t) / (b.t - a.t) : a.v;
+  };
+  // Cuts are made at the context's current time, which only moves on: later reads need nothing before.
+  const dCut = (path, v, t) => {
+    path.delay.delayTime.cancelScheduledValues(t);
+    path.delay.delayTime.setValueAtTime(v, t);
+    path.dm = [{ t, v }];
+  };
+  const dRamp = (path, v, t) => {
+    path.delay.delayTime.linearRampToValueAtTime(v, t);
+    path.dm.push({ t, v, ramp: true });
+  };
+
   // The current path's delay from now on, from the speeds the stream was written at (see above).
   const xfLay = () => {
-    const p = boost.paths[xf.cur].delay.delayTime, now = boost.ctx.currentTime;
-    let t = now, d = p.value, s = now - d;
-    p.cancelScheduledValues(now);
-    p.setValueAtTime(d, now);
+    const path = boost.paths[xf.cur], now = boost.ctx.currentTime;
+    let t = now, d = dAt(path, now), s = now - d;
+    dCut(path, d, now);
     while (xf.segs.length > 1 && xf.segs[1].at <= s) xf.segs.shift();
     for (let i = 0; i < xf.segs.length; i++) {
       const k = xf.segs[i].k, next = xf.segs[i + 1];
@@ -453,21 +474,21 @@
         // Still being written at this speed: read on at 1/k until the delay's limit.
         if (k > 1) {
           const slope = 1 - 1 / k, H = Math.max(0, (XF_MAX_S + 3 - d) / slope);
-          if (H > 0) p.linearRampToValueAtTime(d + slope * H, t + H);
+          if (H > 0) dRamp(path, d + slope * H, t + H);
         }
         return;
       }
       t += (next.at - s) * k;
       s = next.at;
       d = t - s;
-      p.linearRampToValueAtTime(d, t);
+      dRamp(path, d, t);
     }
   };
 
   // Seconds of song between what the page plays and what is heard.
   const xfReserve = () => {
     if (!boost) return 0;
-    const now = boost.ctx.currentTime, s = now - boost.paths[xf.cur].delay.delayTime.value;
+    const now = boost.ctx.currentTime, s = now - dAt(boost.paths[xf.cur], now);
     let c = 0;
     for (let i = 0; i < xf.segs.length; i++) {
       const a = Math.max(s, xf.segs[i].at), b = i + 1 < xf.segs.length ? xf.segs[i + 1].at : now;
@@ -515,9 +536,8 @@
     if (!boost) return;
     const had = xfReserve(), t = boost.ctx.currentTime;
     boost.paths.forEach((path, i) => {
-      path.delay.delayTime.cancelScheduledValues(t);
+      dCut(path, 0, t);
       path.g.gain.cancelScheduledValues(t);
-      path.delay.delayTime.setValueAtTime(0, t);
       path.g.gain.setValueAtTime(i === xf.cur ? 1 : 0, t);
     });
     xf.segs = [{ at: t, k: 1 }];
@@ -542,8 +562,7 @@
     }
     const t = boost.ctx.currentTime, po = boost.paths[old], pn = boost.paths[1 - old];
     // The new path is silent here: its delay can jump to 0, the new song's start.
-    pn.delay.delayTime.cancelScheduledValues(t);
-    pn.delay.delayTime.setValueAtTime(0, t);
+    dCut(pn, 0, t);
     po.g.gain.cancelScheduledValues(t);
     pn.g.gain.cancelScheduledValues(t);
     po.g.gain.setValueCurveAtTime(fadeOut, t, L);

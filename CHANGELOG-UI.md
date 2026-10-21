@@ -6,6 +6,11 @@ Each version section is the text of the GitHub pre-release tagged `ui-v<version>
 
 ## [Unreleased]
 
+## [0.7.4] - 2026-10-21
+
+### Fixed
+- Crossfade: after a song change, a skip or a seek the reserve kept its old length. The app read the audio path's delay back from the browser, which still reported the value from before the change, and scheduled that old value again. The new song then started with the end of the previous one once more, its position stood still until stall recovery jumped back, and skips and seeks sounded about six seconds late. The app now keeps the delays it schedules itself and never reads them back.
+
 ## [0.7.3] - 2026-10-20
 
 ### Fixed

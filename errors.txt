@@ -1,0 +1,6 @@
+PickDuringAdTest > a pick on a song the page already plays after the ad is not played twice() FAILED
+    java.lang.IllegalStateException at PickDuringAdTest.kt:62
+> Task :api-spotify:test FAILED
+FAILURE: Build failed with an exception.
+* What went wrong:
+BUILD FAILED in 3m 56s

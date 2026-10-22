@@ -1,0 +1,170 @@
+Fetching distribution.
+Downloading https://services.gradle.org/distributions/gradle-9.7.1-bin.zip
+..............10%..............20%...............30%..............40%...............50%..............60%...............70%..............80%..............90%...............100%
+
+Welcome to Gradle 9.7.1!
+
+Here are the highlights of this release:
+ - Isolated Projects graduates to incubating
+ - Broader Configuration Cache compatibility
+ - Resilient Sync helps you fix broken builds
+ - More source locations in problem reports
+
+For more details see https://docs.gradle.org/9.7.1/release-notes.html
+
+To honour the JVM settings for this build a single-use Daemon process will be forked. For more on this, please refer to https://docs.gradle.org/9.7.1/userguide/gradle_daemon.html#sec:disabling_the_daemon in the Gradle documentation.
+Daemon will be stopped at the end of the build 
+Parallel Configuration Cache is an incubating feature.
+Calculating task graph as no cached configuration is available for tasks: testDebugUnitTest :api:test :api-spotify:test :app:assembleRelease
+> Task :api:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :api:processResources NO-SOURCE
+> Task :api-spotify:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :api-spotify:processResources
+> Task :app:preBuild UP-TO-DATE
+> Task :app:preDebugBuild UP-TO-DATE
+> Task :app:generateDebugBuildConfig
+> Task :app:generateDebugResources
+> Task :app:packageDebugResources
+> Task :host-android:preBuild UP-TO-DATE
+> Task :host-android:preDebugBuild UP-TO-DATE
+> Task :host-android:processDebugNavigationResources
+> Task :app:processDebugNavigationResources
+> Task :app:parseDebugLocalResources
+> Task :app:generateDebugRFile
+> Task :host-android:generateDebugResources
+> Task :host-android:packageDebugResources
+> Task :host-android:parseDebugLocalResources
+> Task :host-android:generateDebugRFile
+> Task :host-android:javaPreCompileDebug
+> Task :app:javaPreCompileDebug FROM-CACHE
+> Task :host-android:writeDebugAarMetadata
+> Task :app:checkDebugAarMetadata
+> Task :app:mapDebugSourceSetPaths
+> Task :app:compileDebugNavigationResources
+> Task :app:mergeDebugResources
+> Task :app:createDebugCompatibleScreenManifests
+> Task :app:extractDeepLinksDebug
+> Task :host-android:extractDeepLinksDebug
+> Task :host-android:processDebugManifest
+> Task :api:compileKotlin
+> Task :api:compileJava NO-SOURCE
+> Task :api:classes UP-TO-DATE
+> Task :api:jar
+> Task :app:processDebugMainManifest
+> Task :app:processDebugManifest
+> Task :app:processDebugManifestForPackage
+> Task :host-android:mapDebugSourceSetPaths
+> Task :host-android:compileDebugLibraryResources
+> Task :app:processDebugResources
+> Task :app:preDebugUnitTestBuild UP-TO-DATE
+> Task :app:javaPreCompileDebugUnitTest FROM-CACHE
+> Task :host-android:preDebugUnitTestBuild UP-TO-DATE
+> Task :host-android:generateDebugUnitTestStubRFile
+> Task :host-android:javaPreCompileDebugUnitTest FROM-CACHE
+> Task :api:compileTestKotlin NO-SOURCE
+> Task :api:compileTestJava NO-SOURCE
+> Task :api:processTestResources NO-SOURCE
+> Task :api:testClasses UP-TO-DATE
+> Task :api:test NO-SOURCE
+> Task :api-spotify:processTestResources NO-SOURCE
+> Task :app:preReleaseBuild UP-TO-DATE
+> Task :app:mergeReleaseJniLibFolders
+> Task :host-android:preReleaseBuild UP-TO-DATE
+> Task :host-android:mergeReleaseJniLibFolders
+> Task :host-android:mergeReleaseNativeLibs NO-SOURCE
+> Task :host-android:copyReleaseJniLibsProjectOnly
+> Task :host-android:generateReleaseResources FROM-CACHE
+> Task :host-android:packageReleaseResources
+> Task :host-android:processReleaseNavigationResources FROM-CACHE
+> Task :host-android:parseReleaseLocalResources FROM-CACHE
+> Task :host-android:generateReleaseRFile FROM-CACHE
+> Task :host-android:javaPreCompileRelease FROM-CACHE
+> Task :app:checkReleaseDuplicateClasses
+> Task :app:generateReleaseBuildConfig
+> Task :app:generateReleaseResources
+> Task :app:packageReleaseResources
+> Task :app:processReleaseNavigationResources
+> Task :app:parseReleaseLocalResources
+> Task :app:generateReleaseRFile FROM-CACHE
+> Task :app:javaPreCompileRelease FROM-CACHE
+> Task :host-android:prepareReleaseArtProfile
+> Task :app:mergeReleaseArtProfile
+> Task :host-android:writeReleaseAarMetadata
+> Task :app:checkReleaseAarMetadata
+> Task :app:mapReleaseSourceSetPaths
+> Task :app:compileReleaseNavigationResources FROM-CACHE
+
+> Task :api-spotify:compileKotlin
+w: file:///home/runner/work/Spotilol/Spotilol/base/api-spotify/src/main/kotlin/app/myspoti/spotify/SpotifyPlayer.kt:1141:57 Unnecessary non-null assertion (!!) on a non-null receiver of type 'Double'.
+
+> Task :api-spotify:compileJava NO-SOURCE
+> Task :api-spotify:classes
+> Task :api-spotify:jar
+> Task :app:mergeReleaseResources
+> Task :api-spotify:compileTestKotlin
+> Task :api-spotify:compileTestJava NO-SOURCE
+> Task :api-spotify:testClasses UP-TO-DATE
+
+> Task :host-android:compileDebugKotlin
+w: file:///home/runner/work/Spotilol/Spotilol/base/host-android/src/main/kotlin/app/myspoti/host/android/Fingerprint.kt:144:38 Unnecessary safe call on a non-null receiver of type 'JSONObject'.
+
+> Task :host-android:compileDebugJavaWithJavac NO-SOURCE
+> Task :host-android:bundleLibCompileToJarDebug
+
+> Task :api-spotify:test
+
+PickDuringAdTest > a pick on a song the page already plays after the ad is not played twice() FAILED
+    java.lang.IllegalStateException at PickDuringAdTest.kt:62
+
+88 tests completed, 1 failed
+
+> Task :api-spotify:test FAILED
+> Task :app:compileDebugKotlin
+w: file:///home/runner/work/Spotilol/Spotilol/base/app/src/main/java/com/music/spotui/ui/components/AboutSheet.kt:53:49 'fun rememberModalBottomSheetState(skipPartiallyExpanded: Boolean = ..., confirmValueChange: (SheetValue) -> Boolean = ...): SheetState' is deprecated. Use rememberBottomSheetState with Hidden initial value.
+w: file:///home/runner/work/Spotilol/Spotilol/base/app/src/main/java/com/music/spotui/ui/components/AddToPlaylistSheet.kt:70:22 'fun rememberModalBottomSheetState(skipPartiallyExpanded: Boolean = ..., confirmValueChange: (SheetValue) -> Boolean = ...): SheetState' is deprecated. Use rememberBottomSheetState with Hidden initial value.
+w: file:///home/runner/work/Spotilol/Spotilol/base/app/src/main/java/com/music/spotui/ui/components/AppComponents.kt:436:9 'fun Slider(value: Float, onValueChange: (Float) -> Unit, modifier: Modifier = ..., enabled: Boolean = ..., valueRange: ClosedFloatingPointRange<Float> = ..., steps: Int = ..., onValueChangeFinished: (() -> Unit)? = ..., colors: SliderColors = ..., interactionSource: MutableInteractionSource = ...): Unit' is deprecated. Use the Slider overload that accepts SliderState, onValueChange, and onValueChangeFinished instead.
+w: file:///home/runner/work/Spotilol/Spotilol/base/app/src/main/java/com/music/spotui/ui/components/ArtistOptionsSheet.kt:51:22 'fun rememberModalBottomSheetState(skipPartiallyExpanded: Boolean = ..., confirmValueChange: (SheetValue) -> Boolean = ...): SheetState' is deprecated. Use rememberBottomSheetState with Hidden initial value.
+w: file:///home/runner/work/Spotilol/Spotilol/base/app/src/main/java/com/music/spotui/ui/components/EpisodeSheets.kt:106:44 'val Icons.Outlined.Undo: ImageVector' is deprecated. Use the AutoMirrored version at Icons.AutoMirrored.Outlined.Undo.
+w: file:///home/runner/work/Spotilol/Spotilol/base/app/src/main/java/com/music/spotui/ui/components/EpisodeSheets.kt:118:40 'val Icons.Outlined.PlaylistAdd: ImageVector' is deprecated. Use the AutoMirrored version at Icons.AutoMirrored.Outlined.PlaylistAdd.
+w: file:///home/runner/work/Spotilol/Spotilol/base/app/src/main/java/com/music/spotui/ui/components/PlayerSheets.kt:437:22 'fun rememberModalBottomSheetState(skipPartiallyExpanded: Boolean = ..., confirmValueChange: (SheetValue) -> Boolean = ...): SheetState' is deprecated. Use rememberBottomSheetState with Hidden initial value.
+w: file:///home/runner/work/Spotilol/Spotilol/base/app/src/main/java/com/music/spotui/ui/components/PlayerSheets.kt:879:19 'fun rememberSwipeToDismissBoxState(initialValue: SwipeToDismissBoxValue = ..., confirmValueChange: (SwipeToDismissBoxValue) -> Boolean = ..., positionalThreshold: (Float) -> Float = ...): SwipeToDismissBoxState' is deprecated. confirmValueChange is deprecated without replacement. Rather than relying on a callback to veto state changes, the anchor set should not include disallowed anchors. See androidx.compose.foundation.samples.AnchoredDraggableDynamicAnchorsSample for an example of using dynamic anchors over confirmValueChange.
+w: file:///home/runner/work/Spotilol/Spotilol/base/app/src/main/java/com/music/spotui/ui/components/SavedInSheet.kt:86:22 'fun rememberModalBottomSheetState(skipPartiallyExpanded: Boolean = ..., confirmValueChange: (SheetValue) -> Boolean = ...): SheetState' is deprecated. Use rememberBottomSheetState with Hidden initial value.
+w: file:///home/runner/work/Spotilol/Spotilol/base/app/src/main/java/com/music/spotui/ui/components/SongOptionsSheet.kt:99:22 'fun rememberModalBottomSheetState(skipPartiallyExpanded: Boolean = ..., confirmValueChange: (SheetValue) -> Boolean = ...): SheetState' is deprecated. Use rememberBottomSheetState with Hidden initial value.
+w: file:///home/runner/work/Spotilol/Spotilol/base/app/src/main/java/com/music/spotui/ui/components/SongOptionsSheet.kt:328:101 'fun rememberModalBottomSheetState(skipPartiallyExpanded: Boolean = ..., confirmValueChange: (SheetValue) -> Boolean = ...): SheetState' is deprecated. Use rememberBottomSheetState with Hidden initial value.
+w: file:///home/runner/work/Spotilol/Spotilol/base/app/src/main/java/com/music/spotui/ui/components/SpotifyCodeSheet.kt:144:22 'fun rememberModalBottomSheetState(skipPartiallyExpanded: Boolean = ..., confirmValueChange: (SheetValue) -> Boolean = ...): SheetState' is deprecated. Use rememberBottomSheetState with Hidden initial value.
+w: file:///home/runner/work/Spotilol/Spotilol/base/app/src/main/java/com/music/spotui/ui/components/SupporterSheet.kt:100:49 'fun rememberModalBottomSheetState(skipPartiallyExpanded: Boolean = ..., confirmValueChange: (SheetValue) -> Boolean = ...): SheetState' is deprecated. Use rememberBottomSheetState with Hidden initial value.
+w: file:///home/runner/work/Spotilol/Spotilol/base/app/src/main/java/com/music/spotui/ui/screens/ContextScreen.kt:1247:49 Only safe (?.) or non-null asserted (!!.) calls are allowed on a nullable receiver of type 'Collator?'.
+w: file:///home/runner/work/Spotilol/Spotilol/base/app/src/main/java/com/music/spotui/ui/screens/ContextScreen.kt:1248:50 Only safe (?.) or non-null asserted (!!.) calls are allowed on a nullable receiver of type 'Collator?'.
+w: file:///home/runner/work/Spotilol/Spotilol/base/app/src/main/java/com/music/spotui/ui/screens/ContextScreen.kt:1248:105 Only safe (?.) or non-null asserted (!!.) calls are allowed on a nullable receiver of type 'Collator?'.
+w: file:///home/runner/work/Spotilol/Spotilol/base/app/src/main/java/com/music/spotui/ui/screens/ContextScreen.kt:1249:49 Only safe (?.) or non-null asserted (!!.) calls are allowed on a nullable receiver of type 'Collator?'.
+w: file:///home/runner/work/Spotilol/Spotilol/base/app/src/main/java/com/music/spotui/ui/screens/ContextScreen.kt:1249:102 Only safe (?.) or non-null asserted (!!.) calls are allowed on a nullable receiver of type 'Collator?'.
+w: file:///home/runner/work/Spotilol/Spotilol/base/app/src/main/java/com/music/spotui/ui/screens/HomeScreen.kt:444:49 'fun rememberModalBottomSheetState(skipPartiallyExpanded: Boolean = ..., confirmValueChange: (SheetValue) -> Boolean = ...): SheetState' is deprecated. Use rememberBottomSheetState with Hidden initial value.
+w: file:///home/runner/work/Spotilol/Spotilol/base/app/src/main/java/com/music/spotui/ui/screens/LibraryExtras.kt:608:81 'val Icons.Outlined.DriveFileMove: ImageVector' is deprecated. Use the AutoMirrored version at Icons.AutoMirrored.Outlined.DriveFileMove.
+w: file:///home/runner/work/Spotilol/Spotilol/base/app/src/main/java/com/music/spotui/ui/screens/LibraryScreeen.kt:798:22 'fun rememberModalBottomSheetState(skipPartiallyExpanded: Boolean = ..., confirmValueChange: (SheetValue) -> Boolean = ...): SheetState' is deprecated. Use rememberBottomSheetState with Hidden initial value.
+w: file:///home/runner/work/Spotilol/Spotilol/base/app/src/main/java/com/music/spotui/ui/screens/PlayerScreen.kt:1071:9 'fun Slider(value: Float, onValueChange: (Float) -> Unit, modifier: Modifier = ..., enabled: Boolean = ..., valueRange: ClosedFloatingPointRange<Float> = ..., steps: Int = ..., onValueChangeFinished: (() -> Unit)? = ..., colors: SliderColors = ..., interactionSource: MutableInteractionSource = ...): Unit' is deprecated. Use the Slider overload that accepts SliderState, onValueChange, and onValueChangeFinished instead.
+w: file:///home/runner/work/Spotilol/Spotilol/base/app/src/main/java/com/music/spotui/ui/screens/PlayerScreen.kt:1441:45 'val Icons.Filled.KeyboardArrowRight: ImageVector' is deprecated. Use the AutoMirrored version at Icons.AutoMirrored.Filled.KeyboardArrowRight.
+w: file:///home/runner/work/Spotilol/Spotilol/base/app/src/main/java/com/music/spotui/ui/screens/PlayerScreen.kt:1463:50 'val LocalLifecycleOwner: ProvidableCompositionLocal<LifecycleOwner>' is deprecated. Moved to lifecycle-runtime-compose library in androidx.lifecycle.compose package.
+w: file:///home/runner/work/Spotilol/Spotilol/base/app/src/main/java/com/music/spotui/ui/screens/PodcastPlayerScreen.kt:356:51 'val Icons.Filled.RotateLeft: ImageVector' is deprecated. Use the AutoMirrored version at Icons.AutoMirrored.Filled.RotateLeft.
+w: file:///home/runner/work/Spotilol/Spotilol/base/app/src/main/java/com/music/spotui/ui/screens/PodcastPlayerScreen.kt:356:81 'val Icons.Filled.RotateRight: ImageVector' is deprecated. Use the AutoMirrored version at Icons.AutoMirrored.Filled.RotateRight.
+w: file:///home/runner/work/Spotilol/Spotilol/base/app/src/main/java/com/music/spotui/ui/screens/QueueScreen.kt:149:24 'fun rememberSwipeToDismissBoxState(initialValue: SwipeToDismissBoxValue = ..., confirmValueChange: (SwipeToDismissBoxValue) -> Boolean = ..., positionalThreshold: (Float) -> Float = ...): SwipeToDismissBoxState' is deprecated. confirmValueChange is deprecated without replacement. Rather than relying on a callback to veto state changes, the anchor set should not include disallowed anchors. See androidx.compose.foundation.samples.AnchoredDraggableDynamicAnchorsSample for an example of using dynamic anchors over confirmValueChange.
+w: file:///home/runner/work/Spotilol/Spotilol/base/app/src/main/java/com/music/spotui/ui/theme/Theme.kt:74:20 'var statusBarColor: Int' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Spotilol/Spotilol/base/app/src/main/java/com/music/spotui/ui/theme/Theme.kt:78:20 'var navigationBarColor: Int' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Spotilol/Spotilol/base/app/src/main/java/com/music/spotui/ui/viewmodel/ArtistViewModel.kt:63:38 No cast needed.
+w: file:///home/runner/work/Spotilol/Spotilol/base/app/src/main/java/com/music/spotui/ui/viewmodel/ArtistViewModel.kt:93:38 No cast needed.
+w: file:///home/runner/work/Spotilol/Spotilol/base/app/src/main/java/com/music/spotui/ui/viewmodel/PlayerViewModel.kt:153:34 No cast needed.
+gradle/actions: Writing build results to /home/runner/work/_temp/.gradle-actions/build-results/__run_3-1792628174978.json
+
+[Incubating] Problems report is available at: file:///home/runner/work/Spotilol/Spotilol/base/build/reports/problems/problems-report.html
+
+FAILURE: Build failed with an exception.
+
+* What went wrong:
+Execution failed for task ':api-spotify:test'.
+> There were failing tests. See the report at: file:///home/runner/work/Spotilol/Spotilol/base/api-spotify/build/reports/tests/test/index.html
+
+* Try:
+> Run with --scan to get full insights from a Build Scan (powered by Develocity).
+
+BUILD FAILED in 3m 56s
+65 actionable tasks: 54 executed, 11 from cache
+Configuration cache entry stored.

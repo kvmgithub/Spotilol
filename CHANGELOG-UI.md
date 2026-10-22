@@ -6,6 +6,16 @@ Each version section is the text of the GitHub pre-release tagged `ui-v<version>
 
 ## [Unreleased]
 
+## [0.8.2] - 2026-10-22
+
+Myspoti 2.0.1 merged.
+
+### Fixed
+- Accounts on which Spotify refuses every play the app relays (402, free accounts on some phones and in some countries): a refused play or transfer is sent once more from the player page itself, and later commands keep going that way if music then plays within 10 seconds. Otherwise the app goes back to relaying them.
+
+### Diagnostics
+- `refused command sent again from the page -> <status>` and `commands from the page: kept…` / `dropped…`.
+
 ## [0.8.1] - 2026-10-22
 
 ### Changed

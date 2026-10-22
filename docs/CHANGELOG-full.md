@@ -2,6 +2,10 @@
 
 Every change, release by release. The short version is in [CHANGELOG.md](../CHANGELOG.md), which the app and the GitHub releases show.
 
+## 2.0.1
+
+- **402 `COMMAND_FAILED` on every play** (free accounts: Xiaomi Redmi 13 / Indonesia, Samsung A32 / Belarus, issue #55): the same accounts play in Spotui, which sends the Connect commands from the page itself, while Myspoti relays them through OkHttp. A relayed play or transfer answered 402 is now sent once more with the page's own `fetch`; if that one is accepted, the page's commands keep going that way, and only while something plays (checked 10 s later: a command sent from the page can be acknowledged and never delivered). Both refused: the refusal steps run as before. The diagnostic logs the retry's status and whether the page's way was kept.
+
 ## Unreleased
 
 - **Skip intent**: next / previous / "skip to" made while the page cannot take them (an ad is current: "The operation is not allowed"; a reload: "local player is disabled", "not ready") move an intent instead of reaching the page; the screen shows that song, waiting. Whatever recovers playback (the ad recovery, any reload, the end of the ad) plays the intent, not the song after the last state seen; skips made meanwhile move it and the newest wins. A plain next is remembered too: if the page goes into an ad break instead, that song is asked for again after it. "Previous" refused during an ad is held, never turned into a seek (which restarted the ad).

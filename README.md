@@ -2,7 +2,7 @@
 
 Myspoti's native Android interface with the feature and security scope of Spotilol and Spotilol Lite (formerly "Spotilol UI"). This branch (`myspoti-ui`) is separate from Spotilol Lite on `main`; both apps install side by side.
 
-Base: [kota-zo/myspoti](https://github.com/kota-zo/myspoti) 2.0.0 (`c1cbd74`, GPL-3.0), merged from the vendor branch `myspoti-upstream`. Playback still runs in Spotify's Web Player in a hidden WebView (Widevine); search, library, artist, album and playlist screens are native.
+Base: [kota-zo/myspoti](https://github.com/kota-zo/myspoti) 2.0.1 (`496dde4`, GPL-3.0), merged from the vendor branch `myspoti-upstream`. Playback still runs in Spotify's Web Player in a hidden WebView (Widevine); search, library, artist, album and playlist screens are native.
 
 ## Install
 

@@ -68,6 +68,17 @@ internal class ControlRelay(private val view: WebView, private val fingerprint: 
             Logbook.log("page identity: ${identity?.get("userAgent")?.take(160)}")
             return
         }
+        if (m.optString("type") == "direct") {
+            if (m.has("kept")) Logbook.log("commands from the page: ${if (m.optBoolean("kept")) "kept, the music plays" else "dropped, nothing played in 10 s"}")
+            else Logbook.log("refused command sent again from the page -> ${m.optInt("status")}")
+            return
+        }
+        // A refused command sent again from the page itself, and whether that way was kept (Myspoti 2.0.1).
+        if (m.optString("type") == "direct") {
+            if (m.has("kept")) Logbook.log("commands from the page: ${if (m.optBoolean("kept")) "kept, the music plays" else "dropped, nothing played in 10 s"}")
+            else Logbook.log("refused command sent again from the page -> ${m.optInt("status")}")
+            return
+        }
         val id = m.optInt("id", -1).takeIf { it >= 0 } ?: return
         val request = runCatching { build(m) }.getOrElse {
             Logbook.log("relay #$id rejected: ${it.message}")
@@ -271,8 +282,33 @@ internal class ControlRelay(private val view: WebView, private val fingerprint: 
                 return play.apply(this, arguments);
               };
               const relayed = /^https:\/\/(spclient\.wg|[a-z0-9]+-spclient)\.spotify\.com\/(connect-state|track-playback)\/v1\//;
+              const command = /player\/command|connect\/transfer/;
               const pending = new Map();
               let seq = 0;
+              const original = window.fetch;
+              // A refused play or transfer (free accounts in some countries): the app tries another way.
+              const tell = (status, url) => {
+                if ((status === 402 || status === 403) && command.test(url) && window.MyspotiHost) {
+                  try { window.MyspotiHost.postMessage(JSON.stringify({ type: 'refused', status, path: url.split('?')[0].replace(/^.*\/v1\//, '').replace(/\/from\/.*$/, '') })); } catch (e) { /* host gone */ }
+                }
+              };
+              const note = (value) => { try { net.postMessage(JSON.stringify(Object.assign({ type: 'direct' }, value))); } catch (e) { /* host gone */ } };
+              // From Myspoti 2.0.1: some free accounts get every relayed command refused (402
+              // COMMAND_FAILED) while the same account plays in apps that send them from the page
+              // itself. A refused command is sent once more from the page, and the page's commands
+              // keep going that way if it took. Kept only if something plays within 10 s: a command
+              // sent from the page can be acknowledged and never delivered (X-Requested-With).
+              const plays = () => [...media].some(m => !m.paused && !m.ended && m.readyState > 2);
+              const trust = () => {
+                if (window.__mspDirect) return;
+                window.__mspDirect = true;
+                setTimeout(() => {
+                  const kept = plays();
+                  if (!kept) window.__mspDirect = false;
+                  note({ kept });
+                }, 10000);
+              };
+              const direct = (url, init) => original.call(window, url, init).then(r => { tell(r.status, url); return r; });
               net.addEventListener('message', (event) => {
                 let m;
                 try { m = JSON.parse(event.data); } catch (e) { return; }
@@ -281,27 +317,35 @@ internal class ControlRelay(private val view: WebView, private val fingerprint: 
                 pending.delete(m.id);
                 const status = m.status;
                 if (!status) return p.reject(new TypeError('Failed to fetch'));
-                // A refused play or transfer (free accounts in some countries): the app tries another way.
-                if ((status === 402 || status === 403) && /player\/command|connect\/transfer/.test(p.url) && window.MyspotiHost) {
-                  try { window.MyspotiHost.postMessage(JSON.stringify({ type: 'refused', status, path: p.url.split('?')[0].replace(/^.*\/v1\//, '').replace(/\/from\/.*$/, '') })); } catch (e) { /* host gone */ }
+                const relayedAnswer = () => {
+                  const noBody = status === 204 || status === 205 || status === 304;
+                  let headers = {};
+                  try { headers = JSON.parse(m.headers); } catch (e) { /* none */ }
+                  return new Response(noBody ? null : m.body, { status, headers });
+                };
+                if (status === 402 && command.test(p.url) && !window.__mspDirect) {
+                  original.call(window, p.url, p.init).then(r => {
+                    note({ status: r.status });
+                    if (r.ok) trust(); else tell(r.status, p.url);
+                    p.resolve(r);
+                  }, () => { tell(status, p.url); p.resolve(relayedAnswer()); });
+                  return;
                 }
-                const noBody = status === 204 || status === 205 || status === 304;
-                let headers = {};
-                try { headers = JSON.parse(m.headers); } catch (e) { /* none */ }
-                p.resolve(new Response(noBody ? null : m.body, { status, headers }));
+                tell(status, p.url);
+                p.resolve(relayedAnswer());
               });
-              const original = window.fetch;
               window.fetch = function (input, init) {
                 const url = typeof input === 'string' ? input : (input instanceof URL ? input.href : null);
                 const body = init && init.body;
                 if (!url || !relayed.test(url) || (body != null && typeof body !== 'string')) return original.apply(this, arguments);
+                if (window.__mspDirect && command.test(url)) return direct(url, init);
                 const headers = {};
                 new Headers((init && init.headers) || {}).forEach((v, k) => { headers[k] = v; });
                 const method = ((init && init.method) || 'GET').toUpperCase();
                 const credentials = (init && init.credentials) || 'same-origin';
                 return new Promise((resolve, reject) => {
                   const id = ++seq;
-                  pending.set(id, { resolve, reject, url });
+                  pending.set(id, { resolve, reject, url, init });
                   net.postMessage(JSON.stringify({ id, url, method, headers, body: body == null ? null : body, credentials }));
                 });
               };

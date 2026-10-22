@@ -120,6 +120,11 @@ internal class ControlRelay(private val view: WebView, private val fingerprint: 
             Logbook.log("page identity: ${identity.toString().take(320)}")
             return
         }
+        if (m.optString("type") == "direct") {
+            if (m.has("kept")) Logbook.log("commands from the page: ${if (m.optBoolean("kept")) "kept, the music plays" else "dropped, nothing played in 10 s"}")
+            else Logbook.log("refused command sent again from the page -> ${m.optInt("status")}")
+            return
+        }
         val id = m.optInt("id", -1).takeIf { it >= 0 } ?: return
         val body = if (m.isNull("body")) null else m.optString("body")
         send(id, m.optString("url"), m.optString("method", "GET"), m.optJSONObject("headers") ?: JSONObject(), body)
@@ -322,29 +327,62 @@ internal class ControlRelay(private val view: WebView, private val fingerprint: 
               const notRelayed = /^https:\/\/(accounts|challenge|www)\.spotify\.com\//;
               const pending = new Map();
               let seq = 0;
+              const original = window.fetch;
+              const command = /player\/command|connect\/transfer/;
+              // A refused play or transfer (free accounts in some countries): the app tries another way.
+              const tell = (status, url) => {
+                if ((status === 402 || status === 403) && command.test(url) && window.MyspotiHost) {
+                  try { window.MyspotiHost.postMessage(JSON.stringify({ type: 'refused', status, path: url.split('?')[0].replace(/^.*\/v1\//, '').replace(/\/from\/.*$/, '') })); } catch (e) { /* host gone */ }
+                }
+              };
+              const note = (value) => { try { window.MyspotiNet.postMessage(JSON.stringify(Object.assign({ type: 'direct' }, value))); } catch (e) { /* host gone */ } };
+              // Some free accounts get every relayed command refused (402 COMMAND_FAILED) while the
+              // same account plays in apps that send them from the page itself (Spotui): a refused
+              // command is sent once more that way, and the page's commands keep going that way if
+              // it took. Kept only if something plays within 10 s: a command sent from the page can
+              // be acknowledged and never delivered (X-Requested-With, see above).
+              const plays = () => [...media].some(m => !m.paused && !m.ended && m.readyState > 2);
+              const trust = () => {
+                if (window.__mspDirect) return;
+                window.__mspDirect = true;
+                setTimeout(() => {
+                  const kept = plays();
+                  if (!kept) window.__mspDirect = false;
+                  note({ kept });
+                }, 10000);
+              };
+              const direct = (url, init) => original.call(window, url, init).then(r => { tell(r.status, url); return r; });
               window.__mspNetDone = (id, status, headers, body) => {
                 const p = pending.get(id);
                 if (!p) return;
                 pending.delete(id);
                 if (!status) return p.reject(new TypeError('Failed to fetch'));
-                // A refused play or transfer (free accounts in some countries): the app tries another way.
-                if ((status === 402 || status === 403) && /player\/command|connect\/transfer/.test(p.url) && window.MyspotiHost) {
-                  try { window.MyspotiHost.postMessage(JSON.stringify({ type: 'refused', status, path: p.url.split('?')[0].replace(/^.*\/v1\//, '').replace(/\/from\/.*$/, '') })); } catch (e) { /* host gone */ }
+                const relayedAnswer = () => {
+                  const noBody = status === 204 || status === 205 || status === 304;
+                  return new Response(noBody ? null : body, { status, headers: JSON.parse(headers) });
+                };
+                if (status === 402 && command.test(p.url) && !window.__mspDirect) {
+                  original.call(window, p.url, p.init).then(r => {
+                    note({ status: r.status });
+                    if (r.ok) trust(); else tell(r.status, p.url);
+                    p.resolve(r);
+                  }, () => { tell(status, p.url); p.resolve(relayedAnswer()); });
+                  return;
                 }
-                const noBody = status === 204 || status === 205 || status === 304;
-                p.resolve(new Response(noBody ? null : body, { status, headers: JSON.parse(headers) }));
+                tell(status, p.url);
+                p.resolve(relayedAnswer());
               };
-              const original = window.fetch;
               window.fetch = function (input, init) {
                 const url = typeof input === 'string' ? input : (input instanceof URL ? input.href : null);
                 const body = init && init.body;
                 if (!url || !relayed.test(url) || notRelayed.test(url) || (body != null && typeof body !== 'string')) return original.apply(this, arguments);
+                if (window.__mspDirect && command.test(url)) return direct(url, init);
                 const headers = {};
                 new Headers((init && init.headers) || {}).forEach((v, k) => { headers[k] = v; });
                 const method = ((init && init.method) || 'GET').toUpperCase();
                 return new Promise((resolve, reject) => {
                   const id = ++seq;
-                  pending.set(id, { resolve, reject, url });
+                  pending.set(id, { resolve, reject, url, init });
                   window.MyspotiNet.postMessage(JSON.stringify({ id, url, method, headers, body: body == null ? null : body }));
                 });
               };

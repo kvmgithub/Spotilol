@@ -2,6 +2,10 @@
 
 Each release on GitHub shows its section below. The app shows it too when it offers the update. Every detail: [docs/CHANGELOG-full.md](docs/CHANGELOG-full.md).
 
+## 2.0.1
+
+- 🎵 **"Spotify refused to play this"**: on the accounts where Spotify refused every play (free accounts on some phones and in some countries), a refused command is now sent again the way other web-player apps send it, and playback keeps going that way when it works. If it still refuses, please send a new diagnostic report: it now says which way was tried.
+
 ## 2.0.0
 
 Myspoti 2.0 is a new app, rebuilt from the ground up: Spotify with no ads and with lossless downloads, on a free account.

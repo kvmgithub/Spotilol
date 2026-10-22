@@ -274,22 +274,29 @@
     if (boosted(el)) boost.out.gain.setTargetAtTime(1, boost.ctx.currentTime, 0.015);
   };
 
+  // One element into the graph, once; el.__mspId numbers them in the order they joined.
+  const routeEl = el => {
+    if (!(el instanceof HTMLMediaElement) || boost.routed.has(el)) return;
+    boost.routed.add(el);
+    try {
+      boost.ctx.createMediaElementSource(el).connect(boost.gain);
+      el.__mspId = ++boost.count;
+      xfWatch(el);
+      if (el.__mspId > 1) post({ type: 'boost', routed: el.__mspId });
+    } catch (e) {
+      post({ type: 'boost', error: String(e && e.message || e).slice(0, 200) });
+    }
+  };
+  // Called by the host's play() hook (document start) before an element's first sound: an
+  // element routed later, on the next state push, played its first moments past the graph.
+  window.__mspRoute = el => { if (boost) routeEl(el); };
+
   const boostRoute = async () => {
     if (!boost) return;
     const player = await localPlayer().catch(() => null);
     const els = new Set(window.__mspMedia || []);
     if (player && player._player instanceof HTMLMediaElement) els.add(player._player);
-    for (const el of els) {
-      if (!(el instanceof HTMLMediaElement) || boost.routed.has(el)) continue;
-      boost.routed.add(el);
-      try {
-        boost.ctx.createMediaElementSource(el).connect(boost.gain);
-        boost.count++;
-        xfWatch(el);
-      } catch (e) {
-        post({ type: 'boost', error: String(e && e.message || e).slice(0, 200) });
-      }
-    }
+    for (const el of els) routeEl(el);
     if (player && player._player instanceof HTMLMediaElement) xf.el = player._player;
     // Suspended while the player is paused (see xfWatch): a crossfade reserve must not play on.
     if (boost.ctx.state === 'suspended' && (!xf.el || !xf.el.paused)) boost.ctx.resume().catch(() => {});
@@ -329,8 +336,9 @@
     const ctx = new AudioContext({ latencyHint: 'playback' });
     const gain = ctx.createGain();
     const paths = [0, 1].map(i => {
-      const path = { delay: ctx.createDelay(XF_MAX_S + 4), g: ctx.createGain(), dm: [{ t: 0, v: 0 }] };
+      const path = { delay: ctx.createDelay(XF_MAX_S + 4), g: ctx.createGain(), dm: [{ t: 0, v: 0 }], an: ctx.createAnalyser() };
       path.g.gain.value = i === 0 ? 1 : 0;
+      path.an.fftSize = 2048;
       return path;
     });
     const mix = ctx.createGain();
@@ -343,10 +351,14 @@
     // out: local fades and volume sets (see setLevel), after the limiter.
     const out = ctx.createGain();
     const analyser = ctx.createAnalyser();
-    for (const path of paths) gain.connect(path.delay).connect(path.g).connect(mix);
+    for (const path of paths) { gain.connect(path.delay).connect(path.g).connect(mix); path.delay.connect(path.an); }
     mix.connect(limiter).connect(out).connect(ctx.destination);
     gain.connect(analyser);
-    boost = { ctx, gain, paths, mix, limiter, out, analyser, level: 1, routed: new WeakSet(), count: 0 };
+    // What is heard, for the overlap's level probe (see xfProbe).
+    const heard = ctx.createAnalyser();
+    heard.fftSize = 2048;
+    out.connect(heard);
+    boost = { ctx, gain, paths, mix, limiter, out, analyser, heard, level: 1, routed: new WeakSet(), count: 0 };
     boostProbe();
     return boost;
   };
@@ -380,7 +392,7 @@
   const XF_ENDING_MS = 4000;
   const xf = { seconds: 0, el: null, k: 1, ours: false, pageRate: 1, pitch: null, segs: [{ at: 0, k: 1 }], cur: 0,
     switchAt: -1e9, lastRem: Infinity, kind: null, durationMs: 0, speed: 1, planned: null, noted: '',
-    resets: 0, sets: 0, endingUntil: 0, masked: new WeakSet() };
+    resets: 0, sets: 0, endingUntil: 0, overlapUntil: 0, probes: [], masked: new WeakSet() };
 
   // The element's own speed and time, past the masks below.
   const RATE = Object.getOwnPropertyDescriptor(HTMLMediaElement.prototype, 'playbackRate');
@@ -537,6 +549,9 @@
   const xfFlush = why => {
     if (!boost) return;
     const had = xfReserve(), t = boost.ctx.currentTime;
+    // Noted even with no reserve of its own: it also ends the old song's tail under the new one.
+    const during = performance.now() < xf.overlapUntil;
+    xf.overlapUntil = 0;
     boost.paths.forEach((path, i) => {
       dCut(path, 0, t);
       path.g.gain.cancelScheduledValues(t);
@@ -545,7 +560,8 @@
     xf.segs = [{ at: t, k: 1 }];
     xf.planned = null;
     xfRate(1);
-    if (had > 0.05) xfNote('flush', { why, reserve: r1(had) });
+    if (had > 0.05 || during) xfNote('flush', Object.assign({ why, reserve: r1(had), el: xf.el && xf.el.__mspId },
+      during ? { during: 'overlap', after: r1((performance.now() - xf.switchAt) / 1000) } : {}));
   };
 
   // The song ended by itself: its path plays its last seconds and fades out while the other
@@ -573,7 +589,32 @@
     xf.cur = 1 - old;
     xf.segs = [{ at: t, k: 1 }];
     xf.planned = null;
-    xfNote('overlap', Object.assign({ seconds: r1(L) }, facts));
+    xf.overlapUntil = performance.now() + L * 1000;
+    xfNote('overlap', Object.assign({ seconds: r1(L), delayOld: r1(dAt(po, t)), el: xf.el && xf.el.__mspId }, facts));
+    xfProbe(po, pn, L);
+  };
+
+  // RMS level in dBFS of what an analyser sees now (-99: silence).
+  const dbOf = an => {
+    const buf = new Float32Array(an.fftSize);
+    an.getFloatTimeDomainData(buf);
+    let sum = 0;
+    for (const v of buf) sum += v * v;
+    const rms = Math.sqrt(sum / buf.length);
+    return rms > 1e-5 ? Math.round(20 * Math.log10(rms)) : -99;
+  };
+
+  // Diagnosis: what the overlap sounds like, a few times while it runs. old/new: each path
+  // before its fade (the song it carries), gOld/gNew: the fade there, heard: after the limiter.
+  const xfProbe = (po, pn, L) => {
+    xf.probes.forEach(clearTimeout);
+    xf.probes = [0.5, L / 2, L - 1.5].filter(x => x > 0 && x < L).map(x => setTimeout(() => {
+      try {
+        const k = x / L;
+        xfNote('level', { at: r1(x), old: dbOf(po.an), new: dbOf(pn.an), gOld: r1(Math.cos(k * Math.PI / 2)),
+          gNew: r1(Math.sin(k * Math.PI / 2)), heard: dbOf(boost.heard), el: xf.el && xf.el.__mspId, ctx: boost.ctx.state });
+      } catch (e) { /* no analyser */ }
+    }, x * 1000));
   };
 
   // Every timeupdate of the player's element: builds the reserve towards xf.seconds by the
@@ -600,7 +641,7 @@
     const key = xf.durationMs + ':' + Math.round(el.duration);
     if (k > 1 && xf.planned !== key) {
       xf.planned = key;
-      xfNote('build', { speed: Math.round(k * 1000) / 1000, target, reserve: r1(C), left: Math.round(rem) });
+      xfNote('build', { speed: Math.round(k * 1000) / 1000, target, reserve: r1(C), left: Math.round(rem), el: el.__mspId });
     }
   };
 

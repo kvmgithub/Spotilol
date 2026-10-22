@@ -265,6 +265,9 @@ internal class ControlRelay(private val view: WebView, private val fingerprint: 
               HTMLMediaElement.prototype.play = function () {
                 media.add(this);
                 if (window.__mspMuted) { this.muted = false; this.volume = 0.001; }
+                // The bridge's audio graph (boost, crossfade), when there is one: the element joins
+                // it before its first sound.
+                if (window.__mspRoute) { try { window.__mspRoute(this); } catch (e) { /* plays directly */ } }
                 return play.apply(this, arguments);
               };
               const relayed = /^https:\/\/(spclient\.wg|[a-z0-9]+-spclient)\.spotify\.com\/(connect-state|track-playback)\/v1\//;

@@ -6,6 +6,16 @@ Each version section is the text of the GitHub pre-release tagged `ui-v<version>
 
 ## [Unreleased]
 
+## [0.8.1] - 2026-10-22
+
+### Changed
+- A media element of the player joins the audio graph (boost, crossfade) when it starts playing, before its first sound. Until now it joined on the next state report: an element the page created for a new song played its first moments past the graph, at full level and outside the crossfade.
+
+### Diagnostics
+- `page xfade` `level` lines, three per crossfade (after 0.5 s, halfway, 1.5 s before its end): the level of the old and the new song on their paths (dBFS, before their fades), the fades at that moment and the level that is heard. They show whether the old song's end is really heard under the new one.
+- `overlap` lines carry the old path's delay, `overlap` and `build` lines the media element (`el`); a new element joining the graph is noted (`page boost: {"routed": n}`).
+- A flush during a crossfade is always noted (`during: overlap`, seconds after the switch): it ends the old song's tail at once, and was silent before when the new song had no reserve yet.
+
 ## [0.8.0] - 2026-10-22
 
 Myspoti 2.0.0 merged, as far as it fits Spotilol's scope.

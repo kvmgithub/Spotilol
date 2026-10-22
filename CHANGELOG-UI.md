@@ -6,6 +6,43 @@ Each version section is the text of the GitHub pre-release tagged `ui-v<version>
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-10-22
+
+Myspoti 2.0.0 merged, as far as it fits Spotilol's scope.
+
+### Ads
+- Ads are left out of the queue Spotify sends to the player, before the page sees it: the song before an ad goes on to the song after it. When Spotify points both the end and the skip of a song at an ad, the next song is played just before the end, so the ad never becomes current. Until now an ad that could not be skipped reloaded the player, and the crossfade reserve was lost with it.
+- With crossfade on, that early switch counts as the song's end: the two songs still overlap.
+
+### Playback and stability
+- The hidden player page is no longer slowed down by Chromium and no longer redrawn with every frame of the app: fades, resumes and song ends keep their timing with the screen off, and the player screen is smoother and lighter on the battery.
+- A player page that fails to load (server error, rate limit, network error) or never finishes loading is loaded again with growing pauses; a page whose player never asks for DRM is moved to a new WebView.
+- While Spotify rate-limits audio licences, playback and repairs pause for a while instead of feeding the limit.
+- Repairs wait while a sign-in page is open, Google, Facebook and Apple sign-in included; whether you are signed in is asked of the page, never read from a cached token.
+- Fast skips land on the song the taps add up to; a song picked just before an ad plays after it; a refused play (402) tries playback on this phone and the list on shuffle before giving up.
+- Pause fades out and resume fades in along the ear's curve, the resume starting with the sound. With the volume boost on, these fades also act after the limiter.
+
+### Added
+- Collaborative playlists: invite links, members and who added each song; a shared invitation opens the playlist with "Join".
+- Blend invitations open in the app and can be joined.
+- Add songs to a playlist from a search under its cover.
+- Share as a Spotify Code.
+- Shared playlist, album, artist and podcast links open their page instead of playing.
+- Streaming quality per network (Wi-Fi and mobile data), Canvas on Wi-Fi only, and "Keep playing after closing the app" (off by default: closing the app from the recent apps stops the music).
+- A song by several artists opens a picker of its artists.
+- A new welcome screen and setup, a player that grows out of the mini player, page transitions.
+
+### Changed
+- Notification artwork is cached and retried; covers come only from Spotify's image servers or the phone's media store.
+- German texts for Recents, podcasts and playlist editing now come from Myspoti itself.
+
+### Not taken over
+- Word-by-word lyrics from LyricsPlus, lrc.red and Kugou, and Genius song meanings: they are third-party lookups. Spotify's own lyrics stay.
+- Music videos and their sound, downloads, the update and donation prompts, the diagnostic report export.
+
+### Diagnostics
+- `ad left out: …`, `ad ahead: …`, `refusal headers: …`, licence-limit and page-retry lines; crashes and freezes of the last run and main-thread stalls appear in the log.
+
 ## [0.7.4] - 2026-10-21
 
 ### Fixed

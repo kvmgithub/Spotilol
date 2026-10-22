@@ -7,7 +7,7 @@ compatible with the GPL-3.0.
 ## Myspoti — GPL-3.0
 https://github.com/kota-zo/myspoti
 
-The whole Android project (2.0.0-beta.8 `5b247b3`, updated to 2.0.0-beta.9 `f25ddfe`) is the base of this variant.
+The whole Android project (2.0.0-beta.8 `5b247b3`, updated to 2.0.0-beta.9 `f25ddfe` and 2.0.0 `c1cbd74`) is the base of this variant.
 Modified in this branch: security rules, removed download/video/Android Auto/updater
 components, account profiles. The commit history of `myspoti-ui` records every change.
 

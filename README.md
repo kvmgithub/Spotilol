@@ -2,7 +2,7 @@
 
 Myspoti's native Android interface with the feature and security scope of Spotilol and Spotilol Lite (formerly "Spotilol UI"). This branch (`myspoti-ui`) is separate from Spotilol Lite on `main`; both apps install side by side.
 
-Base: [kota-zo/myspoti](https://github.com/kota-zo/myspoti) 2.0.0-beta.9 (`f25ddfe`, GPL-3.0), merged from the vendor branch `myspoti-upstream`. Playback still runs in Spotify's Web Player in a hidden WebView (Widevine); search, library, artist, album and playlist screens are native.
+Base: [kota-zo/myspoti](https://github.com/kota-zo/myspoti) 2.0.0 (`c1cbd74`, GPL-3.0), merged from the vendor branch `myspoti-upstream`. Playback still runs in Spotify's Web Player in a hidden WebView (Widevine); search, library, artist, album and playlist screens are native.
 
 ## Install
 
@@ -18,8 +18,8 @@ Removed:
 
 - SpotiFLAC/lossless downloads and every download path (Deezer, Tidal, Qobuz lookups, signed sessions, transcoding, download UI)
 - Android Auto, the exported artwork provider and external media browsing (the media service is not exported)
-- YouTube music videos (NewPipeExtractor)
-- Third-party lyrics (LRCLIB, NetEase, Genius) and Google lyric translation; Spotify's own lyrics stay
+- YouTube music videos (NewPipeExtractor), including 2.0.0's clip sound
+- Third-party lyrics (LRCLIB, NetEase, LyricsPlus, lrc.red, Kugou, Genius), Genius song meanings and Google lyric translation; Spotify's own lyrics stay, word by word where Spotify times them
 - In-app updater (`REQUEST_INSTALL_PACKAGES`), donation prompts, home screen widget
 - Google Play services code scanner for Jam QR codes (it brought ML Kit and Google's data transport logging); joining a Jam by invite link stays
 - Podcast episode downloads (beta.9), the in-app update settings and the diagnostic-report export row (the redacted log view covers it)
@@ -31,17 +31,19 @@ Added from Spotilol:
 - Switchable, redacted diagnostics (Settings → App)
 - Spotilol's ad and telemetry blocking, including Spotify's `gabo-receiver-service` events and ad hosts; telemetry gets an empty `200` so the page does not retry
 
-Added in MySpotilol: a volume boost up to 200 % through a gain and a limiter in the page (Settings → Playback); it turns itself off and reloads the player when no sound comes through Web Audio.
+Added in MySpotilol: a volume boost up to 200 % through a gain and a limiter in the page (Settings → Playback); it turns itself off and reloads the player when no sound comes through Web Audio. A real crossfade: the page plays a song slightly faster while the graph slows it back down (tempo and pitch unchanged), and the reserve that builds up lets the end of one song overlap the start of the next; a switch in the mini player turns it on and off.
 
 Kept from Myspoti: native screens, library tools, Spotify Connect and Jam, local Recap, sleep timer, Canvas, local files, streaming quality, data and energy saver.
 
 From beta.9: the page's ad managers switched off at runtime (the device registration is no longer altered), X-Requested-With suppressed, renderer-crash recovery, per-install browser identity that follows the WebView version, a kept client device id, relayed requests with the page's own browser headers, login that waits for a real token, crossfade, Recents, show/episode pages and the podcast player, playlist add/remove, and the UI fixes.
 
+From 2.0.0: ads left out of Spotify's track-playback queue in the relay before the page sees them, and the next song played just before an ad that cannot be left out; a player page Chromium never throttles; failed page loads retried; licence rate limits held; collaborative playlists, Blends, add songs, Spotify Codes; per-network streaming quality; the new welcome screen, player and page animations.
+
 ## Security rules
 
 - The page reaches the app only through web message listeners for exactly `https://open.spotify.com`, main frame only. There is no `addJavascriptInterface` fallback; WebViews without listener and document-start support fail closed.
 - The control relay repeats only `connect-state`/`track-playback` requests to exact `*-spclient.spotify.com`/`spclient.wg.spotify.com` hosts, with bounded requests and responses, a total deadline and no redirects. Cookies go out only when the page's own fetch asks for them (`credentials: 'include'`), Set-Cookie is never stored or returned; answers go to the sending document's reply proxy.
-- Direct API, client-token, GraphQL-operation and cover requests use strict HTTPS hosts, no redirects and bounded bodies.
+- Direct API, client-token, GraphQL-operation and cover requests use strict HTTPS hosts, no redirects and bounded bodies. Shared short links (spotify.link, spoti.fi) are followed by hand over HTTPS on those hosts only, for at most four hops.
 - Main-frame navigation is limited to exact HTTPS Spotify and sign-in hosts; Widevine is granted to the player origin only.
 - Restored profile cookies are limited to Spotify origins, carry `Secure`, and the auth cookie keeps `HttpOnly`.
 - Logs and exported diagnostics go through the shared `LogRedactor`.

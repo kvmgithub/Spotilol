@@ -14,6 +14,8 @@ private const val KEY_LYRIC_TRANSLATE_LANG = "lyric_translate_lang"
 private const val KEY_CROSSFADE = "crossfade_seconds"
 
 
+/** Lyrics timed word by word first (karaoke); off: line by line, Spotify's first. */
+
 private fun prefs(c: Context) = c.getSharedPreferences(PREF, Context.MODE_PRIVATE)
 
 /** The bottom bar: fading into the list (the default), or solid black. Read by the bar as state. */

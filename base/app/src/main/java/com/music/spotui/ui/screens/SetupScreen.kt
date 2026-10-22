@@ -6,6 +6,25 @@ import android.content.pm.PackageManager
 import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.width
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.graphicsLayer
+import kotlinx.coroutines.delay
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -49,7 +68,7 @@ import com.music.spotui.data.local.LocalMusic
 import com.music.spotui.ui.theme.AppBackground
 
 /**
- * Shown once after signing in: what Myspoti needs from the phone, each with its own button.
+ * Shown once after signing in: what the app needs from the phone, each with its own button.
  * Nothing is required; "Continue" goes on with whatever was allowed.
  */
 object Setup {
@@ -66,86 +85,134 @@ private fun granted(context: Context, permission: String) =
 @Composable
 fun SetupScreen(onDone: () -> Unit) {
     val context = LocalContext.current
+    // First the sound quality, then the permissions (skipped when done before an update).
+    var qualityStep by remember { mutableStateOf(!com.music.spotui.data.preferences.isQualityChosen(context)) }
+    // Two steps to go through: dots say where the user is.
+    val steps = remember { if (qualityStep && !Setup.permissionsDone(context)) 2 else 1 }
+    Box(Modifier.fillMaxSize().background(AppBackground)) {
+        Glow(Modifier.fillMaxSize(), alpha = 0.16f)
+        Column(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding()) {
+            if (steps == 2) StepDots(current = if (qualityStep) 0 else 1, Modifier.padding(start = 20.dp, top = 16.dp))
+            // One step slides away to the left as the next comes in from the right.
+            AnimatedContent(
+                targetState = qualityStep,
+                transitionSpec = {
+                    (slideInHorizontally(tween(420, easing = FastOutSlowInEasing)) { it / 2 } + fadeIn(tween(420))) togetherWith
+                        (slideOutHorizontally(tween(420, easing = FastOutSlowInEasing)) { -it / 3 } + fadeOut(tween(250)))
+                },
+                label = "setupStep",
+                modifier = Modifier.weight(1f),
+            ) { quality ->
+                if (quality) QualityStep(onNext = {
+                    com.music.spotui.data.preferences.setQualityChosen(context)
+                    if (Setup.permissionsDone(context)) onDone() else qualityStep = false
+                }) else PermissionsStep(onDone)
+            }
+        }
+    }
+}
+
+/** Where the user is in the steps: the current one a longer green dash. */
+@Composable
+private fun StepDots(current: Int, modifier: Modifier = Modifier) {
+    Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = modifier) {
+        for (i in 0..1) {
+            val w by animateDpAsState(if (i == current) 22.dp else 8.dp, tween(350), label = "dot")
+            val c by animateColorAsState(if (i == current) Color(0xFF1DB954) else Color.White.copy(alpha = 0.25f), tween(350), label = "dotColor")
+            Box(Modifier.height(6.dp).width(w).clip(RoundedCornerShape(50)).background(c))
+        }
+    }
+}
+
+/** Each part rising into place a beat after the one above it. */
+@Composable
+private fun Modifier.riseIn(index: Int): Modifier {
+    val a = remember { Animatable(0f) }
+    LaunchedEffect(Unit) { delay(80L + index * 70L); a.animateTo(1f, tween(450, easing = FastOutSlowInEasing)) }
+    return graphicsLayer { alpha = a.value; translationY = (1f - a.value) * 18.dp.toPx() }
+}
+
+@Composable
+private fun PermissionsStep(onDone: () -> Unit) {
+    val context = LocalContext.current
     // Re-read when coming back from a system dialog or the settings.
     var tick by remember { mutableIntStateOf(0) }
     LaunchedEffect(Unit) { while (true) { kotlinx.coroutines.delay(800); tick++ } }
     val launcher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { tick++ }
-    // First the sound quality, then the permissions (skipped when done before an update).
-    var qualityStep by remember { mutableStateOf(!com.music.spotui.data.preferences.isQualityChosen(context)) }
-    if (qualityStep) {
-        QualityStep(onNext = {
-            com.music.spotui.data.preferences.setQualityChosen(context)
-            if (Setup.permissionsDone(context)) onDone() else qualityStep = false
-        })
-        return
-    }
-
     Column(
-        Modifier.fillMaxSize().background(AppBackground).statusBarsPadding().navigationBarsPadding()
-            .verticalScroll(rememberScrollState()).padding(horizontal = 20.dp, vertical = 24.dp),
+        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp, vertical = 24.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Text(stringResource(R.string.setup_title), color = Color.White, fontSize = 26.sp, fontWeight = FontWeight.Bold)
-        Text(stringResource(R.string.setup_subtitle), color = Color(0xFFB3B3B3), fontSize = 14.sp)
+        var row = 0
+        Text(stringResource(R.string.setup_title), color = Color.White, fontSize = 26.sp, fontWeight = FontWeight.Bold, modifier = Modifier.riseIn(row++))
+        Text(stringResource(R.string.setup_subtitle), color = Color(0xFFB3B3B3), fontSize = 14.sp, modifier = Modifier.riseIn(row++))
         Spacer(Modifier.height(8.dp))
         @Suppress("UNUSED_EXPRESSION") tick
         if (Build.VERSION.SDK_INT >= 33) SetupRow(
             stringResource(R.string.setup_notifications_title), stringResource(R.string.setup_notifications_detail),
-            granted(context, Manifest.permission.POST_NOTIFICATIONS),
+            granted(context, Manifest.permission.POST_NOTIFICATIONS), Modifier.riseIn(row++),
         ) { launcher.launch(Manifest.permission.POST_NOTIFICATIONS) }
         SetupRow(
             stringResource(R.string.setup_local_title), stringResource(R.string.setup_local_detail),
-            LocalMusic.hasPermission(context),
+            LocalMusic.hasPermission(context), Modifier.riseIn(row++),
         ) { launcher.launch(LocalMusic.permission) }
         if (Build.VERSION.SDK_INT >= 31) SetupRow(
             stringResource(R.string.setup_bluetooth_title), stringResource(R.string.setup_bluetooth_detail),
-            granted(context, Manifest.permission.BLUETOOTH_CONNECT),
+            granted(context, Manifest.permission.BLUETOOTH_CONNECT), Modifier.riseIn(row++),
         ) { launcher.launch(Manifest.permission.BLUETOOTH_CONNECT) }
         SetupRow(
             stringResource(R.string.setup_battery_title), stringResource(R.string.setup_battery_detail),
-            BatteryExemption.isExempt(context),
+            BatteryExemption.isExempt(context), Modifier.riseIn(row++),
         ) { BatteryExemption.request(context) }
         Spacer(Modifier.height(12.dp))
-        Button(
-            onClick = { Setup.done(context); onDone() },
-            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1DB954), contentColor = Color.Black),
-            modifier = Modifier.fillMaxWidth().height(50.dp),
-        ) { Text(stringResource(R.string.setup_continue), fontWeight = FontWeight.Bold, fontSize = 16.sp) }
+        Box(Modifier.riseIn(row)) {
+            Button(
+                onClick = { Setup.done(context); onDone() },
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1DB954), contentColor = Color.Black),
+                modifier = Modifier.fillMaxWidth().height(50.dp),
+            ) { Text(stringResource(R.string.setup_continue), fontWeight = FontWeight.Bold, fontSize = 16.sp) }
+        }
     }
 }
 
-/** Onboarding, step one: how Myspoti streams and saves music (changed later in Settings). */
+/** Onboarding, step one: how the app streams music (changed later in Settings). */
 @Composable
 private fun QualityStep(onNext: () -> Unit) {
     Column(
-        Modifier.fillMaxSize().background(AppBackground).statusBarsPadding().navigationBarsPadding()
-            .verticalScroll(rememberScrollState()).padding(vertical = 24.dp),
+        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(vertical = 24.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Text(stringResource(R.string.setup_quality_title), color = Color.White, fontSize = 26.sp, fontWeight = FontWeight.Bold,
-            modifier = Modifier.padding(horizontal = 20.dp))
+            modifier = Modifier.padding(horizontal = 20.dp).riseIn(0))
         Text(stringResource(R.string.setup_quality_subtitle), color = Color(0xFFB3B3B3), fontSize = 14.sp,
-            modifier = Modifier.padding(horizontal = 20.dp))
-        com.music.spotui.ui.components.StreamingQualityPicker(Modifier.padding(top = 8.dp))
+            modifier = Modifier.padding(horizontal = 20.dp).riseIn(1))
+        Box(Modifier.riseIn(2)) { com.music.spotui.ui.components.StreamingQualityPicker(Modifier.padding(top = 8.dp)) }
         Button(
             onClick = onNext,
             colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1DB954), contentColor = Color.Black),
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp).height(50.dp),
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp).height(50.dp).riseIn(3),
         ) { Text(stringResource(R.string.setup_continue), fontWeight = FontWeight.Bold, fontSize = 16.sp) }
     }
 }
 
 @Composable
-private fun SetupRow(title: String, detail: String, on: Boolean, onEnable: () -> Unit) {
+private fun SetupRow(title: String, detail: String, on: Boolean, modifier: Modifier = Modifier, onEnable: () -> Unit) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier.fillMaxWidth().background(Color(0xFF1E1E1E), RoundedCornerShape(12.dp)).padding(16.dp),
+        modifier = modifier.fillMaxWidth().background(Color(0xFF1E1E1E), RoundedCornerShape(12.dp)).padding(16.dp),
     ) {
         Column(Modifier.weight(1f)) {
             Text(title, color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
             Text(detail, color = Color(0xFFB3B3B3), fontSize = 13.sp)
         }
-        if (on) Icon(Icons.Default.CheckCircle, contentDescription = null, tint = Color(0xFF1DB954), modifier = Modifier.padding(start = 12.dp).size(28.dp))
-        else TextButton(onClick = onEnable) { Text(stringResource(R.string.setup_enable), color = Color(0xFF1DB954), fontWeight = FontWeight.Bold) }
+        // Allowed: the button gives way to a green check that pops in.
+        AnimatedContent(
+            targetState = on,
+            transitionSpec = { (scaleIn(spring(dampingRatio = 0.5f)) + fadeIn()) togetherWith (scaleOut() + fadeOut()) },
+            label = "allowed",
+        ) { allowed ->
+            if (allowed) Icon(Icons.Default.CheckCircle, contentDescription = null, tint = Color(0xFF1DB954), modifier = Modifier.padding(start = 12.dp).size(28.dp))
+            else TextButton(onClick = onEnable) { Text(stringResource(R.string.setup_enable), color = Color(0xFF1DB954), fontWeight = FontWeight.Bold) }
+        }
     }
 }

@@ -14,7 +14,7 @@
     <string name="settings_lyrics_style_bold">Grande e in grassetto</string>
     <string name="main_update_available">È disponibile un nuovo aggiornamento</string>
     <string name="notif_channel_media_name">Riproduzione multimediale</string>
-    <string name="notif_channel_media_description">Controlli di riproduzione multimediale di Myspoti</string>
+    <string name="notif_channel_media_description">Controlli di riproduzione multimediale di MySpotilol</string>
     <string name="notif_action_previous">Precedente</string>
     <string name="notif_action_next">Successivo</string>
     <string name="notif_action_play">Riproduci</string>
@@ -32,4 +32,11 @@
     <string name="bridge_player_unlocked">Lettore sbloccato</string>
     <string name="bridge_reloading">Ricaricamento…</string>
     <string name="service_disabled_message">Il servizio non è attivo</string>
+    <string name="account_page_title">Account Spotify</string>
+    <string name="account_page_detail">Abbonamento, privacy e dispositivi, su spotify.com</string>
+    <string name="energy_saver_title">Risparmio energetico</string>
+    <string name="energy_saver_summary">Canvas disattivati, video e animazioni più leggeri</string>
+    <string name="playback_seek_description">Posizione di riproduzione</string>
+    <string name="video_fullscreen_enter">Schermo intero</string>
+    <string name="video_fullscreen_exit">Esci dallo schermo intero</string>
 </resources>

@@ -401,7 +401,7 @@ sealed class SearchRow {
 private fun SearchStatus(query: String, loading: Boolean, failed: Boolean, onRetry: () -> Unit) {
     Column(Modifier.fillMaxWidth().padding(24.dp, 40.dp), horizontalAlignment = Alignment.CenterHorizontally) {
         when {
-            loading -> androidx.compose.material3.CircularProgressIndicator(color = com.music.spotui.ui.theme.AppAccent)
+            loading -> com.music.spotui.ui.components.SkeletonList(count = 7, modifier = Modifier.padding(top = 0.dp))
             failed -> com.music.spotui.ui.components.ErrorRetry(stringResource(R.string.search_failed), Modifier.padding(0.dp), onRetry)
             else -> Text(stringResource(R.string.assisted_curation_search_empty_view_no_result_title, query.trim()),
                 color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold,

@@ -51,6 +51,8 @@ import androidx.compose.material.icons.filled.Smartphone
 import androidx.compose.material.icons.filled.Speaker
 import androidx.compose.material.icons.filled.Tv
 import androidx.compose.material.icons.outlined.Timer
+import androidx.compose.material.icons.outlined.AddCircleOutline
+import androidx.compose.material.icons.outlined.AutoAwesome
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
@@ -73,6 +75,7 @@ import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
@@ -100,9 +103,22 @@ fun activeDeviceLabel(): String {
     SongPlayer.activeDevice.value?.let { return it.name }
     val route = rememberAudioRoute()
     return when (route.kind) {
+        // "This phone", in the player as in the official app. Spotify Connect still lists it under
+        // the device's own name (the engine registers that name); only this label says "this phone".
         AudioRoute.Kind.SPEAKER -> stringResource(R.string.connect_phone_is_self)
         AudioRoute.Kind.BLUETOOTH -> route.name.ifBlank { stringResource(R.string.label_bluetooth) }
         AudioRoute.Kind.WIRED -> stringResource(R.string.headphones)
+    }
+}
+
+/** The icon of the output playing now, matching [activeDeviceLabel]: a phone when this phone plays. */
+@Composable
+fun activeDeviceIcon(): ImageVector {
+    SongPlayer.activeDevice.value?.let { return deviceIcon(it.type) }
+    return when (rememberAudioRoute().kind) {
+        AudioRoute.Kind.SPEAKER -> Icons.Default.Smartphone
+        AudioRoute.Kind.BLUETOOTH -> Icons.Default.Bluetooth
+        AudioRoute.Kind.WIRED -> Icons.Default.Headphones
     }
 }
 
@@ -144,7 +160,7 @@ fun DevicesSheet(onDismiss: () -> Unit) {
                         Text(activeDeviceLabel(), color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold,
                             maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
                         if (remote == null) Text(
-                            stringResource(streamingLabel(com.music.spotui.data.preferences.getStreamingQuality(context))),
+                            stringResource(streamingLabel(com.music.spotui.data.preferences.getStreamingQuality(context, com.music.spotui.data.DataSaver.metered))),
                             color = Color(0xFFDDDDDD), fontSize = 12.sp, fontWeight = FontWeight.Medium,
                             modifier = Modifier.padding(start = 8.dp).clip(RoundedCornerShape(6.dp)).background(Color(0xFF4A4A4A))
                                 .clickable { quality = true }.padding(horizontal = 6.dp, vertical = 2.dp),
@@ -260,7 +276,9 @@ private fun QualitySheet(onDismiss: () -> Unit) {
                 },
                 color = Green, fontSize = 15.sp, modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp),
             )
-            if (!local) StreamingQualityPicker(Modifier.padding(top = 12.dp))
+            // The level of the network in use now (Wi-Fi and mobile data each keep their own).
+            if (!local) StreamingQualityPicker(Modifier.padding(top = 12.dp), cellular = com.music.spotui.data.DataSaver.metered,
+                title = if (com.music.spotui.data.DataSaver.metered) R.string.quality_streaming_cell_title else R.string.quality_streaming_wifi_title)
         }
     }
 }
@@ -428,7 +446,7 @@ fun QueueSheet(contextName: String, onDismiss: () -> Unit) {
                         Text(contextName, color = Color.White, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     }
                     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 4.dp, bottom = 8.dp)) {
-                        Icon(Icons.Default.Smartphone, contentDescription = null, tint = Green, modifier = Modifier.size(16.dp))
+                        Icon(activeDeviceIcon(), contentDescription = null, tint = Green, modifier = Modifier.size(16.dp))
                         Spacer(Modifier.width(6.dp))
                         Text(activeDeviceLabel(), color = Green, fontSize = 13.sp)
                     }
@@ -531,6 +549,23 @@ internal fun queueTopInViewport(
     if (totalItems == 0) return 0f
     val firstItemTop = if (firstVisibleIndex > 0 && totalItems > 1) queueContentTop else 0f
     return queueContentTop - (firstItemTop + firstVisibleScrollOffset)
+}
+
+/** The y (in the queue block) of the gap [item] would drop into from [centerY]; mirrors the drop's own placement. */
+private fun dropLineY(
+    entries: List<QEntry>, item: SongPlayer.QueueItem, fromQueued: Boolean, centerY: Float,
+    headerPx: Float, rowPx: Float, topOf: (Int) -> Float,
+): Float? {
+    val rowsOf = { queuedSection: Boolean -> entries.filterIsInstance<QEntry.Row>().filter { it.queued == queuedSection }.map { it.item } }
+    fun rowTop(target: SongPlayer.QueueItem) = topOf(entries.indexOfFirst { it is QEntry.Row && it.item == target })
+    val nextHeaderIndex = entries.indexOfFirst { it is QEntry.Header && !it.queuedSection }
+    val nextHeaderMid = if (nextHeaderIndex >= 0) topOf(nextHeaderIndex) + headerPx / 2 else Float.MAX_VALUE
+    val toQueue = centerY < nextHeaderMid
+    val others = rowsOf(toQueue) - item
+    if (others.isEmpty()) return if (toQueue && !fromQueued) 0f else null
+    val slot = if (toQueue) ((centerY - headerPx) / rowPx).toInt().coerceIn(0, others.size)
+        else ((centerY - (topOf(nextHeaderIndex) + headerPx)) / rowPx).toInt().coerceIn(0, others.size)
+    return if (slot < others.size) rowTop(others[slot]) else rowTop(others.last()) + rowPx
 }
 
 private sealed class QEntry {
@@ -648,7 +683,8 @@ private fun QueueList(
     fun drop(item: SongPlayer.QueueItem, fromQueued: Boolean, centerY: Float) {
         val nextHeaderIndex = entries.indexOfFirst { it is QEntry.Header && !it.queuedSection }
         val nextHeaderMid = if (nextHeaderIndex >= 0) topOf(nextHeaderIndex) + headerPx / 2 else Float.MAX_VALUE
-        val toQueue = fromQueued || centerY < nextHeaderMid
+        // Either way across the line: a song moved up into the queue can be taken back down.
+        val toQueue = centerY < nextHeaderMid
         if (toQueue) {
             val others = queued - item
             if (others.isEmpty()) {
@@ -674,13 +710,29 @@ private fun QueueList(
             val slot = ((centerY - startY) / rowPx).toInt().coerceIn(0, others.size)
             val newNext = others.toMutableList().apply { add(slot, item) }
             if (newNext == nextUp) return
+            if (fromQueued) queued = queued - item
             nextUp = newNext
             if (slot < others.size) SongPlayer.reorder(item, others[slot], after = false)
             else SongPlayer.reorder(item, others[slot - 1], after = true)
         }
     }
 
-    Column {
+    // Where the dragged song would land if let go: a thin accent bar between two rows, worked
+    // out exactly as [drop] places it.
+    val accent = com.music.spotui.ui.theme.AppAccent
+    val dropBar = Modifier.drawWithContent {
+        drawContent()
+        val item = dragging ?: return@drawWithContent
+        val from = entries.indexOfFirst { it is QEntry.Row && it.item == item }
+        if (from < 0) return@drawWithContent
+        val y = dropLineY(entries, item, (entries[from] as QEntry.Row).queued, topOf(from) + dragOffset + rowPx / 2, headerPx, rowPx, ::topOf)
+            ?: return@drawWithContent
+        val inset = 20.dp.toPx()
+        val h = 1.5.dp.toPx()
+        drawRoundRect(androidx.compose.ui.graphics.lerp(accent, Color.Black, 0.35f).copy(alpha = 0.8f), topLeft = androidx.compose.ui.geometry.Offset(inset, y - h / 2),
+            size = androidx.compose.ui.geometry.Size(size.width - inset * 2, h), cornerRadius = androidx.compose.ui.geometry.CornerRadius(h / 2))
+    }
+    Column(dropBar) {
         entries.forEachIndexed { index, e ->
             when (e) {
                 is QEntry.Header -> Row(
@@ -846,6 +898,8 @@ private fun QueueSheetRow(
     trailing: @Composable () -> Unit,
     onClick: () -> Unit,
 ) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val rec = com.music.spotui.ui.screens.SmartShuffle.isRecommendation(song.spotifyTrackId)
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier
@@ -873,10 +927,18 @@ private fun QueueSheetRow(
                 )
             }
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 2.dp)) {
+                // Mixed in by smart shuffle: marked, as in the official app, not taken for one of the playlist's songs.
+                if (rec) { Icon(Icons.Outlined.AutoAwesome, contentDescription = stringResource(R.string.smart_shuffle_recommended), tint = Green, modifier = Modifier.size(14.dp)); Spacer(Modifier.width(4.dp)) }
                 if (song.explicit) { ExplicitBadge(); Spacer(Modifier.width(6.dp)) }
                 Text(song.singer, color = Color.White.copy(alpha = 0.7f), fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
         }
+        if (rec) Icon(
+            Icons.Outlined.AddCircleOutline,
+            contentDescription = stringResource(R.string.smart_shuffle_add),
+            tint = Color.White,
+            modifier = Modifier.padding(end = 12.dp).size(26.dp).clip(CircleShape).clickable { com.music.spotui.ui.screens.SmartShuffle.keep(context, song) },
+        )
         trailing()
     }
 }

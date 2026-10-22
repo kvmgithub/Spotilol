@@ -18,7 +18,7 @@ object Graph {
         // The Spotify session: hidden Web Player + API (operation hashes refresh themselves).
         MyspotiRuntime.start(application, loadPage = !com.music.spotui.data.DataSaver.active)
         // The streaming quality the user chose, set on the player at every page load.
-        com.music.spotui.data.preferences.applyStreamingQuality(com.music.spotui.data.preferences.getStreamingQuality(application))
+        com.music.spotui.data.preferences.applyStreamingQuality(application)
         // The crossfade length (0 = off), in the player from the first song on.
         com.music.spotui.data.preferences.applyCrossfade(com.music.spotui.data.preferences.getCrossfadeSeconds(application))
         // The volume boost (100 % = off), and back to 100 % when no sound comes through it.

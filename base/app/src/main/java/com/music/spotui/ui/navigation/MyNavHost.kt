@@ -63,12 +63,13 @@ fun MyNavHost(
     val context = LocalContext.current
     val startDestination = Routes.Home.route
 
+    com.music.spotui.ui.components.ArtistChooserHost(navHostController)
     NavHost(
         navController = navHostController,
         startDestination = startDestination,
-        // Same motion as the official app: tabs switch instantly, pages slide in from
-        // the right over a slight parallax, the player and queue rise from the bottom.
-        // Slides only (no alpha): a fade puts the whole page in an offscreen layer.
+        // Pages: a short shift with a fade-through, tabs fade in, the player and queue rise
+        // from the bottom (see navEnter). The fades put a page in an offscreen layer for
+        // their 0.1-0.2 s: the owner's call, a page change read as a hard block without them.
         enterTransition = { navEnter(initialState, targetState) },
         exitTransition = { navExit(initialState, targetState) },
         popEnterTransition = { navPopEnter(initialState, targetState) },
@@ -347,32 +348,50 @@ private fun NavBackStackEntry.isSheet() = destination.route in sheetRoutes
 internal val Decelerate = CubicBezierEasing(0.05f, 0.7f, 0.1f, 1f)
 internal val Accelerate = CubicBezierEasing(0.3f, 0f, 0.8f, 0.15f)
 private const val PAGE_MS = 300
+private const val TAB_MS = 150
 internal const val SHEET_IN_MS = 340
 internal const val SHEET_OUT_MS = 240
 
+// Pages: Material's shared axis with a fade-through. The page leaving fades out over the first
+// 90 ms while it moves a step aside; the page coming in moves the same short step and fades in
+// over the rest. Two opaque pages sliding across the whole screen (as before) read as a heavy
+// block with a hard edge running over the content; a short shift and a fade at the hand-over
+// read as the official apps' quick page change. Tabs: the new one fades in, nothing moves.
+private const val SHIFT = 0.08f
+private const val FADE_OUT_MS = 90
+private val Standard = CubicBezierEasing(0.2f, 0f, 0f, 1f)
+
+private fun pageIn(fromRight: Boolean): EnterTransition =
+    slideInHorizontally(tween(PAGE_MS, easing = Standard)) { (it * SHIFT).toInt() * if (fromRight) 1 else -1 } +
+        fadeIn(tween(PAGE_MS - FADE_OUT_MS, delayMillis = FADE_OUT_MS, easing = Decelerate))
+
+private fun pageOut(toLeft: Boolean): ExitTransition =
+    slideOutHorizontally(tween(PAGE_MS, easing = Standard)) { (it * SHIFT).toInt() * if (toLeft) -1 else 1 } +
+        fadeOut(tween(FADE_OUT_MS, easing = Accelerate))
+
 private fun navEnter(from: NavBackStackEntry, to: NavBackStackEntry): EnterTransition = when {
-    isTabSwitch(from, to) -> EnterTransition.None
+    isTabSwitch(from, to) -> fadeIn(tween(TAB_MS, easing = Decelerate))
     to.isSheet() -> slideInVertically(tween(SHEET_IN_MS, easing = Decelerate)) { it }
-    else -> slideInHorizontally(tween(PAGE_MS, easing = Decelerate)) { it }
+    else -> pageIn(fromRight = true)
 }
 
 private fun navExit(from: NavBackStackEntry, to: NavBackStackEntry): ExitTransition = when {
     isTabSwitch(from, to) -> ExitTransition.None
     // The page stays still under the rising sheet until it covers it.
     to.isSheet() -> fadeOut(tween(durationMillis = 1, delayMillis = SHEET_IN_MS))
-    else -> slideOutHorizontally(tween(PAGE_MS, easing = Decelerate)) { -it / 4 }
+    else -> pageOut(toLeft = true)
 }
 
 private fun navPopEnter(from: NavBackStackEntry, to: NavBackStackEntry): EnterTransition = when {
-    isTabSwitch(from, to) -> EnterTransition.None
+    isTabSwitch(from, to) -> fadeIn(tween(TAB_MS, easing = Decelerate))
     from.isSheet() -> EnterTransition.None
-    else -> slideInHorizontally(tween(PAGE_MS, easing = Decelerate)) { -it / 4 }
+    else -> pageIn(fromRight = false)
 }
 
 private fun navPopExit(from: NavBackStackEntry, to: NavBackStackEntry): ExitTransition = when {
     isTabSwitch(from, to) -> ExitTransition.None
     from.isSheet() -> slideOutVertically(tween(SHEET_OUT_MS, easing = Accelerate)) { it }
-    else -> slideOutHorizontally(tween(PAGE_MS, easing = Decelerate)) { it }
+    else -> pageOut(toLeft = false)
 }
 
 /** A destination on an opaque background, so sliding pages never show through each other. */

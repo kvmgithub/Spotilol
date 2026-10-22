@@ -1,5 +1,19 @@
 package com.music.spotui.ui.screens
 
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -15,12 +29,18 @@ import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -29,68 +49,125 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.myspoti.engine.R
 import com.music.spotui.ui.components.pressable
+import com.music.spotui.ui.theme.AppAccent
 import com.music.spotui.ui.theme.AppBackground
 import com.music.spotui.ui.theme.AppSans
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlin.math.PI
+import kotlin.math.cos
+import kotlin.math.sin
 
 /**
  * First screen of a signed-out app: what the app is, then Spotify's own login page
- * (shown by the engine once [onLogin] is tapped).
+ * (shown by the engine once [onLogin] is tapped). The logo, the name, what the app adds and
+ * the button rise into place one after the other, over a soft green light that drifts.
  */
 @Composable
 fun WelcomeScreen(onLogin: () -> Unit) {
-    Box(
-        Modifier
-            .fillMaxSize()
-            .background(AppBackground)
-            .background(
-                Brush.radialGradient(
-                    colors = listOf(Color(0x551ED760), Color.Transparent),
-                    center = Offset(540f, 380f),
-                    radius = 1100f,
-                ),
-            )
-            .systemBarsPadding()
-            .padding(horizontal = 28.dp, vertical = 24.dp),
-    ) {
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center,
-            modifier = Modifier.fillMaxWidth().align(Alignment.Center).padding(bottom = 120.dp),
-        ) {
-            Image(
-                painter = painterResource(R.drawable.ic_launcher_foreground),
-                contentDescription = null,
-                modifier = Modifier.size(132.dp).clip(RoundedCornerShape(36.dp)).background(Color(0xFF181818)),
-            )
-            Spacer(Modifier.height(28.dp))
-            Text(stringResource(R.string.app_name), color = Color.White, fontFamily = AppSans, fontWeight = FontWeight.ExtraBold, fontSize = 40.sp)
-            Text(
-                stringResource(R.string.welcome_tagline),
-                color = Color.White.copy(alpha = 0.7f), fontFamily = AppSans, fontSize = 17.sp, lineHeight = 24.sp,
-                textAlign = TextAlign.Center, modifier = Modifier.padding(top = 12.dp),
-            )
-        }
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            modifier = Modifier.fillMaxWidth().align(Alignment.BottomCenter),
-        ) {
-            Box(
-                contentAlignment = Alignment.Center,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(54.dp)
-                    .pressable(0.96f, onClick = onLogin)
-                    .clip(RoundedCornerShape(50))
-                    .background(com.music.spotui.ui.theme.AppAccent),
+    // One entrance per part, a beat apart: logo, name, features, button.
+    val parts = remember { List(4) { Animatable(0f) } }
+    LaunchedEffect(Unit) {
+        parts.forEachIndexed { i, a -> launch { delay(150L + i * 180L); a.animateTo(1f, tween(650, easing = FastOutSlowInEasing)) } }
+    }
+    fun Modifier.rise(i: Int) = graphicsLayer {
+        val v = parts[i].value
+        alpha = v
+        translationY = (1f - v) * 24.dp.toPx()
+    }
+    Box(Modifier.fillMaxSize().background(AppBackground)) {
+        Glow(Modifier.fillMaxSize())
+        Box(Modifier.fillMaxSize().systemBarsPadding().padding(horizontal = 28.dp, vertical = 24.dp)) {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center,
+                modifier = Modifier.fillMaxWidth().align(Alignment.Center).padding(bottom = 120.dp),
             ) {
-                Text(stringResource(R.string.welcome_login), color = Color.Black, fontFamily = AppSans,
-                    fontWeight = FontWeight.Bold, fontSize = 17.sp)
+                Image(
+                    painter = painterResource(R.drawable.ic_launcher_foreground),
+                    contentDescription = null,
+                    modifier = Modifier
+                        .size(120.dp)
+                        .graphicsLayer {
+                            val v = parts[0].value
+                            alpha = v
+                            val s = 0.85f + 0.15f * v
+                            scaleX = s; scaleY = s
+                        }
+                        .clip(RoundedCornerShape(32.dp))
+                        .background(Color(0xFF181818)),
+                )
+                Spacer(Modifier.height(28.dp))
+                Text(stringResource(R.string.app_name), color = Color.White, fontFamily = AppSans, fontWeight = FontWeight.ExtraBold, fontSize = 40.sp,
+                    modifier = Modifier.rise(1))
+                Spacer(Modifier.height(12.dp))
+                Box(Modifier.rise(2)) { Features() }
             }
-            Text(
-                stringResource(R.string.welcome_privacy),
-                color = Color.White.copy(alpha = 0.5f), fontFamily = AppSans, fontSize = 13.sp, lineHeight = 18.sp,
-                textAlign = TextAlign.Center, modifier = Modifier.padding(top = 14.dp),
-            )
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                modifier = Modifier.fillMaxWidth().align(Alignment.BottomCenter).rise(3),
+            ) {
+                Box(
+                    contentAlignment = Alignment.Center,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(54.dp)
+                        .pressable(0.96f, onClick = onLogin)
+                        .clip(RoundedCornerShape(50))
+                        .background(AppAccent),
+                ) {
+                    Text(stringResource(R.string.welcome_login), color = Color.Black, fontFamily = AppSans,
+                        fontWeight = FontWeight.Bold, fontSize = 17.sp)
+                }
+                Text(
+                    stringResource(R.string.welcome_privacy),
+                    color = Color.White.copy(alpha = 0.5f), fontFamily = AppSans, fontSize = 13.sp, lineHeight = 18.sp,
+                    textAlign = TextAlign.Center, modifier = Modifier.padding(top = 14.dp),
+                )
+            }
+        }
+    }
+}
+
+/** A soft green light behind the logo, drifting slowly. */
+@Composable
+internal fun Glow(modifier: Modifier = Modifier, alpha: Float = 0.30f) {
+    val t = rememberInfiniteTransition(label = "glow")
+    val phase by t.animateFloat(0f, (2 * PI).toFloat(), infiniteRepeatable(tween(16_000, easing = LinearEasing)), label = "phase")
+    Canvas(modifier) {
+        val c = Offset(size.width * (0.5f + 0.12f * sin(phase)), size.height * (0.30f + 0.05f * cos(phase)))
+        val r = size.width * 1.05f
+        drawCircle(Brush.radialGradient(listOf(AppAccent.copy(alpha = alpha), Color.Transparent), c, r), r, c)
+    }
+}
+
+/** "Your music," then what the app adds to it, one feature after the other (MySpotilol's own list). */
+@Composable
+private fun Features() {
+    val features = listOf(
+        stringResource(R.string.welcome_rotate_ads),
+        stringResource(R.string.spotilol_welcome_rotate_lyrics),
+        stringResource(R.string.spotilol_welcome_rotate_crossfade),
+        stringResource(R.string.spotilol_welcome_rotate_boost),
+    )
+    var index by remember { mutableIntStateOf(0) }
+    LaunchedEffect(Unit) {
+        delay(1_200)
+        while (true) { delay(2_400); index = (index + 1) % features.size }
+    }
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Text(stringResource(R.string.welcome_lead), color = Color.White.copy(alpha = 0.7f), fontFamily = AppSans,
+            fontSize = 17.sp, textAlign = TextAlign.Center)
+        AnimatedContent(
+            targetState = index,
+            transitionSpec = {
+                (slideInVertically(tween(400, easing = FastOutSlowInEasing)) { it / 2 } + fadeIn(tween(400))) togetherWith
+                    (slideOutVertically(tween(400, easing = FastOutSlowInEasing)) { -it / 2 } + fadeOut(tween(250)))
+            },
+            label = "feature",
+        ) { i ->
+            Text(features[i], color = Color.White, fontFamily = AppSans, fontWeight = FontWeight.Bold, fontSize = 19.sp,
+                textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(top = 2.dp))
         }
     }
 }

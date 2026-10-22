@@ -74,6 +74,12 @@ android {
             // Real key when provided (CI releases); otherwise the debug key, so a local
             // release build installs over the debug one while testing.
             signingConfig = signingConfigs.getByName(if (hasReleaseKey) "release" else "debug")
+            // -PoverDev: the optimised build under the dev app's id, to measure the speed of a
+            // beta on the test phone without replacing the signed beta installed there.
+            if (findProperty("overDev") != null) {
+                applicationIdSuffix = ".dev"
+                manifestPlaceholders["appLabel"] = "Myspoti dev"
+            }
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(

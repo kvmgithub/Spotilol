@@ -44,6 +44,7 @@ internal fun track(d: JsonElement?, uid: String? = null): Track? {
         explicit = d.str("contentRating.label") == "EXPLICIT",
         playable = d.bool("playability.playable") ?: true,
         uid = uid,
+        hasVideo = (d.long("associationsV3.videoAssociations.totalCount") ?: 0) > 0,
     )
 }
 
@@ -103,6 +104,7 @@ internal fun playlist(d: JsonElement?): Playlist? {
         ownerUri = d.str("ownerV2.data.uri"),
         ownerImages = images(d.list("ownerV2.data.avatar.sources")),
         followers = d.long("followers"),
+        isBlend = d.str("format") == "blend",
     )
 }
 

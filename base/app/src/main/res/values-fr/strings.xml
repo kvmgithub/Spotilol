@@ -15,7 +15,7 @@
     <string name="main_update_available">Une nouvelle mise à jour est disponible</string>
 
     <string name="notif_channel_media_name">Lecture média</string>
-    <string name="notif_channel_media_description">Commandes de lecture média Myspoti</string>
+    <string name="notif_channel_media_description">Commandes de lecture média MySpotilol</string>
     <string name="notif_action_previous">Précédent</string>
     <string name="notif_action_next">Suivant</string>
     <string name="notif_action_play">Lecture</string>

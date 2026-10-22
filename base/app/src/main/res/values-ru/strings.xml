@@ -14,7 +14,7 @@
     <string name="settings_lyrics_style_bold">Крупный жирный</string>
     <string name="main_update_available">Доступно новое обновление</string>
     <string name="notif_channel_media_name">Воспроизведение медиа</string>
-    <string name="notif_channel_media_description">Управление воспроизведением Myspoti</string>
+    <string name="notif_channel_media_description">Управление воспроизведением MySpotilol</string>
     <string name="notif_action_previous">Предыдущий</string>
     <string name="notif_action_next">Следующий</string>
     <string name="notif_action_play">Воспроизвести</string>

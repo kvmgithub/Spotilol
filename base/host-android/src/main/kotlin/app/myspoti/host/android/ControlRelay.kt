@@ -40,6 +40,8 @@ import java.util.concurrent.TimeUnit
  * would; the device registration keeps the Web Player's own name.
  */
 internal class ControlRelay(private val view: WebView, private val fingerprint: Fingerprint) {
+    /** The page's player registered its playback device (it started, and takes commands). */
+    @Volatile var onDeviceRegistered: (() -> Unit)? = null
     private val main = Handler(Looper.getMainLooper())
     private val http: OkHttpClient = BoundedHttp.client(callTimeoutSeconds = 20).newBuilder()
         .readTimeout(15, TimeUnit.SECONDS)
@@ -71,7 +73,7 @@ internal class ControlRelay(private val view: WebView, private val fingerprint: 
             Logbook.log("relay #$id rejected: ${it.message}")
             return answer(reply, id, 0, "{}", "")
         }
-        send(id, request, reply)
+        send(id, request, if (m.isNull("body")) null else m.optString("body"), reply)
     }
 
     /** The page's identity, bounded and limited to printable header-safe values. */
@@ -132,7 +134,7 @@ internal class ControlRelay(private val view: WebView, private val fingerprint: 
         return Request.Builder().url(url).headers(headers.build()).method(method, payload).build()
     }
 
-    private fun send(id: Int, request: Request, reply: JavaScriptReplyProxy) {
+    private fun send(id: Int, request: Request, body: String?, reply: JavaScriptReplyProxy) {
         val asked = android.os.SystemClock.uptimeMillis()
         val label = "${request.method} ${shortPath(request.url.toString())}"
         http.newCall(request).enqueue(object : Callback {
@@ -160,7 +162,32 @@ internal class ControlRelay(private val view: WebView, private val fingerprint: 
                     val net = android.os.SystemClock.uptimeMillis() - asked
                     Logbook.log("relay $label -> ${it.code} in $net ms")
                     if (it.code >= 400) Logbook.log("relay error body: ${LogRedactor.redact(text.take(400))}")
-                    answer(reply, id, it.code, out.toString(), text)
+                    val path = request.url.encodedPath
+                    val registration = request.method == "POST" && path.endsWith("/track-playback/v1/devices")
+                    if (it.code in 200..299 && registration) onDeviceRegistered?.invoke()
+                    // 402 (refused playback on some free accounts), from Myspoti 2.0.0: the refusal's
+                    // own headers and the refused command's shape. No ids, no cookies.
+                    if (it.code == 402) {
+                        val heads = it.headers.names().filterNot { n -> n.equals("set-cookie", true) || n.startsWith("authorization", true) }
+                            .joinToString(", ") { n -> "$n=${it.header(n)?.take(80)}" }
+                        Logbook.log("refusal headers: $heads")
+                        if (body != null) Logbook.log("refused command: ${commandSummary(body)}")
+                    }
+                    if (registration) Regex("\"effective_license\"\\s*:\\s*\"([^\"]*)\"").find(text)
+                        ?.let { m -> Logbook.log("registration: effective_license=${m.groupValues[1]}") }
+                    // An ad in the queue Spotify sends: the song before it goes on to the next song
+                    // instead, before the page sees the queue (AdBlock.withoutAds, Myspoti 2.0.0).
+                    val playback = path.contains("/track-playback/")
+                    val given = if (playback) AdBlock.withoutAds(text) else null
+                    given?.second?.forEach { note -> Logbook.log("ad left out: $note") }
+                    val sent = given?.first ?: text
+                    // Both ways on from this song lead to the ad: the player plays the next song
+                    // just before this one ends (AdBlock.adAhead).
+                    if (playback) AdBlock.adAhead(sent)?.let { a ->
+                        if (AdBlock.ahead.value != a) Logbook.log("ad ahead: ${a.nextUri} is played before the end")
+                        AdBlock.ahead.value = a
+                    }
+                    answer(reply, id, it.code, out.toString(), sent)
                 }
             }
         })
@@ -172,7 +199,34 @@ internal class ControlRelay(private val view: WebView, private val fingerprint: 
         main.post { runCatching { reply.postMessage(message) } }
     }
 
-    private fun shortPath(url: String) = url.substringBefore('?').substringAfter(".com").replace(Regex("[0-9a-f]{20,}"), "…")
+    /** A Connect command's shape, without ids: endpoint, license, picked song, origin. */
+    private fun commandSummary(body: String): String = runCatching {
+        val c = JSONObject(body).optJSONObject("command") ?: JSONObject(body)
+        val opts = c.optJSONObject("options")
+        listOf(
+            "endpoint=${c.optString("endpoint", "?")}",
+            "license=${opts?.optString("license", "<none>") ?: "<no options>"}",
+            "skip_to=${opts?.has("skip_to") == true}",
+            "origin=${c.optJSONObject("play_origin")?.optString("feature_identifier", "?") ?: "?"}",
+            "transfer=${c.has("transfer_options") || JSONObject(body).has("transfer_options")}",
+        ).joinToString(" ")
+    }.getOrDefault("unreadable")
+
+    /**
+     * The path with device ids hidden. A command's `from/<id>/to/<id>` keeps one fact: whether it
+     * targets this player itself (`to/self`) or another device (`to/other`) — a refusal of a
+     * command sent to the official app on the same account reads very differently from one sent
+     * to this player.
+     */
+    private fun shortPath(url: String): String {
+        val path = url.substringBefore('?').substringAfter(".com")
+        val ids = Regex("/from/([0-9a-f]{20,})/to/([0-9a-f]{20,})").find(path)
+        if (ids != null) {
+            val target = if (ids.groupValues[1] == ids.groupValues[2]) "self" else "other"
+            return path.replaceRange(ids.range, "/from/…/to/$target").replace(Regex("[0-9a-f]{20,}"), "…")
+        }
+        return path.replace(Regex("[0-9a-f]{20,}"), "…")
+    }
 
     companion object {
         private const val MAX_REQUEST_BYTES = 1_048_576

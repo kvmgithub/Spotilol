@@ -2,6 +2,48 @@
 
 Each release on GitHub shows its section below. The app shows it too when it offers the update. Every detail: [docs/CHANGELOG-full.md](docs/CHANGELOG-full.md).
 
+## 2.0.0
+
+Myspoti 2.0 is a new app, rebuilt from the ground up: Spotify with no ads and with lossless downloads, on a free account.
+
+- 🚫 **No ads, on a free account**: the ad breaks of Spotify's own player are switched off at the source. Pick any song, skip as much as you want.
+- ⬇️ **Lossless downloads**: songs, albums, playlists and Liked Songs in FLAC (CD or 24-bit hi-res) or small AAC — the very recording, found by its ISRC on Tidal or Qobuz, encrypted on your phone. Downloaded playlists stay in step.
+- 🚀 **A new engine**: faster screens, quicker skips, and playback that recovers by itself.
+- 🎤 **Word-by-word lyrics** from several sources, with translation and **song meanings from Genius**.
+- 🎬 **Official music videos**, in sync, in full screen, silent or with the clip's own sound.
+- 👥 **Playlists**: create and edit them, **add songs** from a search, **collaborative playlists** with invites and who added what.
+- 🔀 **Smart Shuffle**, a draggable queue, crossfade, sleep timer.
+- 🎙️ **Podcasts and audiobooks**, with their own player and downloads.
+- 📷 **Spotify Codes** to share, profiles, Recents, Browse, New releases, Your recap, Jam, Android Auto.
+- 🌍 **7 languages**, in-app updates, and a diagnostic report to send in one tap.
+
+This release installs as **Myspoti**, next to Myspoti Beta if you have it.
+
+## Since 2.0.0-beta.9
+
+- **Word-by-word lyrics from more sources** (Apple Music timing through LyricsPlus, lrc.red, Kugou), lined up with Spotify's own, words lit whole as they are sung; a setting picks word by word or line by line.
+- **Song meanings from Genius**: the light bulb opens the story of the song; underlined lines open their explanation with a long press, best-liked first, translated into your language as they arrive.
+- **Music videos with their own sound**: "Sound: clip" plays the clip's audio while the song keeps playing silently on Spotify (it still counts). Clips in 1080p on Wi-Fi, fewer freezes, the full-screen button in the clip's corner, the right cover after the clip, and label uploads found when Spotify itself has the video.
+- **Add songs to a playlist** from a Spotify search right under its cover, with suggestions.
+- **Collaborative playlists**: invite with a link, members' faces in the header, who added each song, and collaborators can add and remove songs.
+- **Share as a Spotify Code**, with the link under it.
+- **Queue**: a line shows where a dragged song will land, and a song moved into or out of the queue no longer gets stuck.
+- **Smart Shuffle**: suggested songs are marked and can be kept with +, and they light up when they play.
+- **Shared links open the page** (playlist, album, artist, show) instead of starting it.
+- **Fixed**: a crash when typing or deleting in a playlist's search while music plays, a skip when a clip went full screen, the status bar over the login page, the + of a song played from your own playlist, and lyrics hard to read on some colours.
+- **A crash or a freeze now shows in the next diagnostic report.**
+- **A new welcome screen** and a smoother setup.
+- **Smoother player, lighter on the battery**: the hidden player page was redrawn with every frame the app drew (and kept animating its own UI underneath), and the progress bar redrew the whole player 15 times a second. The page now stays out of the app's drawing and the bar redraws only itself, as often as it actually moves. Measured on the player screen: 0 late frames instead of 86 %, about a third less CPU — and a tap on a song or "next" is heard ~150 ms sooner.
+- **The player recovers from a page that fails to load**: when Spotify answered an error to a reload (seen: 504), the app stayed on it, refusing every command until restarted. The page is now loaded again, sooner first, then every minute.
+- **"Next" that does nothing**: when the player page answered "ok" to a skip but stayed on the song (the sound dipped, then nothing), the song after it is now asked for by name.
+- **Spotify refusing playback (402)**: after a refusal, the app now also tries taking playback to this phone first, then the list on shuffle, before telling you; the diagnostic report now says which kind of account plays and whether a refused command targeted this phone or another device.
+- **Smart shuffle from the player keeps the song playing**: on a long playlist the song was often not found and a random one started; the playing song now always stays first.
+- **Fast taps on "next" in the player land where they should, and the screen follows**: each tap showed the same second song (held for seconds while the page went on to the fifth), and a first skip Spotify applied late could push the player one song past the target. The screen now shows the song the taps add up to, and where the skips landed is checked and corrected.
+- **A song picked just before an ad plays after the ad** instead of the old queue going on (reported with a song picked in another playlist).
+- **Profile playlists without a cover of their own show their mosaic** instead of a grey square.
+- **"Restart the player" in Settings says it did.**
+- **Shuffle no longer flips back**: a state sent by the page before it took the tap could turn the button off again, and the list and the player then disagreed.
+
 ## 2.0.0-beta.9
 
 - **Fast skips during an ad or a reload**: the song your taps point to plays once the ad or the reload is over, and the screen shows that same song (the sound and the screen no longer drift apart); "previous" during an ad no longer restarts the ad.
@@ -98,19 +140,6 @@ Each release on GitHub shows its section below. The app shows it too when it off
 - **Sort in both directions** (tap the chosen sort again), remembered for each playlist.
 - **Fixes**: AMOLED black everywhere, lists no longer end under the mini player, full-screen music videos show, the Spotify account page stays under the status bar, "Saved in" confirms each change, fast skips no longer jam the player, no white screen on phones in light mode.
 - **Security and reliability fixes** (Android Auto, library pages, logout, links, video lookups).
-
-## 2.0.0
-
-A new engine, written from scratch, and a cleaner app on top of it.
-
-- **No ads**, with a free account: the ad audio is refused and the next song starts.
-- **New engine**: faster screens, playback that works on every phone, Spotify updates picked up by themselves.
-- **Lossless downloads** (FLAC CD or hi-res, or small AAC), encrypted, with their own offline queue.
-- **Sound quality** for streaming and downloads, and a **Settings** page.
-- **Connect** shows your headphones; music pauses when they go away.
-- **Podcasts and audiobooks**, **Jam**, **New releases**, **Browse**, **Your recap**, **widget**.
-- **Library**: sort by title, artist, album, duration or date added; smart shuffle; folders.
-- **In-app updates**, **Italian**, new icon; beta and release install side by side.
 
 ## 1.1.1
 

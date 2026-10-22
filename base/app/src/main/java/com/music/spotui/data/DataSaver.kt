@@ -65,11 +65,16 @@ object DataSaver {
         runCatching {
             cm.registerDefaultNetworkCallback(object : ConnectivityManager.NetworkCallback() {
                 override fun onCapabilitiesChanged(network: Network, caps: NetworkCapabilities) {
+                    val was = metered
                     metered = !caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_METERED)
+                    // Wi-Fi and mobile data each have their own streaming level.
+                    if (was != metered) com.music.spotui.data.preferences.applyStreamingQuality(app)
                     changed()
                 }
                 override fun onLost(network: Network) {
+                    val was = metered
                     metered = cm.isActiveNetworkMetered
+                    if (was != metered) com.music.spotui.data.preferences.applyStreamingQuality(app)
                     changed()
                 }
             })

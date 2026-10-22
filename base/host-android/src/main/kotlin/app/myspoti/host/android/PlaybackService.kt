@@ -10,6 +10,7 @@ import android.content.pm.ApplicationInfo
 import android.content.pm.ServiceInfo
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.support.v4.media.MediaBrowserCompat
@@ -23,10 +24,13 @@ import androidx.media.MediaBrowserServiceCompat
 import androidx.media.VolumeProviderCompat
 import androidx.media.app.NotificationCompat.MediaStyle
 import androidx.media.session.MediaButtonReceiver
+import android.util.LruCache
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
@@ -82,6 +86,15 @@ class PlaybackService : MediaBrowserServiceCompat() {
     private var foreground = false
     private var lastCoverUrl: String? = null
     private var cover: Bitmap? = null
+    private var coverJob: Job? = null
+    /**
+     * The last covers: a song heard again, or the one after an ad, shows its artwork at once
+     * instead of leaving the notification bare until the download ends. Bitmaps are never
+     * recycled by hand: the session, the notification and this cache may all hold one.
+     */
+    private val covers = object : LruCache<String, Bitmap>(COVER_CACHE_BYTES) {
+        override fun sizeOf(key: String, value: Bitmap) = value.byteCount
+    }
 
     override fun onCreate() {
         super.onCreate()
@@ -133,9 +146,27 @@ class PlaybackService : MediaBrowserServiceCompat() {
         super.onDestroy()
     }
 
+    /**
+     * The app closed from the recent apps. The music stops with it (asked by users: it went on
+     * playing with nothing on screen), unless the setting keeps it playing ([keepsPlayingOnClose]);
+     * a Spotify Connect device that plays is left playing. The pause fades out, then the
+     * notification goes with the service.
+     */
     override fun onTaskRemoved(rootIntent: Intent?) {
+        if (current?.playing == true && !playingRemote && !keepsPlayingOnClose(this)) {
+            controls?.pause()
+            handler.postDelayed({
+                ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
+                foreground = false
+                stopSelf()
+            }, CLOSE_STOP_MS)
+            return
+        }
         if (current?.playing != true) stopSelf()
     }
+
+    /** A Spotify Connect device plays (the session's volume is that device's). */
+    private var playingRemote = false
 
     private val callback = object : MediaSessionCompat.Callback() {
         override fun onPlay() { controls?.play() }
@@ -155,6 +186,11 @@ class PlaybackService : MediaBrowserServiceCompat() {
     }
 
     private fun apply(info: NowPlayingInfo) {
+        // Before the metadata: a cached cover is in it at once. A cover that failed (offline, Doze with the screen off, a 5xx) is asked again on the next
+        // real state change: it used to stay bare until the next song.
+        if (info.coverUrl != lastCoverUrl || (cover == null && !info.coverUrl.isNullOrBlank() && coverJob?.isActive != true)) {
+            loadCover(info.coverUrl)
+        }
         session.setMetadata(MediaMetadataCompat.Builder()
             .putString(MediaMetadataCompat.METADATA_KEY_MEDIA_ID, info.id)
             .putString(MediaMetadataCompat.METADATA_KEY_TITLE, info.title)
@@ -162,7 +198,12 @@ class PlaybackService : MediaBrowserServiceCompat() {
             .putString(MediaMetadataCompat.METADATA_KEY_ALBUM, info.album)
             .putString(MediaMetadataCompat.METADATA_KEY_ALBUM_ART_URI, info.coverUrl)
             .putLong(MediaMetadataCompat.METADATA_KEY_DURATION, info.durationMs)
-            .putBitmap(MediaMetadataCompat.METADATA_KEY_ALBUM_ART, cover.takeIf { info.coverUrl == lastCoverUrl })
+            .apply {
+                // Both keys: the lock screen, the shade, Bluetooth and the car do not read the same one.
+                val art = cover.takeIf { info.coverUrl == lastCoverUrl }
+                putBitmap(MediaMetadataCompat.METADATA_KEY_ALBUM_ART, art)
+                putBitmap(MediaMetadataCompat.METADATA_KEY_ART, art)
+            }
             .build())
         val state = when {
             info.buffering && info.playing -> PlaybackStateCompat.STATE_BUFFERING
@@ -179,30 +220,84 @@ class PlaybackService : MediaBrowserServiceCompat() {
                 if (info.shuffle) R.drawable.msp_ic_shuffle_on else R.drawable.msp_ic_shuffle)
             .setState(state, info.positionMs, if (info.playing && !info.buffering) 1f else 0f)
             .build())
-        if (info.coverUrl != lastCoverUrl) loadCover(info.coverUrl)
     }
 
     private fun loadCover(url: String?) {
+        coverJob?.cancel()
         lastCoverUrl = url
-        cover = null
-        if (url.isNullOrBlank()) return
-        scope.launch {
-            val bitmap = withContext(Dispatchers.IO) {
-                runCatching {
-                    // Cover art from Spotify's image CDNs only, bounded like every native request.
-                    val host = app.myspoti.spotify.security.WebPolicy.httpsHost(url)
-                    require(host != null && (host.endsWith(".scdn.co") || host.endsWith(".spotifycdn.com")))
-                    http.newCall(Request.Builder().url(url).build()).execute().use {
-                        val bytes = app.myspoti.spotify.security.BoundedHttp.readBytes(it.body.byteStream(), 8 * 1024 * 1024)
-                        BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+        cover = url?.let { covers.get(it) }
+        if (url.isNullOrBlank() || cover != null) return
+        coverJob = scope.launch {
+            // Retried with a growing pause: a failed load used to be forgotten.
+            var attempt = 0
+            while (true) {
+                val bitmap = withContext(Dispatchers.IO) { fetchCover(url) }
+                if (bitmap != null) {
+                    covers.put(url, bitmap)
+                    if (url == lastCoverUrl) {
+                        cover = bitmap
+                        current?.let { apply(it); show(it) }
+                        val art = session.controller.metadata?.getBitmap(MediaMetadataCompat.METADATA_KEY_ALBUM_ART)
+                        android.util.Log.d("Myspoti", "cover $url -> ${bitmap.width}x${bitmap.height}, session art ${art?.width}x${art?.height}")
                     }
-                }.getOrNull()
+                    return@launch
+                }
+                delay(COVER_RETRY_MS.getOrNull(attempt++) ?: break)
             }
-            if (url == lastCoverUrl && bitmap != null) {
-                cover = bitmap
-                current?.let { apply(it); show(it) }
-            }
+            android.util.Log.w("Myspoti", "cover not loaded: $url")
         }
+    }
+
+    /** The cover as a bitmap of at most [COVER_MAX_PX], from a Spotify image id, a URL or a local content URI; null on failure. */
+    private fun fetchCover(url: String): Bitmap? {
+        // The same ids the app resolves for Glide (SpotifyImages.kt): profile and playlist items give them.
+        val resolved = when {
+            url.startsWith("spotify:image:") -> "https://i.scdn.co/image/" + url.removePrefix("spotify:image:")
+            url.startsWith("spotify:mosaic:") -> "https://mosaic.scdn.co/640/" + url.removePrefix("spotify:mosaic:").split(':').joinToString("")
+            else -> url
+        }
+        // An album cover comes in 64, 300 and 640 px under the same id: ask for the 640 one first
+        // (the queue and the next song may only carry the small one), the given size is the fallback.
+        val candidates = listOfNotNull(
+            SMALL_ALBUM_COVER.find(resolved)?.let { resolved.replace(it.value, LARGE_ALBUM_COVER_PREFIX) },
+            resolved,
+        ).distinct()
+        for (candidate in candidates) {
+            val bytes = runCatching {
+                // Spotilol: cover art from Spotify's image CDNs over HTTPS or Android's media store
+                // (local files) only, bounded like every native request.
+                val host = app.myspoti.spotify.security.WebPolicy.httpsHost(candidate)
+                if (host != null) {
+                    require(host.endsWith(".scdn.co") || host.endsWith(".spotifycdn.com")) { "cover host" }
+                    http.newCall(Request.Builder().url(candidate).build()).execute().use { r ->
+                        if (r.isSuccessful) app.myspoti.spotify.security.BoundedHttp.readBytes(r.body.byteStream(), COVER_MAX_BYTES)
+                        else null.also { android.util.Log.w("Myspoti", "cover http ${r.code} $candidate") }
+                    }
+                } else {
+                    val uri = Uri.parse(candidate)
+                    require(uri.scheme == "content" && uri.authority == "media") { "cover source" }
+                    contentResolver.openInputStream(uri)?.use { app.myspoti.spotify.security.BoundedHttp.readBytes(it, COVER_MAX_BYTES) }
+                }
+            }.onFailure { android.util.Log.w("Myspoti", "cover $candidate: $it") }.getOrNull() ?: continue
+            decode(bytes)?.let { return it }
+        }
+        return null
+    }
+
+    /** Never decodes more pixels than needed, never keeps more than [COVER_MAX_PX] a side. */
+    private fun decode(bytes: ByteArray): Bitmap? {
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
+        if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return null
+        var sample = 1
+        while (maxOf(bounds.outWidth, bounds.outHeight) / (sample * 2) >= COVER_MAX_PX) sample *= 2
+        val bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size, BitmapFactory.Options().apply { inSampleSize = sample })
+            ?: return null
+        val longest = maxOf(bitmap.width, bitmap.height)
+        if (longest <= COVER_MAX_PX) return bitmap
+        val scale = COVER_MAX_PX.toFloat() / longest
+        return Bitmap.createScaledBitmap(bitmap, (bitmap.width * scale).toInt().coerceAtLeast(1),
+            (bitmap.height * scale).toInt().coerceAtLeast(1), true).also { if (it !== bitmap) bitmap.recycle() }
     }
 
     private val handler = android.os.Handler(android.os.Looper.getMainLooper())
@@ -283,6 +378,7 @@ class PlaybackService : MediaBrowserServiceCompat() {
 
     /** Playback on a Connect device: the volume keys drive that device instead of the phone. */
     private fun setRemote(remote: Boolean, volume: Int) {
+        playingRemote = remote
         if (!remote) {
             session.setPlaybackToLocal(android.media.AudioManager.STREAM_MUSIC)
             return
@@ -356,6 +452,18 @@ class PlaybackService : MediaBrowserServiceCompat() {
     }
 
     companion object {
+        /** Time left to the pause's fade-out before the notification goes. */
+        private const val CLOSE_STOP_MS = 800L
+        private const val CLOSE_PREFS = "playback_service"
+        private const val KEEP_PLAYING_KEY = "keep_playing_on_close"
+
+        /** The music goes on when the app is closed from the recent apps (off: it stops). */
+        fun keepsPlayingOnClose(context: Context): Boolean =
+            context.getSharedPreferences(CLOSE_PREFS, Context.MODE_PRIVATE).getBoolean(KEEP_PLAYING_KEY, false)
+
+        fun setKeepsPlayingOnClose(context: Context, on: Boolean) =
+            context.getSharedPreferences(CLOSE_PREFS, Context.MODE_PRIVATE).edit().putBoolean(KEEP_PLAYING_KEY, on).apply()
+
         const val ROOT_ID = "root"
         /** Root for callers that may control playback but not browse (see onGetRoot). */
         private const val EMPTY_ROOT_ID = "empty"
@@ -369,6 +477,16 @@ class PlaybackService : MediaBrowserServiceCompat() {
             PlaybackStateCompat.ACTION_SEEK_TO or PlaybackStateCompat.ACTION_PLAY_FROM_MEDIA_ID or
             PlaybackStateCompat.ACTION_PLAY_FROM_SEARCH
         private val http = app.myspoti.spotify.security.BoundedHttp.client(OkHttpClient(), callTimeoutSeconds = 20)
+        /** The largest side kept for artwork: what Android's media controls expect (640 is Spotify's biggest cover). */
+        private const val COVER_MAX_PX = 640
+        /** The most bytes read for one cover (Spotify's 640 px JPEGs are well under 1 MB). */
+        private const val COVER_MAX_BYTES = 8 * 1024 * 1024
+        /** About four 640 px covers. */
+        private const val COVER_CACHE_BYTES = 8 * 1024 * 1024
+        /** Pause before each new try of a failed cover; after the last one the cover waits for the next state change. */
+        private val COVER_RETRY_MS = longArrayOf(2_000L, 6_000L, 15_000L)
+        private val SMALL_ALBUM_COVER = Regex("ab67616d0000(?:1e02|4851)")
+        private const val LARGE_ALBUM_COVER_PREFIX = "ab67616d0000b273"
 
         @Volatile private var instance: PlaybackService? = null
         @Volatile private var current: NowPlayingInfo? = null

@@ -168,9 +168,7 @@ fun RecentlyPlayedScreen(navController: NavController) {
                 stringResource(R.string.recently_played_failed, failure.orEmpty()),
                 color = Subtle, fontSize = 14.sp, modifier = Modifier.padding(20.dp),
             )
-            entries == null -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator(color = com.music.spotui.ui.theme.AppAccent)
-            }
+            entries == null -> com.music.spotui.ui.components.SkeletonList(count = 9)
             sections.isEmpty() -> Text(
                 stringResource(R.string.recently_played_empty),
                 color = Subtle, fontSize = 14.sp, modifier = Modifier.padding(20.dp),

@@ -33,6 +33,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -65,7 +66,15 @@ fun SettingsScreen(navController: NavController) {
         }
         Column(Modifier.fillMaxWidth().weight(1f).verticalScroll(rememberScrollState())) {
             Section(R.string.settings_section_playback)
-            StreamingQualityPicker()
+            StreamingQualityPicker(title = R.string.quality_streaming_wifi_title)
+            StreamingQualityPicker(cellular = true, title = R.string.quality_streaming_cell_title)
+            var canvasWifiOnly by remember { mutableStateOf(com.music.spotui.data.preferences.isCanvasWifiOnly(ctx)) }
+            OptionRow(
+                label = stringResource(R.string.canvas_wifi_only),
+                detail = stringResource(R.string.canvas_wifi_only_detail),
+                checked = canvasWifiOnly,
+                onChecked = { canvasWifiOnly = it; com.music.spotui.data.preferences.setCanvasWifiOnly(ctx, it) },
+            )
             OptionRow(
                 label = stringResource(R.string.settings_autoplay_title),
                 detail = stringResource(R.string.settings_autoplay_detail),
@@ -74,6 +83,13 @@ fun SettingsScreen(navController: NavController) {
             )
             CrossfadeRow()
             BoostRow()
+            var keepPlaying by remember { mutableStateOf(app.myspoti.host.android.PlaybackService.keepsPlayingOnClose(ctx)) }
+            OptionRow(
+                label = stringResource(R.string.settings_keep_playing_title),
+                detail = stringResource(R.string.settings_keep_playing_detail),
+                checked = keepPlaying,
+                onChecked = { keepPlaying = it; app.myspoti.host.android.PlaybackService.setKeepsPlayingOnClose(ctx, it) },
+            )
             Divider()
 
             Section(R.string.spotilol_section_accounts)
@@ -154,7 +170,11 @@ fun SettingsScreen(navController: NavController) {
             }
             // The hidden Web Player stuck or crashed: rebuild it without leaving the app.
             Column(
-                Modifier.fillMaxWidth().clickable { app.myspoti.host.android.MyspotiRuntime.host.reload() }
+                Modifier.fillMaxWidth().clickable {
+                    app.myspoti.host.android.MyspotiRuntime.host.reload()
+                    // Reported: nothing said the restart happened.
+                    android.widget.Toast.makeText(ctx, ctx.getString(R.string.restart_player_done), android.widget.Toast.LENGTH_SHORT).show()
+                }
                     .padding(horizontal = 20.dp, vertical = 10.dp),
             ) {
                 Text(stringResource(R.string.restart_player_title), color = Color.White, fontSize = 16.sp)

@@ -11,5 +11,8 @@ package com.music.spotui.ui.components
 fun spotifyImageUrl(url: String?): String? = when {
     url.isNullOrBlank() -> null
     url.startsWith("spotify:image:") -> "https://i.scdn.co/image/" + url.removePrefix("spotify:image:")
+    // A playlist without a cover of its own: the 2x2 mosaic of its first albums, which the
+    // profile endpoints also hand out as a URI (reported: profile playlists left grey).
+    url.startsWith("spotify:mosaic:") -> "https://mosaic.scdn.co/640/" + url.removePrefix("spotify:mosaic:").split(':').joinToString("")
     else -> url
 }

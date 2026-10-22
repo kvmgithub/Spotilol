@@ -40,6 +40,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.boundsInWindow
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
@@ -115,6 +118,39 @@ fun Loader(kind: SkeletonKind = SkeletonKind.List) {
 
 enum class SkeletonKind { List, Home, Header }
 
+/**
+ * Rows of grey shapes for a list that is loading, inside a page already drawn (a search, a
+ * profile's lists): the same static placeholder as [Loader], without taking the whole screen.
+ * [round] draws circles (people) instead of covers.
+ */
+@Composable
+fun SkeletonList(count: Int = 6, round: Boolean = false, modifier: Modifier = Modifier) {
+    var visible by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) { delay(200); visible = true }
+    Column(modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
+        if (!visible) return@Column
+        if (round) repeat(count) {
+            Row(Modifier.padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                Box(Modifier.size(48.dp).clip(androidx.compose.foundation.shape.CircleShape).background(Color(0xFF242424)))
+                Box(Modifier.padding(start = 12.dp).width(150.dp).height(14.dp).clip(RoundedCornerShape(4.dp)).background(Color(0xFF2A2A2A)))
+            }
+        } else SkeletonRows(Color(0xFF242424), Color(0xFF2A2A2A), count)
+    }
+}
+
+/** Lyrics loading: lines of grey bars of varied widths, in the lyrics' own colour. */
+@Composable
+fun SkeletonLyrics(color: Color, modifier: Modifier = Modifier) {
+    var visible by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) { delay(200); visible = true }
+    Column(modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 16.dp)) {
+        if (!visible) return@Column
+        for (w in floatArrayOf(0.85f, 0.6f, 0.75f, 0.5f, 0.9f, 0.65f, 0.7f, 0.45f)) {
+            Box(Modifier.padding(vertical = 9.dp).fillMaxWidth(w).height(22.dp).clip(RoundedCornerShape(6.dp)).background(color.copy(alpha = 0.18f)))
+        }
+    }
+}
+
 @Composable
 private fun SkeletonRows(tile: Color, line: Color, count: Int) {
     repeat(count) {
@@ -160,6 +196,12 @@ fun MiniPlayer(navController: NavHostController) {
         }
     }
 
+    // The big cover the player will open on, loaded now: it is then read from Glide's caches.
+    LaunchedEffect(songCoverUri) {
+        if (songCoverUri.isBlank()) return@LaunchedEffect
+        com.bumptech.glide.Glide.with(context).load(songCoverUri).preload()
+    }
+
     // A new song cross-fades the card's colour instead of snapping to it.
     val animatedTint by androidx.compose.animation.animateColorAsState(tint, androidx.compose.animation.core.tween(400), label = "miniTint")
 
@@ -175,8 +217,27 @@ fun MiniPlayer(navController: NavHostController) {
         CanvasPlayer.preload(context, url)
     }
 
+    // The next song, made ready while this one plays, so a skip shows it whole at once: its big
+    // cover (on storage, not in memory), its colour, and its Canvas (the address always, the clip
+    // itself on storage over Wi-Fi only). After the current song's own loads.
+    LaunchedEffect(np.next?.spotifyTrackId, energy.policy.allowCanvas, com.music.spotui.data.DataSaver.active) {
+        val next = np.next ?: return@LaunchedEffect
+        kotlinx.coroutines.delay(2_500)
+        if (next.coverUri.isNotBlank()) {
+            com.bumptech.glide.Glide.with(context).downloadOnly().load(next.coverUri).submit()
+            Palette().extractFirstColorFromImageUrl(context, next.coverUri) { }
+            Palette().extractSecondColorFromCoverUrl(context, next.coverUri) { }
+        }
+        if (next.spotifyTrackId.isBlank() || !energy.policy.allowCanvas || com.music.spotui.data.DataSaver.active) return@LaunchedEffect
+        val url = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            runCatching { com.music.spotui.di.Graph.api.getCanvasUrl(next.spotifyTrackId) }.getOrNull()
+        } ?: return@LaunchedEffect
+        if (!com.music.spotui.data.DataSaver.metered) CanvasPlayer.warm(context, url)
+    }
+
     // The thin bar moves ~2 px/s: 4 ticks a second look identical to 20.
-    val frame = rememberFrameClock(songPlayingState, fps = 4)
+    // Covered by the full player: no ticks (they redrew the whole window under it).
+    val frame = rememberFrameClock(songPlayingState && !com.music.spotui.ui.navigation.PlayerSheet.open.value, fps = 4)
 
     var showDevices by remember { mutableStateOf(false) }
     if (showDevices) DevicesSheet { showDevices = false }
@@ -195,6 +256,8 @@ fun MiniPlayer(navController: NavHostController) {
 
     Column(
         modifier = Modifier.pressable(0.96f) { com.music.spotui.ui.navigation.PlayerSheet.show() }
+            // Where the full player rises from and sinks back to.
+            .onGloballyPositioned { com.music.spotui.ui.navigation.PlayerSheet.miniTop = it.boundsInWindow().top }
             .padding(horizontal = 8.dp)
             .clip(RoundedCornerShape(8.dp))
             .background(animatedTint)
@@ -214,13 +277,23 @@ fun MiniPlayer(navController: NavHostController) {
                 // T4: during an ad break the page publishes no track, so the song before it
                 // would sit in the mini player; an explicit ad state is shown instead.
                 val adPlaying = com.music.spotui.di.SongPlayer.adPlaying
+                // A song change that is no swipe (the end of a song, a skip from the player or
+                // the notification) crossfades instead of swapping in one frame. After a swipe the
+                // new song is already on screen (the page swiped to): no fade then, or the page
+                // jumped back to would show the old song fading out.
+                val shown = MiniSong(s?.title ?: songTitle, s?.singer ?: songSinger, s?.coverUri ?: songCoverUri)
+                androidx.compose.animation.Crossfade(
+                    targetState = shown,
+                    animationSpec = androidx.compose.animation.core.tween(if (page == 1 && pager.currentPage == 1) 220 else 0),
+                    label = "miniSong",
+                ) { m ->
                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
                     GlideImage(
                         transition = CrossFade,
                         modifier = Modifier
                             .size(40.dp)
                             .clip(RoundedCornerShape(4.dp)),
-                        model = s?.coverUri ?: songCoverUri,
+                        model = m.cover,
                         contentScale = ContentScale.Crop,
                         failure = placeholder(R.drawable.placeholder),
                         loading = placeholder(R.drawable.placeholder),
@@ -229,11 +302,11 @@ fun MiniPlayer(navController: NavHostController) {
                     val remote = SongPlayer.activeDevice.value
                     Column(modifier = Modifier.padding(start = 12.dp, end = 8.dp)) {
                         if (remote == null) {
-                            Text(text = if (adPlaying) stringResource(R.string.ad_playing) else (s?.title ?: songTitle), color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                            Text(text = if (adPlaying) stringResource(R.string.ad_playing) else (m.title), color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
                             if (!adPlaying) Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
                                 // The artist yields the width: the output's name stays whole.
                                 Text(
-                                    text = s?.singer ?: songSinger, color = Color.White.copy(alpha = 0.7f), fontSize = 13.sp,
+                                    text = m.singer, color = Color.White.copy(alpha = 0.7f), fontSize = 13.sp,
                                     maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
                                     modifier = Modifier.weight(1f, fill = false),
                                 )
@@ -256,10 +329,10 @@ fun MiniPlayer(navController: NavHostController) {
                             Text(
                                 text = androidx.compose.ui.text.buildAnnotatedString {
                                     pushStyle(androidx.compose.ui.text.SpanStyle(fontWeight = FontWeight.Bold, color = Color.White))
-                                    append(s?.title ?: songTitle)
+                                    append(m.title)
                                     pop()
                                     pushStyle(androidx.compose.ui.text.SpanStyle(color = Color.White.copy(alpha = 0.7f)))
-                                    append(" • " + (s?.singer ?: songSinger))
+                                    append(" • " + (m.singer))
                                     pop()
                                 },
                                 fontSize = 13.sp, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, softWrap = false,
@@ -273,6 +346,7 @@ fun MiniPlayer(navController: NavHostController) {
                             }
                         }
                     }
+                }
                 }
             }
             // Crossfade on or off in one tap; on comes back at the last length chosen in Settings.
@@ -328,6 +402,8 @@ fun MiniPlayer(navController: NavHostController) {
                 .padding(horizontal = 8.dp)
                 .height(2.dp)
                 .clip(RoundedCornerShape(1.dp))
+                // Its own layer: a tick re-records these two rectangles, not the whole card.
+                .graphicsLayer()
         ) {
             frame.value
             val dur = SongPlayer.getDuration().toFloat()
@@ -387,3 +463,6 @@ fun Snackbar(showMessage : String) {
     }
 }
 
+
+/** What the mini player shows of a song: the crossfade's key, so the old one fades with its own text. */
+private data class MiniSong(val title: String, val singer: String, val cover: String)

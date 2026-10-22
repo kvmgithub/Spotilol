@@ -14,7 +14,7 @@
     <string name="settings_lyrics_style_bold">Grande e em negrito</string>
     <string name="main_update_available">Uma nova atualização está disponível</string>
     <string name="notif_channel_media_name">Reprodução de mídia</string>
-    <string name="notif_channel_media_description">Controles de reprodução de mídia do Myspoti</string>
+    <string name="notif_channel_media_description">Controles de reprodução de mídia do MySpotilol</string>
     <string name="notif_action_previous">Anterior</string>
     <string name="notif_action_next">Próxima</string>
     <string name="notif_action_play">Tocar</string>

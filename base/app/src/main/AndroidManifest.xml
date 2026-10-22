@@ -56,9 +56,10 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
             <!-- No autoVerify: these are Spotify's domains, verification can never
-                 pass for this app. spotify.link is not claimed: the id is only in the
-                 redirect target, so the browser resolves it to open.spotify.com,
-                 which is claimed and parsed. -->
+                 pass for this app. spotify.link / spoti.fi short links (how the official
+                 apps share a collaborative playlist invitation) are offered too: the id and
+                 the invitation token (pt) are only in the redirect target, which the app
+                 resolves itself (InviteLinks). -->
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
@@ -75,6 +76,12 @@
                 <data
                     android:scheme="https"
                     android:host="play.spotify.com" />
+                <data
+                    android:scheme="https"
+                    android:host="spotify.link" />
+                <data
+                    android:scheme="https"
+                    android:host="spoti.fi" />
             </intent-filter>
         </activity>
 

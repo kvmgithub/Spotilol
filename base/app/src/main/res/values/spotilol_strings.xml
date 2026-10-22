@@ -36,4 +36,7 @@
     <string name="spotilol_crossfade_switch">Crossfade on or off</string>
     <string name="spotilol_crossfade_on">Crossfade on (%1$d s)</string>
     <string name="spotilol_crossfade_off">Crossfade off</string>
+    <string name="spotilol_welcome_rotate_lyrics">with Spotify\'s synced lyrics.</string>
+    <string name="spotilol_welcome_rotate_crossfade">with real crossfades.</string>
+    <string name="spotilol_welcome_rotate_boost">up to twice as loud.</string>
 </resources>

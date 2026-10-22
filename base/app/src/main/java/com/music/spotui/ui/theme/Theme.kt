@@ -76,6 +76,9 @@ fun SpotuiTheme(
             // B19: the navigation bar was left to the system — a white band under the always-dark
             // UI (reported in the modal sheets, where the bar was opaque) with dark icons on it.
             window.navigationBarColor = Color.Transparent.toArgb()
+            // Without this Android lays its own translucent scrim on a transparent bar (API 29+),
+            // which showed as a differently coloured strip under the full-screen Canvas.
+            window.isNavigationBarContrastEnforced = false
             WindowCompat.getInsetsController(window, view).isAppearanceLightNavigationBars = false
         }
     }

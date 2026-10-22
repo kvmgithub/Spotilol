@@ -83,7 +83,8 @@ class SpotifyHttp(
      */
     private val deviceId: String = java.util.UUID.randomUUID().toString(),
 ) {
-    private data class WebToken(val access: String, val expiresAtMs: Long, val clientId: String, val appVersion: String, val anonymous: Boolean)
+    private data class WebToken(val access: String, val expiresAtMs: Long, val clientId: String, val appVersion: String, val anonymous: Boolean,
+                                val fetchedAtMs: Long = System.currentTimeMillis())
     private data class ClientToken(val value: String, val expiresAtMs: Long)
 
     private val lock = Mutex()
@@ -94,7 +95,21 @@ class SpotifyHttp(
     suspend fun forgetWebToken() = lock.withLock { web = null }
 
     /** True when the page's token belongs to a signed-in user (the cached one is reused). */
-    suspend fun isSignedIn(): Boolean = lock.withLock { !webToken().anonymous }
+    /**
+     * Asks the page, never the cached token: a token cached before a logout (valid up to an hour)
+     * said "signed in" while the user was still on the e-mail code step, the sign-in page was put
+     * away under them and the code was lost (log seen). A fresh answer also refreshes the cache.
+     * "Fresh" is a few seconds: several checks at once (startup asks five times within five
+     * seconds) share one answer, and every request waits behind this lock while the page answers
+     * (0.3 to 2 s each, measured at startup).
+     */
+    suspend fun isSignedIn(): Boolean = lock.withLock {
+        if (web?.let { System.currentTimeMillis() - it.fetchedAtMs < SIGNED_IN_FRESH_MS } != true) web = null
+        !webToken().anonymous
+    }
+
+    /** What the token in hand says (null: none yet), without asking the page; for logs only. */
+    fun signedInHint(): Boolean? = web?.let { !it.anonymous }
 
     /** The account's token, fetched again only when the cached one is missing or stale. */
     private suspend fun webToken(): WebToken {
@@ -180,6 +195,8 @@ class SpotifyHttp(
     }
 
     companion object {
+        /** How long a signed-in check answers from the token just fetched (see isSignedIn). */
+        const val SIGNED_IN_FRESH_MS = 10_000L
         const val JSON_TYPE = "application/json;charset=UTF-8"
         const val USER_AGENT =
             "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/155.0.0.0 Safari/537.36"

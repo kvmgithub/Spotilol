@@ -7,6 +7,9 @@ import android.content.Context
 import android.content.Intent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.EaseOut
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
@@ -15,6 +18,7 @@ import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.draggable
@@ -64,6 +68,19 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import com.music.spotui.data.entity.LyricWord
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.graphics.drawscope.clipPath
+import androidx.compose.ui.graphics.Outline
+import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.geometry.RoundRect
+import androidx.compose.ui.layout.LayoutCoordinates
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -106,7 +123,18 @@ import java.util.Locale
 private data class LyricsPalette(val background: Color, val text: Color, val highlight: Color)
 
 private fun paletteFor(lyrics: Lyrics?, accent: Color): LyricsPalette {
-    lyrics?.colors?.let { return LyricsPalette(Color(it.background), Color(it.text), Color(it.highlight)) }
+    lyrics?.colors?.let { c ->
+        // Spotify's colours for the song, with the sung white kept readable: on some songs the
+        // background is light enough for white words to fade into it (reported on one song,
+        // fine on another). The background is darkened only as much as that takes.
+        val hi = Color(c.highlight)
+        var bg = Color(c.background)
+        var step = 0
+        while (contrast(hi, bg) < MIN_CONTRAST && step < 8) { bg = lerp(bg, if (hi.luminance() > 0.5f) Color.Black else Color.White, 0.12f); step++ }
+        // Upcoming lines (often black in Spotify's colours) stay readable on that background too.
+        val text = Color(c.text).let { t -> if (contrast(t.copy(alpha = 1f), bg) < 1.8f) hi.copy(alpha = 0.55f) else t }
+        return LyricsPalette(bg, text, hi)
+    }
     // No Spotify colours (fallback source): the artwork colour, like Spotify's own fallback.
     val bg = lerp(accent, Color.Black, 0.15f)
     // B23: upcoming lines were black at 55 % — invisible on a dark (AMOLED) card. On a dark
@@ -116,12 +144,22 @@ private fun paletteFor(lyrics: Lyrics?, accent: Color): LyricsPalette {
     return LyricsPalette(bg, text, Color.White)
 }
 
+/** WCAG contrast ratio of two colours (1 = the same, 21 = black on white). */
+private fun contrast(a: Color, b: Color): Float {
+    val la = a.luminance(); val lb = b.luminance()
+    return (maxOf(la, lb) + 0.05f) / (minOf(la, lb) + 0.05f)
+}
+
+/** What the sung (and karaoke) words need against the background to read at a glance. */
+private const val MIN_CONTRAST = 3.2f
+
 /** Playback position, re-read on every frame while playing (smooth word highlight). */
 @Composable
 private fun rememberPosition(running: Boolean): () -> Long {
     val frame = rememberFrameClock(running, fps = 30)
     return remember(frame) {
-        { frame.value; SongPlayer.getCurrentPosition().coerceAtLeast(0L) }
+        // What is heard: Bluetooth plays it a little later than the player is.
+        { frame.value; (SongPlayer.getCurrentPosition() - com.music.spotui.di.OutputLag.ms()).coerceAtLeast(0L) }
     }
 }
 
@@ -136,6 +174,19 @@ private fun activeIndexFor(lyrics: Lyrics, positionMs: Long): Int {
         if (lyrics.lines[mid].timeMs <= positionMs + 150) { found = mid; lo = mid + 1 } else hi = mid - 1
     }
     return found
+}
+
+/**
+ * How many characters of a word-timed line are lit at [p] (ms): each word lights up whole the
+ * moment it is sung (asked for instead of a fill sliding through the words).
+ */
+private fun sungChars(words: List<LyricWord>, starts: List<Int>, p: Long): Float {
+    var out = 0f
+    for (i in words.indices) {
+        if (p < words[i].startMs) break
+        out = (starts[i] + words[i].text.length).toFloat()
+    }
+    return out
 }
 
 /** Seek to a tapped synced line and make sure we're playing. */
@@ -176,8 +227,12 @@ private fun AutoFollow(listState: LazyListState, activeIndex: Int, offsetPx: Int
             if (it is DragInteraction.Start || it is DragInteraction.Stop) userScrollAt = System.currentTimeMillis()
         }
     }
+    // The first placement is instant: the screen opens (container transform) already on the
+    // current line instead of scrolling there from the top while it grows.
+    var placed by remember { mutableStateOf(false) }
     LaunchedEffect(activeIndex, enabled) {
         if (!enabled || activeIndex < 0) return@LaunchedEffect
+        if (!placed) { placed = true; listState.scrollToItem(activeIndex, -offsetPx); return@LaunchedEffect }
         val wait = 3000 - (System.currentTimeMillis() - userScrollAt)
         if (wait > 0) delay(wait)
         listState.animateScrollToItem(activeIndex, -offsetPx)
@@ -197,37 +252,80 @@ private fun LyricLineText(
     position: () -> Long,
     translation: String?,
     onTap: (() -> Unit)?,
+    modifier: Modifier = Modifier,
+    annotated: Boolean = false,
+    onHold: (() -> Unit)? = null,
 ) {
     val target = when (state) {
         1 -> palette.text
         else -> palette.highlight
     }
     val color by animateColorAsState(target, tween(220), label = "lyricColor")
-    val modifier = Modifier
+    val lineModifier = modifier
         .fillMaxWidth()
         .then(
-            if (onTap != null) Modifier.clickable(
+            if (onTap != null || onHold != null) Modifier.combinedClickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,
-            ) { onTap() } else Modifier
+                onLongClick = onHold,
+                onClick = { onTap?.invoke() },
+            ) else Modifier
         )
-    Column(modifier) {
+    // Explained by Genius: a light dotted line under each row of the text.
+    var layout by remember { mutableStateOf<androidx.compose.ui.text.TextLayoutResult?>(null) }
+    val underline = if (!annotated) Modifier else Modifier.drawBehind {
+        val t = layout ?: return@drawBehind
+        val dot = 2.dp.toPx()
+        val effect = androidx.compose.ui.graphics.PathEffect.dashPathEffect(floatArrayOf(0.01f, dot * 2.5f))
+        for (r in 0 until t.lineCount) {
+            val y = t.getLineBaseline(r) + 5.dp.toPx()
+            drawLine(color.copy(alpha = color.alpha * 0.55f), androidx.compose.ui.geometry.Offset(t.getLineLeft(r), y),
+                androidx.compose.ui.geometry.Offset(t.getLineRight(r), y), strokeWidth = dot, cap = androidx.compose.ui.graphics.StrokeCap.Round, pathEffect = effect)
+        }
+    }
+    Column(lineModifier) {
         val words = line.words
         if (state == 0 && words != null) {
-            // Only this line follows the clock: count of words already sung.
-            val sung by remember(line) {
-                derivedStateOf { val p = position(); words.count { it.startMs <= p } }
+            // Karaoke: each word goes straight from the upcoming colour to white as it is sung (drawn
+            // on each frame, the line is not recomposed). Words in another colour were hard to tell apart.
+            val shown = remember(line) { words.joinToString("") { it.text }.trimEnd() }
+            val starts = remember(line) { var c = 0; words.map { w -> c.also { c += w.text.length } } }
+            var fill by remember { mutableStateOf<androidx.compose.ui.text.TextLayoutResult?>(null) }
+            Box {
+                Text(
+                    text = shown,
+                    // The words to come keep the colour of the lines to come; sung, they turn white.
+                    color = palette.text,
+                    fontSize = fontSize,
+                    lineHeight = fontSize * 1.25f,
+                    fontWeight = FontWeight.Bold,
+                    onTextLayout = { layout = it },
+                    modifier = underline,
+                )
+                Text(
+                    text = shown,
+                    color = palette.highlight,
+                    fontSize = fontSize,
+                    lineHeight = fontSize * 1.25f,
+                    fontWeight = FontWeight.Bold,
+                    onTextLayout = { fill = it },
+                    modifier = Modifier.drawWithContent {
+                        val l = fill ?: return@drawWithContent
+                        val off = sungChars(words, starts, position()).coerceAtMost(shown.length.toFloat())
+                        if (off <= 0f) return@drawWithContent
+                        if (off >= shown.length) { drawContent(); return@drawWithContent }
+                        val whole = off.toInt()
+                        val row = l.getLineForOffset(whole)
+                        val x0 = l.getHorizontalPosition(whole, true)
+                        val x1 = if (l.getLineForOffset(whole + 1) == row) l.getHorizontalPosition(whole + 1, true) else l.getLineRight(row)
+                        val x = x0 + (x1 - x0) * (off - whole)
+                        val path = androidx.compose.ui.graphics.Path()
+                        for (r in 0 until row) path.addRect(androidx.compose.ui.geometry.Rect(0f, l.getLineTop(r), size.width, l.getLineBottom(r)))
+                        path.addRect(androidx.compose.ui.geometry.Rect(0f, l.getLineTop(row), x, l.getLineBottom(row)))
+                        clipPath(path) { this@drawWithContent.drawContent() }
+                    },
+                )
             }
-            Text(
-                text = buildAnnotatedString {
-                    words.forEachIndexed { i, w ->
-                        withStyle(SpanStyle(color = if (i < sung) palette.highlight else palette.text)) { append(w.text) }
-                    }
-                },
-                fontSize = fontSize,
-                lineHeight = fontSize * 1.25f,
-                fontWeight = FontWeight.Bold,
-            )
         } else {
             Text(
                 text = line.text,
@@ -235,6 +333,8 @@ private fun LyricLineText(
                 fontSize = fontSize,
                 lineHeight = fontSize * 1.25f,
                 fontWeight = FontWeight.Bold,
+                onTextLayout = { layout = it },
+                modifier = underline,
             )
         }
         AnimatedVisibility(
@@ -260,7 +360,18 @@ private fun lineState(lyrics: Lyrics, index: Int, active: Int): Int = when {
     else -> 1
 }
 
-/** Full-screen lyrics (Spotify's "Lyrics" view). */
+/**
+ * Fade + small rise of one part of the screen while the container settles. [reveal] is the
+ * open progress (0..1), read in the draw phase only: nothing recomposes per frame.
+ */
+private fun Modifier.revealIn(reveal: (() -> Float)?, start: Float, riseDp: Float, span: Float = 0.3f): Modifier =
+    if (reveal == null) this else graphicsLayer {
+        val a = ((reveal() - start) / span).coerceIn(0f, 1f)
+        alpha = a
+        translationY = (1f - a) * riseDp.dp.toPx()
+    }
+
+/** Full-screen lyrics (Spotify's "Lyrics" view). [reveal] drives the staggered entrance, null = all shown. */
 @Composable
 fun LyricsScreen(
     title: String,
@@ -268,6 +379,7 @@ fun LyricsScreen(
     album: String,
     accentColor: Color,
     onClose: () -> Unit,
+    reveal: (() -> Float)? = null,
 ) {
     val context = LocalContext.current
     val vm: LyricsViewModel = viewModel()
@@ -283,7 +395,9 @@ fun LyricsScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(bg)
+            // The background comes in over the first instants so the card's own lines
+            // dissolve under it instead of vanishing on the first frame.
+            .drawBehind { drawRect(bg, alpha = if (reveal == null) 1f else (reveal() / 0.08f).coerceIn(0f, 1f)) }
             .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = {})
             .statusBarsPadding()
             .navigationBarsPadding(),
@@ -291,7 +405,7 @@ fun LyricsScreen(
         // ── Header: close, title / artist, more ──
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.fillMaxWidth().height(64.dp).padding(horizontal = 4.dp),
+            modifier = Modifier.fillMaxWidth().height(64.dp).padding(horizontal = 4.dp).revealIn(reveal, 0.3f, 8f),
         ) {
             Box(
                 contentAlignment = Alignment.Center,
@@ -327,8 +441,8 @@ fun LyricsScreen(
 
         when (state) {
             is LyricsViewModel.State.Loading ->
-                Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator(color = palette.highlight)
+                Box(Modifier.weight(1f).fillMaxWidth()) {
+                    com.music.spotui.ui.components.SkeletonLyrics(palette.highlight)
                 }
             is LyricsViewModel.State.NotFound ->
                 Box(Modifier.weight(1f).fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
@@ -338,8 +452,19 @@ fun LyricsScreen(
                 val l = state.lyrics
                 // Translation is requested by onTranslate; do not upload lyrics on screen entry.
                 val active by remember(l) { derivedStateOf { activeIndexFor(l, position()) } }
+                // Other lyrics for the same song (Spotify's lines, then the word-timed ones; or the
+                // setting changed): the new ones fade in over the old, already on the line being
+                // sung, instead of the list jumping.
+                androidx.compose.animation.Crossfade(
+                    targetState = l, animationSpec = tween(450), label = "lyricsSwap",
+                    modifier = Modifier.weight(1f).fillMaxWidth(),
+                ) { l ->
+                val active by remember(l) { derivedStateOf { activeIndexFor(l, position()) } }
                 val listState = rememberLazyListState()
-                BoxWithConstraints(Modifier.weight(1f).fillMaxWidth()) {
+                // Lines near the current one rise in one after the other, the first just
+                // above it; the rest of the screen's lines have no visible entrance.
+                val staggerBase = remember(l) { (active - 4).coerceAtLeast(0) }
+                BoxWithConstraints(Modifier.fillMaxSize()) {
                     val offsetPx = with(LocalDensity.current) { (maxHeight * 0.28f).roundToPx() }
                     AutoFollow(listState, active, offsetPx, enabled = l.synced)
                     LazyColumn(
@@ -365,6 +490,7 @@ fun LyricsScreen(
                                 position = position,
                                 translation = if (state.showTranslation) state.translations?.getOrNull(i) else null,
                                 onTap = if (l.synced) ({ jumpTo(line.timeMs) }) else null,
+                                modifier = Modifier.revealIn(reveal, 0.35f + 0.045f * (i - staggerBase).coerceIn(0, 8), 22f),
                             )
                         }
                         l.provider?.let { p ->
@@ -379,6 +505,7 @@ fun LyricsScreen(
                         }
                     }
                 }
+                }
                 val sameLanguage = state.sourceLanguage?.substringBefore('-')
                     ?.equals(targetLanguage.substringBefore('-'), ignoreCase = true) == true
                 LyricsControls(
@@ -389,6 +516,7 @@ fun LyricsScreen(
                     translating = state.translating && state.translationRequested,
                     onTranslate = { vm.toggleTranslation(targetLanguage) },
                     onShare = { shareLyrics(context, title, artist, l.lines.getOrNull(active)?.text) },
+                    modifier = Modifier.revealIn(reveal, 0.5f, 16f, span = 0.5f),
                 )
             }
         }
@@ -439,10 +567,11 @@ private fun LyricsControls(
     translating: Boolean,
     onTranslate: () -> Unit,
     onShare: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     val durationMs = SongPlayer.getDuration().coerceAtLeast(0L)
     val playing = com.music.spotui.di.Graph.currentSongState.playingState.value
-    Column(Modifier.fillMaxWidth().padding(horizontal = 24.dp).padding(bottom = 8.dp)) {
+    Column(modifier.fillMaxWidth().padding(horizontal = 24.dp).padding(bottom = 8.dp)) {
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(bottom = 10.dp)) {
             LyricsChip(stringResource(R.string.lyrics_fullscreen_chip_label_share), R.drawable.ic_share, false, false, palette, onShare)
             if (showTranslate) LyricsChip(stringResource(R.string.lyrics_fullscreen_chip_label_translate), R.drawable.ic_translate_lyrics, translationActive, translating, palette, onTranslate)
@@ -543,6 +672,8 @@ fun InlineLyrics(
         modifier = Modifier
             .fillMaxWidth()
             .padding(16.dp, 8.dp, 16.dp, 40.dp)
+            // The card's live bounds are read when the lyrics open / close (see LyricsOverlay).
+            .onGloballyPositioned { LyricsCardAnchor.coords = it }
             .clip(RoundedCornerShape(12.dp))
             .background(palette.background)
             .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) { onExpand() }
@@ -606,4 +737,95 @@ private fun CardIconButton(palette: LyricsPalette, description: String, icon: @C
             .background(Color.Black.copy(alpha = 0.25f))
             .clickable(onClick = onClick),
     ) { icon() }
+}
+
+/** The inline card's layout node, so the full screen can grow out of it and fold back into it. */
+private object LyricsCardAnchor { var coords: LayoutCoordinates? = null }
+
+/** The visible part of the container: a rounded rectangle that moves from the card to the screen. */
+private class LyricsWindow(private val rect: Rect, private val radius: Float) : Shape {
+    override fun createOutline(size: Size, layoutDirection: LayoutDirection, density: Density): Outline =
+        Outline.Rounded(RoundRect(rect, CornerRadius(radius)))
+}
+
+private val CARD_CORNER = 12.dp
+
+/**
+ * Hosts [LyricsScreen] as a container transform: the screen is laid out once at full size and
+ * revealed through a window that grows from the inline card's bounds (position, size, corner
+ * radius, same colour) to the whole page, while its lines rise in staggered; closing plays
+ * it backwards into the card. Only graphicsLayer / draw state moves per frame, no recomposition.
+ * Without a visible card (swipe-up open, card scrolled away) it slides up as it always did.
+ */
+@Composable
+fun LyricsOverlay(
+    visible: Boolean,
+    title: String,
+    artist: String,
+    album: String,
+    accentColor: Color,
+    onClose: () -> Unit,
+) {
+    val progress = remember { Animatable(0f) }
+    var mounted by remember { mutableStateOf(false) }
+    // Window the container starts from, in this host's pixels; null = slide-up fallback.
+    var from by remember { mutableStateOf<Rect?>(null) }
+    val host = remember { arrayOfNulls<LayoutCoordinates>(1) }
+
+    fun cardRect(): Rect? {
+        val h = host[0]?.takeIf { it.isAttached } ?: return null
+        val card = LyricsCardAnchor.coords?.takeIf { it.isAttached } ?: return null
+        val r = h.localBoundingBoxOf(card, clipBounds = false)
+        val screen = Rect(0f, 0f, h.size.width.toFloat(), h.size.height.toFloat())
+        val seen = r.intersect(screen)
+        // Mostly off-screen card: growing out of it would look odd, slide up instead.
+        return if (r.height > 0f && seen.height >= r.height * 0.4f && seen.width > 0f) r else null
+    }
+
+    LaunchedEffect(visible) {
+        if (visible) {
+            from = cardRect()
+            mounted = true
+            val spec = if (from != null) tween<Float>(560, easing = FastOutSlowInEasing) else tween(250, easing = EaseOut)
+            progress.animateTo(1f, spec)
+        } else if (mounted) {
+            // Fold into the card where it is now; a slide-up opening slides back down.
+            if (from != null) cardRect()?.let { from = it }
+            val spec = if (from != null) tween<Float>(470, easing = FastOutSlowInEasing) else tween(200, easing = EaseOut)
+            progress.animateTo(0f, spec)
+            mounted = false
+        }
+    }
+
+    Box(Modifier.fillMaxSize().onGloballyPositioned { host[0] = it }) {
+        if (!mounted) return@Box
+        val window = from
+        val cornerPx = with(LocalDensity.current) { CARD_CORNER.toPx() }
+        Box(
+            Modifier.fillMaxSize().graphicsLayer {
+                val p = progress.value
+                if (window == null) {
+                    translationY = (1f - p) * size.height
+                } else {
+                    shape = LyricsWindow(
+                        Rect(
+                            window.left * (1f - p), window.top * (1f - p),
+                            window.right + (size.width - window.right) * p, window.bottom + (size.height - window.bottom) * p,
+                        ),
+                        cornerPx * (1f - p),
+                    )
+                    clip = true
+                }
+            },
+        ) {
+            LyricsScreen(
+                title = title,
+                artist = artist,
+                album = album,
+                accentColor = accentColor,
+                onClose = onClose,
+                reveal = if (window == null) null else ({ progress.value }),
+            )
+        }
+    }
 }

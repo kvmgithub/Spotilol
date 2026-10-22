@@ -15,7 +15,7 @@
     <string name="main_update_available">Υπάρχει νέα ενημέρωση</string>
 
     <string name="notif_channel_media_name">Αναπαραγωγή πολυμέσων</string>
-    <string name="notif_channel_media_description">Χειριστήρια αναπαραγωγής πολυμέσων του Myspoti</string>
+    <string name="notif_channel_media_description">Χειριστήρια αναπαραγωγής πολυμέσων του MySpotilol</string>
     <string name="notif_action_previous">Προηγούμενο</string>
     <string name="notif_action_next">Επόμενο</string>
     <string name="notif_action_play">Αναπαραγωγή</string>

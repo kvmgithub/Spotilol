@@ -7,6 +7,10 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import app.myspoti.engine.R
+import com.music.spotui.data.entity.LibraryEntry
 import java.util.concurrent.ConcurrentHashMap
 
 /**
@@ -41,7 +45,30 @@ object SpotifySync {
         }
     }
 
-    /** Removes every occurrence of a track from one of the user's playlists. */
+    /**
+     * Takes one row out of a playlist, named by its row id (not by its song: the same song twice
+     * in a playlist is two rows, and removing "the song" took both). Without a row id (an old
+     * cache) the first row of that song goes, never all of them.
+     */
+    fun removeRowFromPlaylist(context: Context, playlistId: String, trackId: String, rowUid: String, onDone: (Boolean) -> Unit = {}) {
+        if (playlistId.isBlank() || (trackId.isBlank() && rowUid.isBlank())) { onDone(false); return }
+        scope.launch {
+            val ok = runCatching {
+                val uri = "spotify:playlist:$playlistId"
+                val uid = rowUid.ifBlank { allTracks(uri).firstOrNull { it.uri == "spotify:track:$trackId" }?.uid }
+                checkNotNull(uid) { "track not in playlist" }
+                api.playlists.removeTracks(uri, listOf(uid))
+            }.onFailure { Log.w(TAG, "remove row $rowUid ($trackId) from $playlistId failed: ${it.message}") }.isSuccess
+            // The song may still be in the playlist through another row: read it again when asked.
+            if (ok) membershipCache.remove(playlistId)
+            onDone(ok)
+        }
+    }
+
+    /**
+     * Removes every occurrence of a track from one of the user's playlists: the "Saved in"
+     * sheet's switch means "this song is not in that playlist any more".
+     */
     fun removeTrackFromPlaylist(context: Context, playlistId: String, trackId: String, onDone: (Boolean) -> Unit = {}) {
         if (playlistId.isBlank() || trackId.isBlank()) { onDone(false); return }
         scope.launch {
@@ -56,21 +83,62 @@ object SpotifySync {
         }
     }
 
-    /** Creates a playlist (and adds the track when given). */
-    fun createPlaylistWithTrack(context: Context, name: String, trackId: String, folderUri: String? = null, onDone: (Boolean) -> Unit = {}) {
-        if (name.isBlank()) { onDone(false); return }
+    // Visibility taps are written one at a time, in the order they were made.
+    private val visibilityWrites = Mutex()
+
+    /** Who may see or change a playlist (public, private, collaborative), as chosen. [onDone] gets whether Spotify took it. */
+    fun setPlaylistAccess(uri: String, access: app.myspoti.api.PlaylistAccess, onDone: (Boolean) -> Unit = {}) {
         scope.launch {
-            val ok = runCatching {
-                val uri = api.playlists.create(name.trim(), folderUri)
-                if (trackId.isNotBlank()) {
-                    api.playlists.addTracks(uri, listOf("spotify:track:$trackId"))
-                    membershipCache[uri.substringAfterLast(':')] = ConcurrentHashMap.newKeySet<String>().apply { add(trackId) }
-                }
-            }.onFailure { Log.w(TAG, "create playlist '$name' failed: ${it.message}") }.isSuccess
-            Api.HomeCache.libraryRoot = null
-            folderUri?.let { Api.HomeCache.folders.remove(it) }
+            val ok = visibilityWrites.withLock {
+                runCatching { api.playlists.setAccess(uri, access) }
+                    .onFailure { Log.w(TAG, "access of $uri to $access refused: ${it.message}") }.isSuccess
+            }
             onDone(ok)
         }
+    }
+
+    /** Whether the playlist is listed on the user's profile. */
+    fun setPlaylistPublished(uri: String, published: Boolean, onDone: (Boolean) -> Unit = {}) {
+        scope.launch {
+            val ok = visibilityWrites.withLock {
+                runCatching { api.playlists.setPublished(uri, published) }
+                    .onFailure { Log.w(TAG, "profile listing of $uri to $published refused: ${it.message}") }.isSuccess
+            }
+            onDone(ok)
+        }
+    }
+
+    private val pendingIds = java.util.concurrent.atomic.AtomicInteger()
+
+    /**
+     * Creates a playlist (and adds the track when given). In the library it shows at once as a
+     * row that cannot be opened yet, and becomes the real playlist when Spotify has answered;
+     * a refused creation takes the row away again.
+     */
+    fun createPlaylistWithTrack(context: Context, name: String, trackId: String, folderUri: String? = null, onDone: (Boolean) -> Unit = {}) {
+        val title = name.trim()
+        if (title.isBlank()) { onDone(false); return }
+        val app = context.applicationContext
+        val placeholderId = LibraryEdits.PENDING_PREFIX + pendingIds.incrementAndGet()
+        val edit = LibraryEdits.Add(folderUri, LibraryEntry(
+            spotifyId = placeholderId, name = title,
+            subtitle = app.getString(R.string.assisted_curation_search_playlist) + ProfileCache.name?.let { " • $it" }.orEmpty(),
+            coverUri = "", isPlaylist = true, uri = placeholderId,
+            addedAt = java.time.Instant.now().toString(),
+        ))
+        var trackAdded = true
+        LibraryEdits.run(context, edit, write = {
+            val uri = api.playlists.create(title, folderUri)
+            LibraryEdits.resolve(edit, edit.entry.copy(spotifyId = uri.substringAfterLast(':'), uri = uri))
+            Api.HomeCache.libraryRoot = null
+            folderUri?.let { Api.HomeCache.folders.remove(it) }
+            if (trackId.isNotBlank()) {
+                // The playlist exists now: a refused track must not take its row away again.
+                trackAdded = runCatching { api.playlists.addTracks(uri, listOf("spotify:track:$trackId")) }
+                    .onFailure { Log.w(TAG, "add $trackId to new playlist '$title' failed: ${it.message}") }.isSuccess
+                if (trackAdded) membershipCache[uri.substringAfterLast(':')] = ConcurrentHashMap.newKeySet<String>().apply { add(trackId) }
+            }
+        }, onDone = { ok -> onDone(ok && trackAdded) })
     }
 
     private suspend fun allTracks(uri: String): List<app.myspoti.api.Track> {

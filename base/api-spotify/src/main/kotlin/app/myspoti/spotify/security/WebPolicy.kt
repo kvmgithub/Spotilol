@@ -21,9 +21,6 @@ object WebPolicy {
         "www.facebook.com", "m.facebook.com", "appleid.apple.com",
     )
 
-    /** Spotify's sign-in hosts; a page there means the user has to sign in. */
-    private val SPOTIFY_AUTH = setOf("accounts.spotify.com", "challenge.spotify.com")
-
     private val SPCLIENT = Regex("[a-z0-9]+-spclient\\.spotify\\.com")
     private val RELAY_PATHS = listOf("/connect-state/v1/", "/track-playback/v1/")
 
@@ -54,10 +51,13 @@ object WebPolicy {
     /** Main-frame navigation target the hidden player may load. */
     fun isNavigation(url: String?): Boolean = httpsHost(url).let { it in LINKS || it in LOGIN }
 
-    /** A sign-in page: Spotify's account or challenge pages, or a /login route on Spotify. */
+    /**
+     * A sign-in page: Spotify's account or challenge pages, a /login route on Spotify, or an
+     * identity provider's page while "Continue with Google / Facebook / Apple" runs.
+     */
     fun isLoginPage(url: String?): Boolean {
         val host = httpsHost(url) ?: return false
-        if (host in SPOTIFY_AUTH) return true
+        if (host in LOGIN) return true
         return (host == "spotify.com" || host.endsWith(".spotify.com")) && "/login" in path(url!!)
     }
 
@@ -81,8 +81,8 @@ object WebPolicy {
     /** Protected media (Widevine) is granted to the player page only. */
     fun isDrmOrigin(origin: String?): Boolean = isPlayer(origin)
 
-    /** Spotify links the app opens itself. */
-    fun isDeepLink(url: String?): Boolean = httpsHost(url) in LINKS
+    /** Spotify links the app opens itself, spoti.fi short links included (resolved by the app, not navigated to). */
+    fun isDeepLink(url: String?): Boolean = httpsHost(url).let { it in LINKS || it == "spoti.fi" }
 
     /**
      * A cookie pair safe to restore into the WebView: no attributes, no header injection.

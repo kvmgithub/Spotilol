@@ -14,7 +14,7 @@
     <string name="main_update_available">Yeni bir güncelleme mevcut</string>
 
     <string name="notif_channel_media_name">Medya Oynatma</string>
-    <string name="notif_channel_media_description">Myspoti medya oynatma kontrolleri</string>
+    <string name="notif_channel_media_description">MySpotilol medya oynatma kontrolleri</string>
     <string name="notif_action_previous">Önceki</string>
     <string name="notif_action_next">Sonraki</string>
     <string name="notif_action_play">Oynat</string>

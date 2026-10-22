@@ -83,6 +83,7 @@ import com.bumptech.glide.integration.compose.ExperimentalGlideComposeApi
 import com.bumptech.glide.integration.compose.CrossFade
 import com.bumptech.glide.integration.compose.GlideImage
 import com.music.spotui.data.api.Api
+import com.music.spotui.data.api.LibraryEdits
 import com.music.spotui.data.api.Response
 import com.music.spotui.data.entity.AccountModel
 import app.myspoti.engine.R
@@ -112,7 +113,7 @@ fun LibraryScreen(navController: NavController) {
     androidx.compose.runtime.LaunchedEffect((entries as? Response.Success)?.data?.take(8)?.map { it.spotifyId }) {
         val top = (entries as? Response.Success)?.data.orEmpty().take(8).mapNotNull { e ->
             when {
-                e.isFolder || e.spotifyId.startsWith(LOCAL_PLAYLIST_PREFIX) -> null
+                e.isFolder || LibraryEdits.isPending(e.spotifyId) || e.spotifyId.startsWith(LOCAL_PLAYLIST_PREFIX) -> null
                 e.spotifyId in setOf(Api.HomeCache.LOCAL_FILES_ID, Api.HomeCache.DOWNLOADS_ID, Api.HomeCache.EPISODES_ID) -> null
                 e.spotifyId == Api.HomeCache.LIKED_SONGS_ID -> "liked" to ""
                 e.isPlaylist -> "playlist" to e.spotifyId
@@ -273,10 +274,15 @@ fun LibraryScreen(navController: NavController) {
         }
 
         val followedArtists by libraryViewModel.followedArtists.collectAsState()
+        val refreshing by libraryViewModel.refreshing.collectAsState()
         when (entries) {
             is Response.Loading -> LibrarySkeleton(PaddingValues(0.dp))
             // Offline / error: the pinned folders (Local Files, Downloaded) stay reachable.
-            else -> Box {
+            else -> androidx.compose.material3.pulltorefresh.PullToRefreshBox(
+                isRefreshing = refreshing,
+                onRefresh = { libraryViewModel.refresh() },
+                modifier = Modifier.fillMaxSize(),
+            ) {
                 val localName = stringResource(R.string.local_files_title)
                 val downloadsName = stringResource(R.string.collection_downloaded)
                 val localSubtitle = stringResource(R.string.assisted_curation_search_playlist) + " • " + stringResource(R.string.local_playlist_subtitle)
@@ -492,7 +498,7 @@ fun SumUpLibraryScreen(
                         Text(text = entry.subtitle, color = Color.Gray, fontSize = 12.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     }
                 }
-                if (entry.uri.isNotBlank()) Icon(Icons.Default.MoreVert, stringResource(R.string.content_description_context_menu),
+                if (entry.uri.isNotBlank() && !LibraryEdits.isPending(entry.spotifyId)) Icon(Icons.Default.MoreVert, stringResource(R.string.content_description_context_menu),
                     tint = Color(0xFFB3B3B3), modifier = Modifier.size(36.dp).clip(CircleShape).clickable { itemMenu = entry }.padding(6.dp))
             }
         }
@@ -555,6 +561,7 @@ fun LibraryEntryCover(entry: LibraryEntry, modifier: Modifier) {
 const val LOCAL_PLAYLIST_PREFIX = "local-playlist:"
 
 private fun prefetchLibraryEntry(entry: LibraryEntry) = when {
+    LibraryEdits.isPending(entry.spotifyId) -> Unit
     entry.isFolder || entry.spotifyId.startsWith(LOCAL_PLAYLIST_PREFIX) -> Unit
     entry.spotifyId == Api.HomeCache.LOCAL_FILES_ID || entry.spotifyId == Api.HomeCache.DOWNLOADS_ID || entry.spotifyId == Api.HomeCache.EPISODES_ID -> Unit
     entry.spotifyId == Api.HomeCache.LIKED_SONGS_ID -> ContextViewModel.prefetch("liked", "")
@@ -563,6 +570,8 @@ private fun prefetchLibraryEntry(entry: LibraryEntry) = when {
 }
 
 private fun openLibraryEntry(entry: LibraryEntry, navController: NavController) {
+    // A playlist or folder Spotify is still creating has no page yet.
+    if (LibraryEdits.isPending(entry.spotifyId)) return
     if (entry.isFolder) navController.navigate(folderRoute(entry.folderUri, entry.name))
     else if (entry.spotifyId.startsWith(LOCAL_PLAYLIST_PREFIX)) navController.navigate(localPlaylistRoute(entry.spotifyId.removePrefix(LOCAL_PLAYLIST_PREFIX)))
     else if (entry.spotifyId == Api.HomeCache.LOCAL_FILES_ID) navController.navigate(Routes.LocalFiles.route)

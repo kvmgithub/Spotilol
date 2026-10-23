@@ -363,6 +363,7 @@
     <string name="page_load_failed">Impossible de charger cette page.\nVérifiez votre connexion et réessayez.</string>
     <string name="jam_paste_link">Rejoindre avec un lien copié</string>
     <string name="play_refused">Spotify a refusé cette lecture sur votre compte. Dans certains pays, un compte gratuit ne joue qu’en aléatoire : essayez le bouton aléatoire.</string>
+    <string name="drm_missing">Lecture impossible ici : l’Android System WebView de ce téléphone n’a pas de DRM Widevine fonctionnel, dont Spotify a besoin. Mettez à jour Android System WebView et Chrome dans le Play Store, puis choisissez-le dans Paramètres > Options pour les développeurs > Implémentation WebView.</string>
     <string name="artist_liked_songs">Titres likés</string>
     <plurals name="artist_liked_songs_count">
         <item quantity="one">%1$d titre de %2$s</item>

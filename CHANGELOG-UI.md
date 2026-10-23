@@ -6,6 +6,30 @@ Each version section is the text of the GitHub pre-release tagged `ui-v<version>
 
 ## [Unreleased]
 
+## [0.8.3] - 2026-10-23
+
+Myspoti 2.0.2-beta.2 merged (Myspoti has no final 2.0.2 yet; its beta.1 left Spotify's player without a device, beta.2 undoes that part).
+
+### Fixed
+- A play Spotify acknowledges but never starts (the song stays at 0:00) now goes on to the fallbacks after 10 s instead of leaving a silent player.
+- A song left paused right after an ad break, without anyone pausing it, starts by itself.
+- While another device of the account plays (Spotify Connect, the desktop app), the app no longer seeks, skips or sets the volume on it; the computer stopped jumping tracks.
+- Repeat keeps the mode you chose after a new play or a reloaded page.
+- Sign-in on a slow phone: the wait for the session only counts once the player page is ready, so the app no longer sends you back to the login page in a loop.
+- The + of a song in a search or an album is no longer shown as saved because an own playlist plays.
+- Recents lists a play whose playlist or album row Spotify did not announce instead of dropping it.
+
+### Added
+- If the phone's WebView has no working Widevine (which every Spotify stream needs), the app says so after a play fails, and how to fix it.
+- Playlists without a cover show the mosaic of their songs' albums.
+
+### Changed
+- App font: Manrope instead of Figtree (Cyrillic and Greek text now uses the app's font too).
+- Big playlists show their own controls and members sooner.
+
+### Not taken over
+- Myspoti's download and Android Auto fixes (both are not part of MySpotilol).
+
 ## [0.8.2] - 2026-10-22
 
 Myspoti 2.0.1 merged.

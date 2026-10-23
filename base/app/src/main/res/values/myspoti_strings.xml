@@ -363,6 +363,7 @@
     <string name="page_load_failed">Couldn\'t load this page.\nCheck your connection and try again.</string>
     <string name="jam_paste_link">Join with a copied link</string>
     <string name="play_refused">Spotify refused to play this on your account. Free accounts in some countries can only play shuffled: try the shuffle button.</string>
+    <string name="drm_missing">Playback is impossible here: this phone\'s Android System WebView has no working Widevine DRM, which Spotify needs. Update Android System WebView and Chrome in the Play Store, and pick it under Settings > Developer options > WebView implementation.</string>
     <string name="artist_liked_songs">Liked songs</string>
     <plurals name="artist_liked_songs_count">
         <item quantity="one">%1$d song by %2$s</item>

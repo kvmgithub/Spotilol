@@ -43,4 +43,5 @@
     <string name="spotilol_welcome_rotate_lyrics">mit Spotifys synchronen Songtexten.</string>
     <string name="spotilol_welcome_rotate_crossfade">mit echtem Überblenden.</string>
     <string name="spotilol_welcome_rotate_boost">bis zu doppelt so laut.</string>
+    <string name="drm_missing">Hier ist keine Wiedergabe möglich: Das Android System WebView dieses Telefons hat kein funktionierendes Widevine-DRM, das Spotify braucht. Aktualisiere Android System WebView und Chrome im Play Store und wähle es unter Einstellungen > Entwickleroptionen > WebView-Implementierung.</string>
 </resources>

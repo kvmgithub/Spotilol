@@ -31,4 +31,19 @@ class SpotifyImagesTest {
 
     @Test fun anythingElseIsUntouched() =
         assertEquals("spotify:track:4cOdK2wGLETKBW3PvgPWqT", spotifyImageUrl("spotify:track:4cOdK2wGLETKBW3PvgPWqT"))
+
+    private fun c(id: String) = "https://i.scdn.co/image/$id"
+
+    @Test fun fourDifferentAlbumsMakeTheMosaicOfAPlaylistWithoutCover() = assertEquals(
+        "https://mosaic.scdn.co/640/aabbccdd",
+        mosaicCoverFor(listOf(c("aa"), c("aa"), c("bb"), c("cc"), c("dd"), c("ee"))),
+    )
+
+    // Two or three images are refused by the mosaic host: the first album's cover stands in.
+    @Test fun fewerThanFourAlbumsUseTheFirstCover() = assertEquals(c("aa"), mosaicCoverFor(listOf(c("aa"), c("bb"), c("aa"))))
+
+    @Test fun noSpotifyCoverGivesNothing() {
+        assertEquals("", mosaicCoverFor(emptyList()))
+        assertEquals("", mosaicCoverFor(listOf("", "https://example.com/x.jpg")))
+    }
 }

@@ -75,6 +75,8 @@ class Bridge(private val host: BridgeHost, scope: CoroutineScope) {
             "refused" -> _events.tryEmit("refused" to msg)
             // The volume boost's probe: sound through Web Audio or not (see "volume boost").
             "boost" -> _events.tryEmit("boost" to msg)
+            // The page's EME probe (see player-bridge.js): whether Widevine works in this WebView.
+            "drm" -> _events.tryEmit("drm" to msg)
             "error" -> _ready.value = false
         }
     }

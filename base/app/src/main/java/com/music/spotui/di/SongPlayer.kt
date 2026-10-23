@@ -208,8 +208,16 @@ object SongPlayer {
         }
         scope.launch {
             MyspotiRuntime.spotify.player.refused.collect {
-                android.widget.Toast.makeText(Graph.app, app.myspoti.engine.R.string.play_refused, android.widget.Toast.LENGTH_LONG).show()
+                // No Widevine in this WebView: the refusal is the WebView's, not the account's.
+                val message = if (MyspotiRuntime.spotify.player.drmMissing.value) app.myspoti.engine.R.string.drm_missing else app.myspoti.engine.R.string.play_refused
+                android.widget.Toast.makeText(Graph.app, message, android.widget.Toast.LENGTH_LONG).show()
             }
+        }
+        // Said once the page has asked its WebView: a device that cannot decrypt Spotify's streams
+        // plays nothing (no sound, 0:00), and nothing else in the app says why.
+        scope.launch {
+            MyspotiRuntime.spotify.player.drmMissing.first { it }
+            android.widget.Toast.makeText(Graph.app, app.myspoti.engine.R.string.drm_missing, android.widget.Toast.LENGTH_LONG).show()
         }
         scope.launch {
             MyspotiRuntime.host.licenseLimitedUntil.collect { until ->

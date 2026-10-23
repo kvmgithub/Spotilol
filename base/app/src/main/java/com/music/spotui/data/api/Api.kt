@@ -847,7 +847,9 @@ class Api constructor(
             SongPlayer.registerContext(songs.map { it.url }, uri)
             val total = songs.sumOf { it.durationMs.toLong() }
             val meta = listOf(saves, if (total > 0) durationLabel(total) else "").filter { it.isNotBlank() }.joinToString(" • ")
-            return Response.Success(header.copy(metaLine = meta, tracks = songs.toList(), complete = done))
+            // A playlist without a cover of its own shows the mosaic of its songs' albums, as in the official app.
+            val cover = header.coverUri.ifBlank { com.music.spotui.ui.components.mosaicCoverFor(songs.take(200).map { it.coverUri }) }
+            return Response.Success(header.copy(coverUri = cover, metaLine = meta, tracks = songs.toList(), complete = done))
         }
         if (first != null) {
             songs += first.items.map(::songOf)

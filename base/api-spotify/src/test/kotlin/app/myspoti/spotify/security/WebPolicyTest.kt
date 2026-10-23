@@ -59,6 +59,7 @@ class WebPolicyTest {
         ).forEach { assertTrue(WebPolicy.isRelayTarget(it), it) }
         listOf(
             "https://gew4-spclient.spotify.com/gabo-receiver-service/public/v3/events",
+            "https://gew4-spclient.spotify.com/melody/v1/msg/batch",
             "https://api-partner.spotify.com/connect-state/v1/x", "https://evil-spclient.spotify.com.evil.test/connect-state/v1/",
             "http://gew4-spclient.spotify.com/connect-state/v1/", "https://gew4-spclient.spotify.com:8443/connect-state/v1/",
             "https://gew4-spclient.spotify.com/connect-state/v1/../../melody/v1/x", "https://a.b-spclient.spotify.com/connect-state/v1/",

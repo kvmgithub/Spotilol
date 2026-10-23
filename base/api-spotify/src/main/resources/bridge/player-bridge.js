@@ -1149,9 +1149,32 @@
   window.addEventListener('error', e => post({ type: 'jserror', error: String(e.message || e.error || '').slice(0, 300) }));
   window.addEventListener('unhandledrejection', e => post({ type: 'jserror', error: String((e.reason && (e.reason.stack || e.reason.message)) || e.reason || '').slice(0, 300) }));
 
+  // Widevine, which every Spotify stream is encrypted with: a WebView without a working one (an
+  // outdated or stripped Android System WebView, a device without a licence) plays nothing, which
+  // looks like "no sound", "refused" or "stuck at 0:00". Asked once per page, from the page's own
+  // EME; an empty robustness is the weakest level every Widevine device has (L3).
+  // Only on the host's request after a play failed ("drm.probe"), never at boot: asked while the
+  // player sets up its own EME (2.0.2-beta.1), the page never registered its playback device.
+  let drm = null;
+  let drmAsked = false;
+  const probeDrm = () => {
+    if (drmAsked) return;
+    drmAsked = true;
+    const report = (ok, error) => { drm = { type: 'drm', ok, error: error || '' }; post(drm); };
+    try {
+      if (!navigator.requestMediaKeySystemAccess) return report(false, 'no EME in this WebView');
+      navigator.requestMediaKeySystemAccess('com.widevine.alpha', [{
+        initDataTypes: ['cenc'],
+        audioCapabilities: [{ contentType: 'audio/mp4; codecs="mp4a.40.2"' }],
+      }]).then(() => report(true), e => report(false, String((e && e.message) || e).slice(0, 200)));
+    } catch (e) { report(false, String((e && e.message) || e).slice(0, 200)); }
+  };
+  commands['drm.probe'] = () => { probeDrm(); return drm; };
+
   const announce = () => {
     if (!services) return;
     post({ type: 'ready', version: VERSION });
+    if (drm) post(drm);
     lastState = '';
     pushState();
   };

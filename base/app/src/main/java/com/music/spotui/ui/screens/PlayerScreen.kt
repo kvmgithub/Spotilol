@@ -1389,7 +1389,14 @@ fun AddButton(song: () -> SongsModel, liked: Boolean, size: androidx.compose.ui.
     }
     // A queued song plays with the list still as its context: only the list's own rows count.
     val fromList = SongPlayer.nowPlaying.value.provider.let { it.isBlank() || it == "context" }
-    val saved = liked || (inOwnList && fromList && !SmartShuffle.isRecommendation(current.spotifyTrackId))
+    val saved = com.music.spotui.ui.components.savedSomewhere(
+        liked = liked,
+        isRecommendation = SmartShuffle.isRecommendation(current.spotifyTrackId),
+        // The list is the player's: it says nothing of a row of a search result or an album.
+        isPlayingTrack = current.spotifyTrackId.isNotBlank() && current.spotifyTrackId == SongPlayer.currentTrackId,
+        playingFromOwnList = inOwnList,
+        fromList = fromList,
+    )
     if (SmartShuffle.isRecommendation(current.spotifyTrackId)) {
         Icon(
             Icons.Outlined.AddCircleOutline,

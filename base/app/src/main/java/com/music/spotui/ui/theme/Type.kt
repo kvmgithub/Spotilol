@@ -9,9 +9,12 @@ import androidx.compose.ui.unit.sp
 import app.myspoti.engine.R
 
 /**
- * UI typeface: Figtree (SIL Open Font License 1.1, licenses/Figtree-OFL.txt), a free
- * geometric grotesque close to the official app's look. One variable font file,
- * each weight picked through its "wght" axis.
+ * UI typeface: Manrope (SIL Open Font License 1.1, licenses/Manrope-OFL.txt), a free
+ * geometric sans close to the official app's look. One variable font file, each weight
+ * picked through its "wght" axis (200 to 800: the heaviest cut asks for 900 and gets 800).
+ * It has Latin, Cyrillic and Greek glyphs. The Figtree it replaced had no Cyrillic, so Android
+ * drew those letters with the system font and a Russian or Ukrainian interface jumped between
+ * two typefaces (issue #62).
  */
 @OptIn(androidx.compose.ui.text.ExperimentalTextApi::class)
 private fun sans(weight: Int) = Font(

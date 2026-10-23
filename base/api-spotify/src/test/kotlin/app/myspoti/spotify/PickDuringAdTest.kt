@@ -43,6 +43,8 @@ class PickDuringAdTest {
         scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
         host = FakeHost()
         player = SpotifyPlayer(Bridge(host, scope), scope)
+        // A message posted before the bridge listens is lost (a slow CI machine): wait for it.
+        waitFor("bridge listening") { host.messages.subscriptionCount.value > 0 }
     }
 
     @AfterEach fun down() {

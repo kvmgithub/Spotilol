@@ -73,6 +73,8 @@ class Bridge(private val host: BridgeHost, scope: CoroutineScope) {
             "queue" -> _events.tryEmit("queue" to (msg["queue"] ?: JsonNull))
             // Spotify refused a playback command (HTTP 402/403 on Connect), see ControlRelay.
             "refused" -> _events.tryEmit("refused" to msg)
+            // The page's EME probe (see player-bridge.js): whether Widevine works in this WebView.
+            "drm" -> _events.tryEmit("drm" to msg)
             "error" -> _ready.value = false
         }
     }

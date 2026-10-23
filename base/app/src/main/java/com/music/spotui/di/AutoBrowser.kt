@@ -30,6 +30,12 @@ class AudioNotReady(what: String) : IllegalStateException("player not ready: $wh
 object AutoBrowser {
     const val ROOT = "root"
     private const val TIMEOUT_MS = 15_000L
+    /**
+     * The most one folder lists. A library of thousands of liked songs, each with a cover the car
+     * fetches through [ArtworkProvider] (a binder thread held per image), is what froze Android
+     * Auto's screen; the car shows no more than a page of a list while driving anyway.
+     */
+    private const val MAX_ITEMS = 300
     /** Cold start: the car binds before the hidden Web Player is up; browse waits this long. */
     private const val READY_WAIT_MS = 25_000L
 
@@ -55,11 +61,11 @@ object AutoBrowser {
                 val wantPlaylists = parentId == "playlists"
                 val entries = (firstResult { Graph.api.getLibrary() } ?: emptyList())
                     .filter { it.isPlaylist == wantPlaylists && it.spotifyId != com.music.spotui.data.api.Api.HomeCache.LIKED_SONGS_ID }
-                entries.map { e ->
+                entries.take(MAX_ITEMS).map { e ->
                     browsable(if (wantPlaylists) "pl:${e.spotifyId}" else "al:${e.spotifyId}", e.name, e.coverUri, subtitle = e.subtitle)
                 }
             }
-            parentId == "artists" -> Graph.api.getFollowedArtists().filter { it.id.isNotBlank() }.map { a ->
+            parentId == "artists" -> Graph.api.getFollowedArtists().filter { it.id.isNotBlank() }.take(MAX_ITEMS).map { a ->
                 browsable("ar:${a.id}|${a.name}", a.name, a.coverUri)
             }
             parentId == "liked" -> tracksOf(firstResult { Graph.api.getLikedPage() })
@@ -117,7 +123,7 @@ object AutoBrowser {
     private fun tracksOf(page: ContextPageModel?): List<MediaItem> {
         page ?: return emptyList()
         pages[page.uri] = page
-        return page.tracks.map { playable(page.uri, it) }
+        return page.tracks.take(MAX_ITEMS).map { playable(page.uri, it) }
     }
 
     private suspend fun <T> firstResult(load: suspend () -> kotlinx.coroutines.flow.Flow<Response<T>>): T? =

@@ -282,29 +282,54 @@ object LosslessSource {
 
     internal data class TidalHit(
         val id: String, val title: String, val artist: String, val durationSec: Int, val isrc: String,
+        /** Every credited artist, when the search lists them (the first alone is [artist]). */
+        val artists: List<String> = emptyList(),
     )
 
     /** Spotify id → Tidal track via the Tidal backend's own search, ISRC or title matched. */
     internal suspend fun tidalHit(info: TrackInfo): TidalHit? {
-        val q = URLEncoder.encode("${info.title} ${info.artist}", "UTF-8")
+        val queries = searchQueries(info.title, info.artist)
         for (endpoint in LosslessRegistry.tidalEndpoints()) {
             if (endpoint.isBlank()) continue
-            val hits = runCatching {
-                val root = JSONObject(get("$endpoint/search/?s=$q", keyHeader()))
-                val items: JSONArray = root.optJSONObject("data")?.optJSONArray("items") ?: JSONArray()
-                (0 until items.length()).mapNotNull { i ->
-                    val o = items.optJSONObject(i) ?: return@mapNotNull null
-                    TidalHit(
-                        id = o.optString("id"), title = o.optString("title"),
-                        artist = o.optJSONObject("artist")?.optString("name").orEmpty(),
-                        durationSec = o.optInt("duration"), isrc = o.optString("isrc"),
-                    )
-                }
-            }.getOrElse { Log.w(TAG, "tidal search $endpoint: ${it.message}"); emptyList() }
-            pickHit(hits, info.isrc, info.title, info.artist, info.durationSec)?.let { return it }
+            for (query in queries) {
+                val q = URLEncoder.encode(query, "UTF-8")
+                val hits = runCatching {
+                    val root = JSONObject(get("$endpoint/search/?s=$q", keyHeader()))
+                    val items: JSONArray = root.optJSONObject("data")?.optJSONArray("items") ?: JSONArray()
+                    (0 until items.length()).mapNotNull { i ->
+                        val o = items.optJSONObject(i) ?: return@mapNotNull null
+                        val names = o.optJSONArray("artists")?.let { a -> (0 until a.length()).mapNotNull { a.optJSONObject(it)?.optString("name") } }.orEmpty()
+                        TidalHit(
+                            id = o.optString("id"), title = fullTitle(o.optString("title"), o.optString("version")),
+                            artist = o.optJSONObject("artist")?.optString("name").orEmpty(),
+                            durationSec = o.optInt("duration"), isrc = o.optString("isrc"),
+                            artists = names,
+                        )
+                    }
+                }.getOrElse { Log.w(TAG, "tidal search $endpoint: ${it.message}"); emptyList() }
+                pickHit(hits, info.isrc, info.title, info.artist, info.durationSec)?.let { return it }
+            }
         }
         return null
     }
+
+    /**
+     * What is typed in the search: the title and the main artist ("A, B" is Spotify's list, Tidal's
+     * search wants one name), then the bare title when Spotify's carries a version suffix
+     * ("Song - 2011 Remaster", "Song - Slowed") that makes the full phrase match nothing.
+     */
+    internal fun searchQueries(title: String, artist: String): List<String> {
+        val main = artist.substringBefore(",").trim()
+        val bare = title.substringBefore(" - ").substringBefore(" (").trim()
+        return listOf("$title $main".trim(), "$bare $main".trim()).filter { it.isNotBlank() }.distinct()
+    }
+
+    /**
+     * Tidal keeps the version of a recording apart from its title ("Song" + "2011 Remaster",
+     * "Slowed + Reverb"), where Spotify writes it into the title: the two are put back together.
+     */
+    internal fun fullTitle(title: String, version: String): String =
+        if (version.isBlank() || titleKey(title).containsAll(titleKey(version))) title else "$title ($version)"
 
     /**
      * The hit is the very recording Spotify plays: both sides have an ISRC and it is the
@@ -320,14 +345,33 @@ object LosslessSource {
     internal fun pickHit(
         hits: List<TidalHit>, isrc: String, title: String, artist: String, durationSec: Int,
     ): TidalHit? {
-        fun key(s: String) = s.lowercase().filter { it.isLetterOrDigit() }
         hits.firstOrNull { isrc.isNotBlank() && it.isrc.equals(isrc, ignoreCase = true) && it.id.isNotBlank() }
             ?.let { return it }
+        val wanted = titleKey(title)
+        val artists = artist.split(',').map(::key).filter { it.isNotEmpty() }
         return hits.firstOrNull {
-            it.id.isNotBlank() && key(it.title) == key(title) && key(it.artist) == key(artist) &&
+            it.id.isNotBlank() && titleKey(it.title) == wanted && sameArtist(it, artists) &&
                 (durationSec <= 0 || kotlin.math.abs(it.durationSec - durationSec) <= 3)
         }
     }
+
+    /**
+     * A title as the words it is made of, order aside: "Song - 2011 Remaster" and "Song (Remastered
+     * 2011)" are one recording, "Song - Slowed" and "Song" are not (the duration tells the rest).
+     */
+    internal fun titleKey(title: String): List<String> = title.lowercase()
+        .split(Regex("[^\\p{L}\\p{N}]+")).filter { it.isNotEmpty() && it != "version" }
+        .map { if (it == "remastered") "remaster" else it }.sorted()
+
+    private fun key(s: String) = s.lowercase().filter { it.isLetterOrDigit() }
+
+    /**
+     * The hit's main artist, or any of its credited ones, is one of Spotify's: Spotify hands over
+     * "A, B", Tidal's search names the first alone, and requiring the whole string made every
+     * track with a featured artist unfindable.
+     */
+    private fun sameArtist(hit: TidalHit, artists: List<String>): Boolean =
+        (listOf(hit.artist) + hit.artists).map(::key).any { it.isNotEmpty() && it in artists }
 
     // Qobuz public search API (app_id/secret are the community's published constants).
     private const val QOBUZ_APP_ID = "712109809"

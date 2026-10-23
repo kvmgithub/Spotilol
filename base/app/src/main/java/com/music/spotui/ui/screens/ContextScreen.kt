@@ -310,9 +310,14 @@ class ContextViewModel(
             return@launch
         }
         val uris = p.tracks.mapNotNull { s -> s.spotifyTrackId.takeIf { it.isNotBlank() }?.let { "spotify:track:$it" } } + p.uri
-        val saved = SongPlayer.libraryContains(uris)
-        savedUris.value = saved
-        contextSaved.value = p.uri in saved
+        // Apart from what follows: the hearts of a 6000-song list are 120 requests one after the
+        // other, and the page's own controls (add songs, members, who added what) waited behind
+        // all of them.
+        launch {
+            val saved = SongPlayer.libraryContains(uris)
+            savedUris.value = saved
+            contextSaved.value = p.uri in saved
+        }
         // A11: Spotify refuses an edit to a list the user cannot change, so the entry is only
         // offered where it would work (own and collaborative playlists, as Spotify itself).
         if (p.type == "playlist") editableContext.value = withContext(Dispatchers.IO) {
@@ -618,6 +623,8 @@ private fun ContextContent(navController: NavController, vm: ContextViewModel, p
                         model = p.coverUri,
                         contentDescription = "",
                         contentScale = ContentScale.Crop,
+                        // No cover at all (a new playlist): the app's own image, not an empty square.
+                        failure = com.bumptech.glide.integration.compose.placeholder(R.drawable.placeholder),
                         modifier = Modifier
                             .fillMaxWidth(0.66f)
                             .aspectRatio(1f)
@@ -710,7 +717,8 @@ private fun ContextContent(navController: NavController, vm: ContextViewModel, p
                         LikeButton(liked = SongPlayer.library[p.uri] ?: contextSaved, size = 28.dp) { vm.toggleContextSaved(p) }
                         Spacer(Modifier.width(20.dp))
                     }
-                    val ids = p.tracks.map { it.spotifyTrackId }.filter { it.isNotBlank() }.distinct()
+                    // Once per list, not at every redraw of the header (6000 songs, mapped each time).
+                    val ids = remember(p.tracks) { p.tracks.map { it.spotifyTrackId }.filter { it.isNotBlank() }.distinct() }
                     // Songs with no matching recording count as settled: the list can still be removed.
                     val downloadedCount = ids.count {
                         com.music.spotui.data.offline.OfflineStore.isDownloaded(it) ||

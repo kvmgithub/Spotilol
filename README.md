@@ -158,7 +158,7 @@ Every push builds and tests on GitHub Actions. A `v*` tag publishes a signed APK
 - [SpotiFLAC Mobile](https://github.com/zarzet/SpotiFLAC-Mobile) (MIT) and its [extensions](https://github.com/zarzet/SpotiFLAC-Extension) (Apache-2.0): the signed download sessions and the Tidal / Qobuz requests.
 - [NewPipeExtractor](https://github.com/TeamNewPipe/NewPipeExtractor) (GPL-3.0): music videos.
 - Lyrics: [LRCLIB](https://lrclib.net), LyricsPlus, lrc.red, Kugou and NetEase; song meanings: [Genius](https://genius.com).
-- [Material Icons](https://github.com/google/material-design-icons) (Apache 2.0) and the [Figtree](https://github.com/erikdkennedy/figtree) font (SIL OFL 1.1, see `base/licenses/`).
+- [Material Icons](https://github.com/google/material-design-icons) (Apache 2.0) and the [Manrope](https://github.com/googlefonts/manrope) font (SIL OFL 1.1, see `base/licenses/`).
 
 Full notices: [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md).
 

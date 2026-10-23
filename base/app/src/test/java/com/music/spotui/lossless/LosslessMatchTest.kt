@@ -47,6 +47,44 @@ class LosslessMatchTest {
         // The track's own ISRC decides which of the same-named candidates wins.
         assertEquals("1", LosslessSource.pickHit(hits, "GBUM71705174", "Real Title", "Artist", 200)?.id)
     }
+
+    @Test
+    fun aVersionKeptApartByTidalIsPutBackInTheTitle() {
+        assertEquals("Song (2011 Remaster)", LosslessSource.fullTitle("Song", "2011 Remaster"))
+        // Already part of the title: not written twice.
+        assertEquals("Song (Slowed)", LosslessSource.fullTitle("Song (Slowed)", "Slowed"))
+        assertEquals("Song", LosslessSource.fullTitle("Song", ""))
+        val hits = listOf(hit("1", LosslessSource.fullTitle("Song", "2011 Remaster"), "Artist", 200))
+        assertEquals("1", LosslessSource.pickHit(hits, "", "Song - 2011 Remaster", "Artist", 200)?.id)
+    }
+
+    @Test
+    fun remasterSpellingsAndSlowedSuffixesMatch() {
+        val hits = listOf(
+            hit("1", "Song (Remastered 2011)", "Artist", 200),
+            hit("2", "Song (Slowed + Reverb)", "Artist", 250),
+        )
+        assertEquals("1", LosslessSource.pickHit(hits, "", "Song - 2011 Remaster", "Artist", 200)?.id)
+        assertEquals("2", LosslessSource.pickHit(hits, "", "Song - Slowed + Reverb", "Artist", 250)?.id)
+        // The plain song is not its slowed version, nor the reverse.
+        assertNull(LosslessSource.pickHit(hits.take(1), "", "Song - Slowed + Reverb", "Artist", 200))
+        assertNull(LosslessSource.pickHit(hits.drop(1), "", "Song", "Artist", 250))
+    }
+
+    @Test
+    fun spotifyListsEveryArtistTidalNamesOne() {
+        val hits = listOf(hit("1", "Real Title", "Artist", 200))
+        assertEquals("1", LosslessSource.pickHit(hits, "", "Real Title", "Artist, Guest", 200)?.id)
+        val credited = listOf(LosslessSource.TidalHit("2", "Real Title", "Other", 200, "", listOf("Other", "Guest")))
+        assertEquals("2", LosslessSource.pickHit(credited, "", "Real Title", "Artist, Guest", 200)?.id)
+        assertNull(LosslessSource.pickHit(hits, "", "Real Title", "Someone, Guest", 200))
+    }
+
+    @Test
+    fun theSearchAsksForOneArtistThenTheBareTitle() {
+        assertEquals(listOf("Song - Slowed A", "Song A"), LosslessSource.searchQueries("Song - Slowed", "A, B"))
+        assertEquals(listOf("Song A"), LosslessSource.searchQueries("Song", "A"))
+    }
 }
 
 /** The FLAC STREAMINFO read that rejects 30 s previews handed out by backends. */

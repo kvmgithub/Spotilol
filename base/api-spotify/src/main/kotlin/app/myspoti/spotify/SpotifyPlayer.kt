@@ -105,6 +105,13 @@ class SpotifyPlayer(private val bridge: Bridge, private val scope: CoroutineScop
      */
     val refused: kotlinx.coroutines.flow.SharedFlow<Unit> = _refused
 
+    private val _drmMissing = kotlinx.coroutines.flow.MutableStateFlow(false)
+    /**
+     * The WebView has no working Widevine: nothing Spotify streams can play on this device, whatever
+     * is tried, and the user has to update or change the WebView (see player-bridge.js).
+     */
+    val drmMissing: kotlinx.coroutines.flow.StateFlow<Boolean> = _drmMissing
+
     /** Reloads the Web Player page (set by the host); used when a stalled player does not recover. */
     @Volatile var reloadHost: (suspend () -> Unit)? = null
     /**
@@ -130,7 +137,8 @@ class SpotifyPlayer(private val bridge: Bridge, private val scope: CoroutineScop
                 when (type) {
                     "state" -> onState(playerState(payload))
                     "queue" -> queue(payload)?.let { q -> _queue.value = q.copy(nextUp = q.nextUp.filter { it.kind != ItemKind.AD }) }
-                    "refused" -> onRefused()
+                    "refused" -> onRefused(late = ((payload as? JsonObject)?.get("late") as? kotlinx.serialization.json.JsonPrimitive)?.booleanOrNull == true)
+                    "drm" -> (payload as? JsonObject)?.let { _drmMissing.value = (it["ok"] as? kotlinx.serialization.json.JsonPrimitive)?.booleanOrNull == false }
                 }
             }
         }
@@ -162,6 +170,7 @@ class SpotifyPlayer(private val bridge: Bridge, private val scope: CoroutineScop
                 if (!ownReload && (lost != null || liveIntent() != null)) scope.launch {
                     runCatching { if (lost != null) resumeAfterReload(lost) else { delay(RESTORE_GAP_MS); playIntent() } }
                 }
+                repeatRestoreUntil = System.currentTimeMillis() + REPEAT_RESTORE_MS
                 if (audioQuality != "auto") applyAudioQuality()
                 // The page keeps its volume: an app closed during a muted ad must not stay silent.
                 runCatching { if (volume() == 0.0) setVolume(wantedVolume?.takeIf { v -> v > 0.0 } ?: 1.0) }
@@ -267,6 +276,13 @@ class SpotifyPlayer(private val bridge: Bridge, private val scope: CoroutineScop
 
     /** The media element as the watcher last read it. */
     @Volatile private var lastMedia: Media? = null
+
+    /**
+     * Another device of the account is Spotify Connect's active one: this page's element stands
+     * still while the state is that device's. Judged on the element too, as the active flag is read
+     * every few seconds and lags a transfer to this phone (whose element then moves).
+     */
+    internal val remoteActive: Boolean get() = lastMedia?.let { it.active == false && it.paused } == true
 
     /** Loads the song after the current one in advance (see "player.preloadNext"); on by default. */
     @Volatile var preloadNext = true
@@ -451,6 +467,15 @@ class SpotifyPlayer(private val bridge: Bridge, private val scope: CoroutineScop
             }
             // A song really playing again: the ad break is over.
             if (s != null && !s.isPaused && !s.isBuffering) { adAttempts = 0; adReloaded = false }
+            // Another device of the account plays (Spotify Connect, the desktop app): the state is
+            // its, followed and never repaired. A stall judged on its clock — "past the end" on a
+            // state that came a moment late, "buffering" on its report — was answered with a seek or
+            // a play of the next song, i.e. a command that skipped a track on that other device.
+            if (remoteActive) {
+                if (key != null || attempts != 0) bridge.logger?.invoke("another device plays: nothing repaired from here")
+                key = null; attempts = 0; silentSince = 0L
+                continue
+            }
             // Silent: the state says this phone plays, yet its media element stands still.
             val fading = fadeBackTo != null || fadeBack?.isActive == true
             val playingHere = s != null && !s.isPaused && !s.isBuffering && media != null && media.active != false && !fading
@@ -487,6 +512,8 @@ class SpotifyPlayer(private val bridge: Bridge, private val scope: CoroutineScop
      */
     private suspend fun guardVolume(s: PlayerState?, media: Media?) {
         if (s == null || s.isPaused || s.isBuffering || _adPlaying.value || fadeBackTo != null || fadeBack?.isActive == true) return
+        // Its volume is set through Connect: with another device playing it would be that device's.
+        if (remoteActive) return
         // A crossfade owns the element level until it ends: the guard must not undo the ramp.
         // Past its deadline, though, it is exactly the lost unmute it exists to catch.
         if (crossfadeArmed) {
@@ -527,10 +554,15 @@ class SpotifyPlayer(private val bridge: Bridge, private val scope: CoroutineScop
      * 3. the list on shuffle (an account that may only shuffle);
      * then the user is told.
      */
-    private fun onRefused() {
+    private fun onRefused(late: Boolean = false) {
+        probeDrm()
         val last = lastPlay ?: return
         val now = System.currentTimeMillis()
-        if (now - last.third > REFUSED_WINDOW_MS) return
+        if (now - last.third > if (late) LATE_REFUSED_WINDOW_MS else REFUSED_WINDOW_MS) return
+        // A command acknowledged and never delivered: the page's media element stood still for 10 s
+        // while its state may well say "playing". Not a refusal if the user paused, an ad is on or
+        // another device plays.
+        if (late && (pausedByUser || _adPlaying.value || remoteActive)) return
         // A play of ours (an ad recovery, a reload restore): refused during an ad, and the steps
         // below would replay the list from its start and turn shuffle on, which nobody asked for.
         if (!lastPlayRefusable) { bridge.logger?.invoke("play refused by Spotify: not the user's, left alone"); return }
@@ -699,6 +731,8 @@ class SpotifyPlayer(private val bridge: Bridge, private val scope: CoroutineScop
         }
         val ctx = _state.value?.contextUri ?: return
         if (userMoveAt != movedAt) return
+        // Another device plays this list (the ad is this phone's page's, not its): not skipped from here.
+        if (remoteActive) return
         // Clearing the flow below cancels this very block (collectLatest): what follows must
         // finish, or the skip is sent and its put-back never is.
         withContext(NonCancellable) {
@@ -827,6 +861,23 @@ class SpotifyPlayer(private val bridge: Bridge, private val scope: CoroutineScop
         shufflePending?.takeIf { System.currentTimeMillis() - it.second < PICK_REPLAY_MS }?.let { (on, _) ->
             if (adJustEnded && s?.shuffle != on) scope.launch { runCatching { setShuffle(on) } }
         }
+        // Reported (2.0, stable): the ad is got past, then the music stays paused until Play is
+        // pressed. The page can leave the song it moves on to paused when the ad's audio was
+        // refused. Nobody paused (a pause is [pausedByUser]), so the song is resumed once the
+        // state has settled, unless something else was played or picked meanwhile.
+        if (adJustEnded && s?.item != null && s.isPaused && !pausedByUser && s.item?.kind != ItemKind.AD) {
+            val playedAt = lastPlay?.third
+            val uri = s.item?.uri
+            scope.launch {
+                delay(AD_END_SETTLE_MS)
+                val now = _state.value
+                if (now != null && now.item?.uri == uri && now.isPaused && !pausedByUser && !_adPlaying.value && liveIntent() == null &&
+                    lastPlay?.third == playedAt && !remoteActive) {
+                    bridge.logger?.invoke("paused after the ad break, nobody paused: ${now.item?.name} resumed")
+                    runCatching { resume() }
+                }
+            }
+        }
         adsOffSent = false
         adMuteTries = 0
         // A real song is playing: the fallback after a refusal (play the list without picking the
@@ -836,6 +887,17 @@ class SpotifyPlayer(private val bridge: Bridge, private val scope: CoroutineScop
         else if (lastTrackState?.item != null) lastSongUntil = System.currentTimeMillis()
         lastTrackState = s
         _state.value = s
+        // Reported: the repeat button forgets what it was. A play command (and a reloaded page) starts
+        // the page on its own options, repeat off; the mode the user chose is set again, once, when the
+        // first song of that play reports another. Only within a few seconds of our own play: a repeat
+        // changed from another device later is theirs.
+        wantedRepeat?.let { want ->
+            if (s?.item != null && s.repeat != want && System.currentTimeMillis() < repeatRestoreUntil) {
+                repeatRestoreUntil = 0L
+                bridge.logger?.invoke("repeat is ${s.repeat} after a play, $want was chosen: set again")
+                scope.launch { runCatching { setRepeat(want) } }
+            }
+        }
         val i = liveIntent() ?: run { intent = null; return }
         val uri = s?.item?.uri
         when {
@@ -1119,15 +1181,30 @@ class SpotifyPlayer(private val bridge: Bridge, private val scope: CoroutineScop
         lastPlayRefusable = refusable
         refusalStep = 0
         pausedByUser = false
+        repeatRestoreUntil = System.currentTimeMillis() + REPEAT_RESTORE_MS
         withFade {
-            command("player.play", timeoutMs = PLAY_TIMEOUT_MS, args = buildJsonObject {
-                put("contextUri", contextUri)
-                order?.let { uris -> putJsonArray("order") { uris.forEach { add(kotlinx.serialization.json.JsonPrimitive(it)) } } }
-                trackUri?.let { put("trackUri", it) }
-                index?.let { put("index", it) }
-                positionMs?.let { put("positionMs", it) }
-            })
+            try {
+                command("player.play", timeoutMs = PLAY_TIMEOUT_MS, args = buildJsonObject {
+                    put("contextUri", contextUri)
+                    order?.let { uris -> putJsonArray("order") { uris.forEach { add(kotlinx.serialization.json.JsonPrimitive(it)) } } }
+                    trackUri?.let { put("trackUri", it) }
+                    index?.let { put("index", it) }
+                    positionMs?.let { put("positionMs", it) }
+                })
+            } catch (e: app.myspoti.spotify.bridge.BridgeException) {
+                probeDrm()
+                throw e
+            }
         }
+    }
+
+    /**
+     * Asks the page whether its WebView has a working Widevine ([drmMissing]), after a play failed:
+     * never at boot, where the probe ran alongside the player's own EME set-up and the page of
+     * 2.0.2-beta.1 never registered its device. The page asks once; later calls only repeat the answer.
+     */
+    private fun probeDrm() {
+        scope.launch { runCatching { bridge.call("drm.probe", timeoutMs = 5_000, quiet = true) } }
     }
 
     /**
@@ -1328,7 +1405,13 @@ class SpotifyPlayer(private val bridge: Bridge, private val scope: CoroutineScop
         }
     }
 
+    /** The repeat mode the user chose last: a play or a reload that leaves the page on another one is put back (see [onState]). */
+    @Volatile private var wantedRepeat: Repeat? = null
+    /** Until when a page reporting another repeat mode than [wantedRepeat] counts as having forgotten it. */
+    @Volatile private var repeatRestoreUntil = 0L
+
     override suspend fun setRepeat(mode: Repeat) {
+        wantedRepeat = mode
         bridge.call("player.setRepeat", buildJsonObject { put("mode", mode.ordinal) })
     }
 
@@ -1509,9 +1592,15 @@ class SpotifyPlayer(private val bridge: Bridge, private val scope: CoroutineScop
         const val PLAY_TIMEOUT_MS = 10_000L
         /** A refusal that long after a play belongs to it. */
         const val REFUSED_WINDOW_MS = 5_000L
+        /** A play that leaves the page's repeat mode other than the user's: set again if it shows within this long. */
+        const val REPEAT_RESTORE_MS = 20_000L
+        /** An acknowledged command that never played is told 10 s after it was sent. */
+        const val LATE_REFUSED_WINDOW_MS = 25_000L
         /** An ad starting this soon after a song is picked came in its place. */
         const val PICK_AD_MS = 8_000L
         /** After this the user has moved on: a pick is no longer replayed after its ad. */
+        /** After an ad break, a pause nobody asked for is undone once the page's state has settled this long. */
+        const val AD_END_SETTLE_MS = 1_200L
         const val PICK_REPLAY_MS = 120_000L
         /** How long a resume waits for a page that went silent while paused before loading it again. */
         const val RESUME_PING_MS = 1_500L

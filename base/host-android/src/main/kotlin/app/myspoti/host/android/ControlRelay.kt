@@ -277,8 +277,13 @@ internal class ControlRelay(private val view: WebView, private val fingerprint: 
          * "X-Requested-With: <our package>" — no browser does that, and it was measured on the wire
          * riding on the telemetry and on the audio files themselves. Relaying through OkHttp is what
          * removes it; the playback commands were only the first ones (that header alone was enough to
-         * silence them). One rule on Spotify's side is all it takes to flag every install, so the
-         * whole API goes through here now.
+         * silence them). One rule on Spotify's side is all it takes to flag every install.
+         *
+         * Only the playback commands and states are on the list. The play telemetry (`melody`,
+         * `gabo-receiver-service`) was added in 2.0.2-beta.1 and that beta's page never registered
+         * its playback device on a free account ("Device not found", nothing plays): it leaves from
+         * the WebView again, as in 2.0.1, until it is proven harmless on a phone. Widening this to
+         * everything else broke the page too (protobuf and binary bodies, see the notes).
          *
          * Login and consent hosts stay out: their flows post forms and redirect, and a relay would
          * have to reproduce every step exactly to sign in.
@@ -330,9 +335,11 @@ internal class ControlRelay(private val view: WebView, private val fingerprint: 
               const original = window.fetch;
               const command = /player\/command|connect\/transfer/;
               // A refused play or transfer (free accounts in some countries): the app tries another way.
-              const tell = (status, url) => {
+              // late: the command was acknowledged but nothing played (see trust): the host judges it
+              // more than its usual few seconds after the play.
+              const tell = (status, url, late) => {
                 if ((status === 402 || status === 403) && command.test(url) && window.MyspotiHost) {
-                  try { window.MyspotiHost.postMessage(JSON.stringify({ type: 'refused', status, path: url.split('?')[0].replace(/^.*\/v1\//, '').replace(/\/from\/.*$/, '') })); } catch (e) { /* host gone */ }
+                  try { window.MyspotiHost.postMessage(JSON.stringify({ type: 'refused', status, late: !!late, path: url.split('?')[0].replace(/^.*\/v1\//, '').replace(/\/from\/.*$/, '') })); } catch (e) { /* host gone */ }
                 }
               };
               const note = (value) => { try { window.MyspotiNet.postMessage(JSON.stringify(Object.assign({ type: 'direct' }, value))); } catch (e) { /* host gone */ } };
@@ -342,13 +349,18 @@ internal class ControlRelay(private val view: WebView, private val fingerprint: 
               // it took. Kept only if something plays within 10 s: a command sent from the page can
               // be acknowledged and never delivered (X-Requested-With, see above).
               const plays = () => [...media].some(m => !m.paused && !m.ended && m.readyState > 2);
-              const trust = () => {
+              const trust = (url) => {
                 if (window.__mspDirect) return;
                 window.__mspDirect = true;
                 setTimeout(() => {
                   const kept = plays();
                   if (!kept) window.__mspDirect = false;
                   note({ kept });
+                  // Acknowledged and never delivered: the page showed a song at 0:00 that never
+                  // started (reported after 2.0.1: "I can press play, the clock moves, nothing
+                  // plays"). Told as a refusal, so the app's fallbacks run and, failing all of
+                  // them, the user is told instead of left on a silent player.
+                  if (!kept) tell(402, url, true);
                 }, 10000);
               };
               const direct = (url, init) => original.call(window, url, init).then(r => { tell(r.status, url); return r; });
@@ -364,7 +376,7 @@ internal class ControlRelay(private val view: WebView, private val fingerprint: 
                 if (status === 402 && command.test(p.url) && !window.__mspDirect) {
                   original.call(window, p.url, p.init).then(r => {
                     note({ status: r.status });
-                    if (r.ok) trust(); else tell(r.status, p.url);
+                    if (r.ok) trust(p.url); else tell(r.status, p.url);
                     p.resolve(r);
                   }, () => { tell(status, p.url); p.resolve(relayedAnswer()); });
                   return;

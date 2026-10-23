@@ -38,6 +38,9 @@ private const val LOG = "Myspoti"
  */
 private const val SESSION_WAIT_MS = 6_000L
 
+/** The most a returning page may take to get its bridge ready before the wait gives up anyway. */
+private const val SESSION_LOAD_MAX_MS = 60_000L
+
 /**
  * The app's only screen host: the Compose UI, with the Web Player page attached behind it.
  * The page comes to the front only to sign in, on Spotify's own login pages.
@@ -187,7 +190,8 @@ class MainActivity : AppCompatActivity() {
                 loginWait?.cancel()
                 loginWait = launch {
                     var waited = 0L
-                    while (waited < SESSION_WAIT_MS) {
+                    var elapsed = 0L
+                    while (waited < SESSION_WAIT_MS && elapsed < SESSION_LOAD_MAX_MS) {
                         if (runCatching { MyspotiRuntime.isSignedIn() }.getOrDefault(false)) {
                             android.util.Log.d(LOG, "session established: player shown")
                             hideLogin()
@@ -195,7 +199,14 @@ class MainActivity : AppCompatActivity() {
                         }
                         // The countdown only runs while the user is looking at the app: away to read
                         // the e-mail, the sign-in page must not be reset under them.
-                        if (lifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.RESUMED)) waited += 500
+                        // Nor while the player is still loading: it answers nothing before its bridge is
+                        // ready, which takes 10 s and more on a slow device (a DAP, a low-end Xiaomi).
+                        // Counted from the address alone, the wait ran out under a page that was still
+                        // booting and put the sign-in page back: the reported loop to the login page.
+                        if (lifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.RESUMED)) {
+                            elapsed += 500
+                            if (MyspotiRuntime.spotify.ready.value) waited += 500
+                        }
                         kotlinx.coroutines.delay(500)
                     }
                     android.util.Log.d(LOG, "no session ${SESSION_WAIT_MS / 1000}s after the player came back: sign-in page restored")
@@ -219,7 +230,9 @@ class MainActivity : AppCompatActivity() {
             if (MyspotiRuntime.awaitSignedIn(1_500)) {
                 android.util.Log.d(LOG, "back with a session: player shown")
                 hideLogin()
-            } else if (MyspotiRuntime.host.url.value.let { it.startsWith("https://open.spotify.com") && !it.contains("/login") }) {
+            } else if (MyspotiRuntime.spotify.ready.value &&
+                MyspotiRuntime.host.url.value.let { it.startsWith("https://open.spotify.com") && !it.contains("/login") }) {
+                // Ready: a player still booting has not answered yet, and is left to watchLoginReturn.
                 android.util.Log.d(LOG, "back without a session: sign-in page restored")
                 MyspotiRuntime.host.openLogin()
             }

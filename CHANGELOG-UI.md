@@ -6,6 +6,18 @@ Each version section is the text of the GitHub pre-release tagged `ui-v<version>
 
 ## [Unreleased]
 
+## [0.8.5] - 2026-10-26
+
+Two fixes taken from Myspoti 2.0.2-beta.6; the rest of that beta (extensions, Android Auto, the update popup, the Immersive look, Settings tabs) is not part of MySpotilol.
+
+### Fixed
+- A crash at playback start when the cover for the notification and lock screen had been released by the system ("cannot use a recycled source in createBitmap"): such a cover is fetched again, and the media session falls back to metadata without artwork instead of failing.
+- Play, next and previous from Bluetooth or headset buttons while the app sat paused in the background: the playback service now starts for real, so playback no longer stops by itself a few seconds later.
+- The notification, lock screen and Bluetooth devices get the large cover, also for a song picked from a list that carried only the small one.
+
+### Diagnostics
+- `media session: <command>` for every command from the notification, lock screen or a Bluetooth device.
+
 ## [0.8.4] - 2026-10-25
 
 Three fixes taken from Myspoti 2.0.2-beta.5; the rest of that beta (extensions, the Immersive look, a network stack from Google Play services) is not part of MySpotilol.

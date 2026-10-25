@@ -141,6 +141,7 @@ class PlaybackService : MediaBrowserServiceCompat() {
 
     override fun onDestroy() {
         instance = null
+        holdLocks(false)
         session.release()
         scope.cancel()
         super.onDestroy()
@@ -309,8 +310,36 @@ class PlaybackService : MediaBrowserServiceCompat() {
         }
     }
 
+    private var cpuLock: android.os.PowerManager.WakeLock? = null
+    private var wifiLock: android.net.wifi.WifiManager.WifiLock? = null
+
+    /**
+     * Keeps the CPU and the Wi-Fi radio awake while a song plays (Myspoti 2.0.2-beta.5): with the
+     * screen off the page's timers and the audio downloads stalled in doze-like power saving. The
+     * timeout is only a safety net against a lock leaked by a missed pause; every state refresh renews it.
+     */
+    @android.annotation.SuppressLint("WakelockTimeout")
+    private fun holdLocks(on: Boolean) {
+        runCatching {
+            if (on) {
+                val cpu = cpuLock ?: getSystemService(android.os.PowerManager::class.java)
+                    .newWakeLock(android.os.PowerManager.PARTIAL_WAKE_LOCK, "MySpotilol:playback")
+                    .apply { setReferenceCounted(false) }.also { cpuLock = it }
+                cpu.acquire(LOCK_TIMEOUT_MS)
+                val wifi = wifiLock ?: applicationContext.getSystemService(android.net.wifi.WifiManager::class.java)
+                    .createWifiLock(android.net.wifi.WifiManager.WIFI_MODE_FULL_HIGH_PERF, "MySpotilol:playback")
+                    .apply { setReferenceCounted(false) }.also { wifiLock = it }
+                if (!wifi.isHeld) wifi.acquire()
+            } else {
+                cpuLock?.takeIf { it.isHeld }?.release()
+                wifiLock?.takeIf { it.isHeld }?.release()
+            }
+        }
+    }
+
     private fun show(info: NowPlayingInfo) {
         val notification = build(info)
+        holdLocks(info.playing || info.buffering)
         if (info.playing || info.buffering) {
             handler.removeCallbacks(leaveForeground)
             startForegroundSafely(notification)
@@ -455,6 +484,7 @@ class PlaybackService : MediaBrowserServiceCompat() {
         /** Time left to the pause's fade-out before the notification goes. */
         private const val CLOSE_STOP_MS = 800L
         private const val CLOSE_PREFS = "playback_service"
+        private const val LOCK_TIMEOUT_MS = 6 * 60 * 60 * 1000L
         private const val KEEP_PLAYING_KEY = "keep_playing_on_close"
 
         /** The music goes on when the app is closed from the recent apps (off: it stops). */

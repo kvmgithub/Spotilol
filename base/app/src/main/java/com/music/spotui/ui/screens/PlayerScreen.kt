@@ -513,7 +513,8 @@ fun PlayerScreen(navController: NavController) {
                                 val grow = 1f + (1f - coverAlpha) * 0.06f
                                 scaleX = grow; scaleY = grow
                             },
-                        model = cover,
+                        // The 640 px cover: the list a song was picked from may only carry the small one.
+                        model = app.myspoti.host.android.Covers.large(cover),
                         contentScale = ContentScale.Crop,
                         contentDescription = "")
                 }

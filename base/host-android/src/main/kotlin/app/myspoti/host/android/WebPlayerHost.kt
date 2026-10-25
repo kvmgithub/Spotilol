@@ -64,6 +64,8 @@ class WebPlayerHost(private val context: Context) : BridgeHost {
     private val _licenseLimitedUntil = MutableStateFlow(0L)
     /** Elapsed-realtime end of the current hold, 0 or past when none. */
     val licenseLimitedUntil: StateFlow<Long> = _licenseLimitedUntil
+    /** Licence requests answered with a 429 by the app during the current hold (see shouldInterceptRequest). */
+    @Volatile private var heldLicenses = 0
     fun licenseLimited(): Boolean = android.os.SystemClock.elapsedRealtime() < _licenseLimitedUntil.value
 
     private fun onLicenseLimited() = synchronized(license429) {
@@ -77,6 +79,7 @@ class WebPlayerHost(private val context: Context) : BridgeHost {
         limitStreak++
         license429.clear()
         Logbook.log("Spotify is limiting audio licences (429 x$LIMIT_COUNT in ${LIMIT_WINDOW_MS / 1000} s): playback held ${hold / 1000} s")
+        heldLicenses = 0
         _licenseLimitedUntil.value = now + hold
     }
 
@@ -172,8 +175,11 @@ class WebPlayerHost(private val context: Context) : BridgeHost {
         exposeToPlayer("MyspotiHost", MAX_MESSAGE_BYTES) { json, _ -> _messages.tryEmit(json) }
         webChromeClient = object : WebChromeClient() {
             override fun onConsoleMessage(message: android.webkit.ConsoleMessage): Boolean {
-                if (message.messageLevel() == android.webkit.ConsoleMessage.MessageLevel.ERROR ||
-                    message.messageLevel() == android.webkit.ConsoleMessage.MessageLevel.WARNING)
+                // The page's steady console noise (font preloads every ~10 s, storage access refused
+                // on every load) never helped a report: left out (Myspoti 2.0.2-beta.5).
+                if ((message.messageLevel() == android.webkit.ConsoleMessage.MessageLevel.ERROR ||
+                    message.messageLevel() == android.webkit.ConsoleMessage.MessageLevel.WARNING) &&
+                    CONSOLE_NOISE.none { it.containsMatchIn(message.message()) })
                     log("console ${message.messageLevel()}: ${message.message().take(300)}")
                 return true
             }
@@ -190,6 +196,14 @@ class WebPlayerHost(private val context: Context) : BridgeHost {
         webViewClient = object : WebViewClient() {
             override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? {
                 val url = request.url.toString()
+                // Spotify is limiting audio licences (429) and the app holds playback: the page still
+                // skipped on by itself through every song it got no licence for (~4 requests a second,
+                // each answered 429). It gets the same 429 from here, and Spotify sees none of them
+                // while the hold lasts (Myspoti 2.0.2-beta.5).
+                if (request.method == "POST" && licenseLimited() && WebPolicy.isSpotifyApi(url) && LICENSE_PATH in url) {
+                    if (heldLicenses++ == 0) log("audio licence requests answered here while Spotify is limiting")
+                    return WebResourceResponse("application/octet-stream", "utf-8", 429, "Too Many Requests", emptyMap(), ByteArrayInputStream(ByteArray(0)))
+                }
                 if (AdBlock.isTelemetry(url)) {
                     // Once per host and route a session, so the diagnostics show what is blocked.
                     val key = "${request.url.host}${request.url.path?.substringBeforeLast('/')?.take(48).orEmpty()}"
@@ -574,6 +588,8 @@ class WebPlayerHost(private val context: Context) : BridgeHost {
         /** Logcat through the shared redactor (diagnostics exports read these lines). */
         fun log(message: String) = Logbook.log(message)
         const val PLAYER_URL = "https://open.spotify.com/"
+        private const val LICENSE_PATH = "/widevine-license/v1/audio/license"
+        private val CONSOLE_NOISE = listOf(Regex("^The resource .* was preloaded"), Regex("^requestStorageAccess: Permission denied"))
         private val PLAYER_ROOT = Regex("""https://open\.spotify\.com/intl-[a-z]{2,3}(?:-[a-zA-Z]{2,4})?/""")
         private const val ROOT_KEY = "player_root"
         private const val PLAYER_HOST = "open.spotify.com"

@@ -6,6 +6,18 @@ Each version section is the text of the GitHub pre-release tagged `ui-v<version>
 
 ## [Unreleased]
 
+## [0.8.4] - 2026-10-25
+
+Three fixes taken from Myspoti 2.0.2-beta.5; the rest of that beta (extensions, the Immersive look, a network stack from Google Play services) is not part of MySpotilol.
+
+### Fixed
+- Playback with the screen off: the app keeps the CPU and Wi-Fi awake while a song plays or loads, so the player page's timers and audio downloads no longer stall in power saving.
+- While Spotify limits audio licences, the player page no longer skips through the following songs on its own: its licence requests are answered by the app until the hold is over, and Spotify sees none of them.
+- The player shows the large cover of a song picked from a list that only carried the small one, instead of a stretched thumbnail.
+
+### Diagnostics
+- The page's recurring font preload and storage-access warnings are left out of the log.
+
 ## [0.8.3] - 2026-10-23
 
 Myspoti 2.0.2-beta.2 merged (Myspoti has no final 2.0.2 yet; its beta.1 left Spotify's player without a device, beta.2 undoes that part).

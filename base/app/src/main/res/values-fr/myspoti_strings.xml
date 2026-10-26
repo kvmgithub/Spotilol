@@ -428,6 +428,7 @@
     <string name="player_sleep_timer">Minuteur de veille</string>
     <string name="player_speed_a11y">Vitesse de lecture, %1$s×</string>
     <string name="restart_player_done">Lecteur redémarré</string>
+    <string name="songs_skipped_by_spotify">Spotify enchaînait des morceaux qu’il ne pouvait pas lire : la lecture a été mise en pause. Appuyez sur lecture pour réessayer, ou vérifiez votre compte et votre connexion.</string>
     <string name="spotify_limited">Spotify limite la lecture pour le moment. Réessayez dans une minute.</string>
     <string name="library_change_undone">Spotify a refusé la modification, votre bibliothèque est revenue comme avant</string>
     <string name="blend_title">Mix à plusieurs</string>

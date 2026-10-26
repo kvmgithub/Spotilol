@@ -6,6 +6,23 @@ Each version section is the text of the GitHub pre-release tagged `ui-v<version>
 
 ## [Unreleased]
 
+## [0.8.6] - 2026-10-26
+
+Three changes taken from Myspoti 2.0.2-beta.7; the rest of that beta (the Immersive look and its queue, the last session of extension and downloaded songs, extensions) is not part of MySpotilol. Its fix for previous right after a skip only concerns extension songs.
+
+### Fixed
+- When Spotify skips through several songs in a row that it cannot play (each after a few seconds, nobody asking for it), playback is paused and a message says so, instead of the page running through the whole queue.
+- The lyrics follow the song after a skip also when title and artist stay the same (another version of the song).
+
+### Added
+- A clear button in the search field of the search page.
+
+### Changed
+- The clear buttons of the library, "Find in…" and "Add songs" fields are easier to hit and put the cursor back with the keyboard up.
+
+### Diagnostics
+- `track change: <old> -> <new> (<reason>, left at <position> of <length>)` for every change of song, with the reason (a command, an ad break, the song's end, or the page on its own) and, with crossfade on, the reserve still heard.
+
 ## [0.8.5] - 2026-10-26
 
 Two fixes taken from Myspoti 2.0.2-beta.6; the rest of that beta (extensions, Android Auto, the update popup, the Immersive look, Settings tabs) is not part of MySpotilol.

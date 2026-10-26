@@ -3,6 +3,9 @@ package com.music.spotui.ui.screens
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PushPin
 import com.music.spotui.ui.components.pressable
+import com.music.spotui.ui.components.SearchClearButton
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.res.stringResource
 
 import androidx.compose.foundation.background
@@ -37,7 +40,6 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Search
@@ -235,6 +237,7 @@ fun LibraryScreen(navController: NavController) {
         }
 
         AnimatedVisibility(visible = searchActive) {
+            val searchFocus = remember { FocusRequester() }
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier
@@ -252,7 +255,8 @@ fun LibraryScreen(navController: NavController) {
                     textStyle = TextStyle(color = Color.White, fontSize = 15.sp),
                     modifier = Modifier
                         .weight(1f)
-                        .padding(8.dp, 10.dp),
+                        .padding(8.dp, 10.dp)
+                        .focusRequester(searchFocus),
                     decorationBox = { inner ->
                         Box {
                             if (searchQuery.isEmpty()) Text(stringResource(R.string.navigationbar_musicappitems_search_title), color = Color(0xFF888888), fontSize = 15.sp)
@@ -260,16 +264,7 @@ fun LibraryScreen(navController: NavController) {
                         }
                     },
                 )
-                if (searchQuery.isNotEmpty()) {
-                    Icon(
-                        imageVector = Icons.Default.Close,
-                        contentDescription = stringResource(R.string.chat_content_picker_clear_recent_searches),
-                        tint = Color(0xFF888888),
-                        modifier = Modifier.pressable(0.96f) { searchQuery = "" }
-                            .size(18.dp)
-                            ,
-                    )
-                }
+                if (searchQuery.isNotEmpty()) SearchClearButton(searchFocus, Color(0xFF888888)) { searchQuery = "" }
             }
         }
 

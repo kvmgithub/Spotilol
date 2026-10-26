@@ -220,6 +220,11 @@ object SongPlayer {
             android.widget.Toast.makeText(Graph.app, app.myspoti.engine.R.string.drm_missing, android.widget.Toast.LENGTH_LONG).show()
         }
         scope.launch {
+            MyspotiRuntime.spotify.player.skipChained.collect {
+                android.widget.Toast.makeText(Graph.app, app.myspoti.engine.R.string.songs_skipped_by_spotify, android.widget.Toast.LENGTH_LONG).show()
+            }
+        }
+        scope.launch {
             MyspotiRuntime.host.licenseLimitedUntil.collect { until ->
                 if (until > SystemClock.elapsedRealtime()) main.post {
                     playing = false

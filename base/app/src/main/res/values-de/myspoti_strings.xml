@@ -340,6 +340,7 @@
     <string name="spotiflac_verify_again">Die SpotiFLAC-Bestätigung ist abgelaufen: Bestätige sie in den Einstellungen erneut, um verlustfrei herunterzuladen</string>
     <string name="download_on_mobile_data">Download über mobile Daten: Er verbraucht dein Datenvolumen</string>
     <string name="restart_player_done">Player neu gestartet</string>
+    <string name="songs_skipped_by_spotify">Spotify hat mehrere Songs übersprungen, die es nicht abspielen konnte, daher wurde die Wiedergabe pausiert. Tippe auf Play, um es erneut zu versuchen, oder prüfe dein Konto und deine Verbindung.</string>
     <string name="spotify_limited">Spotify begrenzt die Wiedergabe gerade. Versuche es in einer Minute erneut.</string>
     <string name="library_change_undone">Spotify hat die Änderung abgelehnt, deine Bibliothek ist wieder wie vorher</string>
     <string name="blend_title">Blend</string>

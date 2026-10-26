@@ -67,6 +67,7 @@ import com.bumptech.glide.integration.compose.CrossFade
 import com.bumptech.glide.integration.compose.GlideImage
 import com.bumptech.glide.integration.compose.placeholder
 import app.myspoti.engine.R
+import com.music.spotui.ui.components.SearchClearButton
 import com.music.spotui.data.api.Response
 import com.music.spotui.data.entity.SearchResults
 import com.music.spotui.data.entity.SongsModel
@@ -858,6 +859,9 @@ fun SearchStickyBar(
     focusRequester: androidx.compose.ui.focus.FocusRequester? = null,
     onTextChange: (String) -> Unit,
 ) {
+    // The field is always attached to a requester, so the clear button can put the cursor back in it.
+    val ownFocus = remember { androidx.compose.ui.focus.FocusRequester() }
+    val fieldFocus = focusRequester ?: ownFocus
 
     Row(verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier
@@ -876,7 +880,7 @@ fun SearchStickyBar(
         TextField(
             enabled = true,
             modifier = Modifier
-                .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
+                .focusRequester(fieldFocus)
                 .onFocusChanged { onFocusChange(it.isFocused) },
             value = text,
             textStyle = TextStyle.Default.copy(fontSize = 16.sp, color = Color.Black, fontWeight = FontWeight(500)),
@@ -899,7 +903,10 @@ fun SearchStickyBar(
                     text = stringResource(R.string.search_header_field_hint)
 
                 )
-            }
+            },
+            trailingIcon = if (text.isEmpty()) null else {
+                { SearchClearButton(fieldFocus, Color.Black) { onTextChange("") } }
+            },
         )
     }
 }

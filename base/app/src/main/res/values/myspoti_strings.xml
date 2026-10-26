@@ -428,6 +428,7 @@
     <string name="player_sleep_timer">Sleep timer</string>
     <string name="player_speed_a11y">Playback speed, %1$s×</string>
     <string name="restart_player_done">Player restarted</string>
+    <string name="songs_skipped_by_spotify">Spotify kept skipping songs it could not play, so playback was paused. Tap play to try again, or check your account and connection.</string>
     <string name="spotify_limited">Spotify is limiting playback for a moment. Try again in a minute.</string>
     <string name="library_change_undone">Spotify refused the change, your library is back as it was</string>
     <string name="blend_title">Blend</string>

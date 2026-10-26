@@ -845,6 +845,40 @@ class SpotifyPlayer(private val bridge: Bridge, private val scope: CoroutineScop
         }
     }
 
+    private val skipChain = TrackChanges.Chain()
+    private val _skipChained = kotlinx.coroutines.flow.MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+    /**
+     * The page moved on by itself through several songs after a few seconds each (it cannot play
+     * them: licences refused, a stream failing): it was paused, the UI says so.
+     */
+    val skipChained: kotlinx.coroutines.flow.SharedFlow<Unit> = _skipChained
+
+    /**
+     * One Logbook line for each change of song with the reason (a command, an ad, the song's end,
+     * or the page on its own), so a report of songs skipping says which. The page moving on by
+     * itself again and again is stopped instead of chained through the list (Myspoti 2.0.2-beta.7).
+     */
+    private fun noteTrackChange(old: PlayerState?, s: PlayerState?, adJustEnded: Boolean) {
+        val from = old?.item ?: return
+        val to = s?.item ?: return
+        if (from.uri == to.uri || from.kind == ItemKind.AD || remoteActive) return
+        val now = System.currentTimeMillis()
+        // With a crossfade the state shows what is heard, which lags the page's element by the
+        // reserve: the page left the song that much further on. The reserve is the last tick's.
+        val reserve = if (crossfadeSeconds > 0) ((lastMedia?.lag ?: 0.0) * 1000).toLong() else 0L
+        val played = old.positionAt(now) + reserve
+        val sinceCommand = now - maxOf(userMoveAt, lastPlay?.third ?: 0L)
+        val cause = TrackChanges.cause(played, from.durationMs, sinceCommand, adJustEnded, crossfadeArmed)
+        val held = recoveryHeld()
+        bridge.logger?.invoke("track change: ${from.name} -> ${to.name} (${cause.text}, left at ${TrackChanges.clock(played)} of ${TrackChanges.clock(from.durationMs)}${if (reserve > 0) ", ${reserve / 100 / 10.0} s reserve still heard" else ""}${if (held) ", playback held" else ""})")
+        if (held) { skipChain.reset(); return }
+        if (skipChain.record(cause, played, now)) {
+            bridge.logger?.invoke("skip chain: the page moved on by itself three times in a row after a few seconds each (now on ${to.name}): paused")
+            _skipChained.tryEmit(Unit)
+            scope.launch { runCatching { pause() } }
+        }
+    }
+
     private fun onState(s: PlayerState?) {
         stateSeq++
         // Another song than the one a crossfade is fading out: the ramp up, at once (the
@@ -924,6 +958,7 @@ class SpotifyPlayer(private val bridge: Bridge, private val scope: CoroutineScop
         refusalStep = 0
         if (s?.item != null) lastSong = s
         else if (lastTrackState?.item != null) lastSongUntil = System.currentTimeMillis()
+        noteTrackChange(lastTrackState, s, adJustEnded)
         lastTrackState = s
         _state.value = s
         // Reported: the repeat button forgets what it was. A play command (and a reloaded page) starts

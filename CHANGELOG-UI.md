@@ -6,6 +6,8 @@ Each version section is the text of the GitHub pre-release tagged `ui-v<version>
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-10-27
+
 Fixes taken from Myspoti 2.1.0, the stable release of the 2.0.2 betas. Its extensions, the Immersive look, the Connect mirror for extension songs, play reports sent by the app (Spotify's `melody` telemetry stays blocked), the update checker and the Chromium network routes for refused commands are not part of MySpotilol.
 
 ### Fixed

@@ -68,11 +68,6 @@ internal class ControlRelay(private val view: WebView, private val fingerprint: 
             Logbook.log("page identity: ${identity?.get("userAgent")?.take(160)}")
             return
         }
-        if (m.optString("type") == "direct") {
-            if (m.has("kept")) Logbook.log("commands from the page: ${if (m.optBoolean("kept")) "kept, the music plays" else "dropped, nothing played in 10 s"}")
-            else Logbook.log("refused command sent again from the page -> ${m.optInt("status")}")
-            return
-        }
         // A refused command sent again from the page itself, and whether that way was kept (Myspoti 2.0.1).
         if (m.optString("type") == "direct") {
             if (m.has("kept")) Logbook.log("commands from the page: ${if (m.optBoolean("kept")) "kept, the music plays" else "dropped, nothing played in 10 s"}")
@@ -148,6 +143,14 @@ internal class ControlRelay(private val view: WebView, private val fingerprint: 
     private fun send(id: Int, request: Request, body: String?, reply: JavaScriptReplyProxy) {
         val asked = android.os.SystemClock.uptimeMillis()
         val label = "${request.method} ${shortPath(request.url.toString())}"
+        // The device the previous page left (app swiped away or killed before its unload handler
+        // ran) is taken off the account alongside this registration (Myspoti 2.0.2): no idle
+        // "Web Player" copy of this phone stays among the account's devices.
+        if (isRegistration(request)) {
+            body?.let { b -> runCatching { JSONObject(b).optJSONObject("device")?.optString("device_id") }.getOrNull() }
+                ?.takeIf { DEVICE_ID.matches(it) }
+                ?.let { mine -> devices.registering(mine)?.let { (old, seq) -> sayGoodbye(request, old, seq) } }
+        } else if (request.method != "DELETE") devices.sent(request.url.toString(), body)
         http.newCall(request).enqueue(object : Callback {
             override fun onFailure(call: Call, e: IOException) {
                 MyspotiRuntime.network.failed()
@@ -174,8 +177,10 @@ internal class ControlRelay(private val view: WebView, private val fingerprint: 
                     Logbook.log("relay $label -> ${it.code} in $net ms")
                     if (it.code >= 400) Logbook.log("relay error body: ${LogRedactor.redact(text.take(400))}")
                     val path = request.url.encodedPath
-                    val registration = request.method == "POST" && path.endsWith("/track-playback/v1/devices")
+                    val registration = isRegistration(request)
                     if (it.code in 200..299 && registration) onDeviceRegistered?.invoke()
+                    if (it.code in 200..299 && registration) runCatching { JSONObject(text).optLong("initial_seq_num", 0) }.getOrNull()?.let(devices::answered)
+                    if (it.code in 200..299 && request.method == "DELETE" && path.contains("/track-playback/v1/devices/")) devices.deregistered(request.url.toString())
                     // 402 (refused playback on some free accounts), from Myspoti 2.0.0: the refusal's
                     // own headers and the refused command's shape. No ids, no cookies.
                     if (it.code == 402) {
@@ -191,6 +196,8 @@ internal class ControlRelay(private val view: WebView, private val fingerprint: 
                     val playback = path.contains("/track-playback/")
                     val given = if (playback) AdBlock.withoutAds(text) else null
                     given?.second?.forEach { note -> Logbook.log("ad left out: $note") }
+                    // Marked as holding an ad, yet left as it was: why (which marker, what kept it), once per reason.
+                    if (playback && given == null) AdBlock.whyKept(text)?.takeIf { it != lastAdKept }?.let { why -> lastAdKept = why; Logbook.log("ad kept in the queue: $why") }
                     val sent = given?.first ?: text
                     // Both ways on from this song lead to the ad: the player plays the next song
                     // just before this one ends (AdBlock.adAhead).
@@ -203,6 +210,33 @@ internal class ControlRelay(private val view: WebView, private val fingerprint: 
             }
         })
     }
+
+    private fun isRegistration(request: Request) =
+        request.method == "POST" && request.url.encodedPath.endsWith("/track-playback/v1/devices")
+
+    /** The last page's playback device, kept across starts (see [PlayerDeviceRecord]). */
+    private val devices = PlayerDeviceRecord(java.io.File(view.context.filesDir, "spotify/player-device"))
+
+    /** The page's own goodbye for a device it left: the same DELETE, with the registration's headers. */
+    private fun sayGoodbye(registration: Request, old: String, seq: Long) {
+        if (!DEVICE_ID.matches(old)) return
+        val url = PlayerDeviceRecord.deviceUrl(registration.url.toString(), old)
+        if (!WebPolicy.isRelayTarget(url)) return
+        val request = Request.Builder()
+            .url(url)
+            .headers(registration.headers)
+            .delete(PlayerDeviceRecord.goodbye(seq).toByteArray().toRequestBody(null))
+            .build()
+        http.newCall(request).enqueue(object : Callback {
+            override fun onFailure(call: Call, e: IOException) = Logbook.log("previous player device: goodbye failed: ${e.javaClass.simpleName}")
+            override fun onResponse(call: Call, response: Response) = response.use {
+                Logbook.log("previous player device taken off -> ${it.code}")
+            }
+        })
+    }
+
+    /** The last reason an ad was kept in a queue (see [AdBlock.whyKept]): logged once per reason. */
+    @Volatile private var lastAdKept: String? = null
 
     /** Back to the document that asked, on the main thread (reply proxies are thread-bound). */
     private fun answer(reply: JavaScriptReplyProxy, id: Int, status: Int, headersJson: String, body: String) {
@@ -244,6 +278,8 @@ internal class ControlRelay(private val view: WebView, private val fingerprint: 
         private const val MAX_RESPONSE_BYTES = 4_194_304
         private const val MAX_HEADER_BYTES = 16_384
         private val METHODS = setOf("GET", "HEAD", "POST", "PUT", "PATCH", "DELETE")
+        /** A playback device id as the page registers it (hex); anything else is never put in a URL. */
+        private val DEVICE_ID = Regex("[A-Za-z0-9_-]{1,128}")
         private val BLOCKED_HEADERS = setOf(
             "cookie", "cookie2", "host", "origin", "referer", "connection", "content-length", "transfer-encoding",
             "te", "trailer", "upgrade", "accept-encoding", "user-agent", "x-requested-with", "accept-language",

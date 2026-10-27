@@ -1,6 +1,7 @@
 package app.myspoti.spotify.gql
 
 import app.myspoti.spotify.bridge.Bridge
+import app.myspoti.spotify.bridge.BridgeException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -116,11 +117,13 @@ class SpotifyHttp(
         val now = System.currentTimeMillis()
         return web?.takeIf { it.expiresAtMs - now > 60_000 } ?: run {
             val t = bridge.call("token.get").jsonObject
+            // A page that answers without a field (a build that changed) is a bridge error, not a crash.
+            fun field(name: String): JsonPrimitive = t[name] as? JsonPrimitive ?: throw BridgeException("token.get: no $name")
             WebToken(
-                access = t["accessToken"]!!.jsonPrimitive.content,
-                expiresAtMs = t["expiresAtMs"]!!.jsonPrimitive.long,
-                clientId = t["clientId"]!!.jsonPrimitive.content,
-                appVersion = t["appVersion"]!!.jsonPrimitive.content,
+                access = field("accessToken").content,
+                expiresAtMs = field("expiresAtMs").long,
+                clientId = field("clientId").content,
+                appVersion = field("appVersion").content,
                 anonymous = t["isAnonymous"]?.jsonPrimitive?.contentOrNull == "true",
             ).also { web = it }
         }
@@ -191,7 +194,8 @@ class SpotifyHttp(
         val granted = runCatching { Bridge.json.parseToJsonElement(text).jsonObject["granted_token"]?.jsonObject }.getOrNull()
             ?: throw GqlException("clienttoken", "HTTP $code: ${text.take(200)}")
         val seconds = (granted["expires_after_seconds"] as? JsonPrimitive)?.long ?: 86_400
-        return ClientToken(granted["token"]!!.jsonPrimitive.content, System.currentTimeMillis() + seconds * 1000)
+        val token = (granted["token"] as? JsonPrimitive)?.content ?: throw GqlException("clienttoken", "no token in the answer")
+        return ClientToken(token, System.currentTimeMillis() + seconds * 1000)
     }
 
     companion object {

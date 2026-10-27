@@ -7,6 +7,7 @@ import app.myspoti.spotify.bridge.BridgeHost
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -42,12 +43,14 @@ class PlaybackFollowUpTest {
     private lateinit var scope: CoroutineScope
     private lateinit var host: FakeHost
     private lateinit var player: SpotifyPlayer
+    private lateinit var bridge: Bridge
 
     @BeforeEach fun up() {
         AdBlock.ahead.value = null
         scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
         host = FakeHost()
-        player = SpotifyPlayer(Bridge(host, scope), scope)
+        bridge = Bridge(host, scope)
+        player = SpotifyPlayer(bridge, scope)
         // A message posted before the bridge listens is lost (a slow CI machine): wait for it.
         waitFor("bridge listening") { host.messages.subscriptionCount.value > 0 }
     }
@@ -109,6 +112,45 @@ class PlaybackFollowUpTest {
         host.post(state(track("P"), repeat = 0))
         delay(300)
         assertEquals(sent + 1, called("player.setRepeat"))
+    }
+
+    @Test fun `while playback is held, each song the page moves on to by itself is paused once`() = runBlocking {
+        player.playbackHeld = { true }
+        host.post("""{"type":"ready"}""")
+        host.post(state(track("A")))
+        waitFor("A paused") { called("player.pause") == 1 }
+        // The same song again (the user played it on): left alone.
+        host.post(state(track("A")))
+        delay(300)
+        assertEquals(1, called("player.pause"))
+        // The page skipped on by itself to a song it has no licence for: paused too.
+        host.post(state(track("B")))
+        waitFor("B paused") { called("player.pause") == 2 }
+        player.playbackHeld = { false }
+        host.post(state(track("C")))
+        delay(300)
+        assertEquals(2, called("player.pause"), "no hold, no pause")
+    }
+
+    @Test fun `a reload waits for the new page, not the old page still ready`() = runBlocking {
+        host.post("""{"type":"ready"}""")
+        waitFor("ready") { bridge.ready.value }
+        // The host only asks for the load: the old page stays ready until the new one starts.
+        player.reloadHost = { }
+        val reloaded = async(Dispatchers.Default) { player.reloadPage() }
+        delay(2_500)
+        assertFalse(reloaded.isCompleted, "still the old page")
+        bridge.pageGone()
+        host.post("""{"type":"ready"}""")
+        assertTrue(reloaded.await())
+    }
+
+    @Test fun `the repeat mode of an earlier run is set again on the first song`() = runBlocking {
+        player.restoreRepeat(Repeat.CONTEXT)
+        host.post("""{"type":"ready"}""")
+        host.post(state(track("A"), repeat = 0))
+        waitFor("repeat set again") { called("player.setRepeat") == 1 }
+        assertEquals("{\"mode\":1}", host.calls.last { it.first == "player.setRepeat" }.second)
     }
 
     @Test fun `a webview without widevine is reported`() = runBlocking {

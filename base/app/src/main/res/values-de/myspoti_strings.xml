@@ -503,4 +503,6 @@
     <string name="playlist_member_owner">Ersteller</string>
     <string name="playlist_member_collab">Mitwirkende*r</string>
     <string name="playlist_members_more">%1$s und %2$d weitere</string>
+    <string name="settings_headset_skip_title">Kopfhörertasten springen 15 s bei Podcasts</string>
+    <string name="settings_headset_skip_detail">Aus: sie wechseln zur nächsten oder vorherigen Folge</string>
 </resources>

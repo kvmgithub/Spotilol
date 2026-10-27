@@ -46,6 +46,7 @@ object MyspotiRuntime {
         // the player is not there to answer, and the "page not answering" reload threw the user
         // off the e-mail code step while they were away reading the code (reported, log seen).
         spotify.player.recoveryHeld = { host.licenseLimited() || host.loginRequired.value }
+        spotify.player.playbackHeld = { host.licenseLimited() }
         // Spotify limiting this client: stop asking (a paused player requests no licence).
         scope.launch {
             host.licenseLimitedUntil.collect { until ->

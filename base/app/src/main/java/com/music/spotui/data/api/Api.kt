@@ -219,12 +219,12 @@ class Api constructor(
         val id = c.uri.substringAfterLast(':')
         val image = cover(c.images)
         return when (c.kind) {
-            MediaKind.ALBUM -> HomeItem.Album(id = id, name = c.title, imageUrl = image, subtitle = c.subtitle ?: "Album", artists = c.subtitle.orEmpty())
+            MediaKind.ALBUM -> HomeItem.Album(id = id, name = c.title, imageUrl = image, subtitle = c.subtitle ?: context.getString(R.string.album_type_album), artists = c.subtitle.orEmpty())
             MediaKind.ARTIST -> HomeItem.Artist(name = c.title, imageUrl = image, id = id)
-            MediaKind.PLAYLIST -> HomeItem.Playlist(name = c.title, imageUrl = image, subtitle = c.subtitle?.let { "Playlist • $it" } ?: "Playlist", id = id)
+            MediaKind.PLAYLIST -> HomeItem.Playlist(name = c.title, imageUrl = image, subtitle = c.subtitle?.let { context.getString(R.string.assisted_curation_search_playlist) + " • $it" } ?: context.getString(R.string.assisted_curation_search_playlist), id = id)
             MediaKind.SHOW, MediaKind.AUDIOBOOK -> HomeItem.Show(id = id, name = c.title, imageUrl = image, subtitle = c.subtitle.orEmpty(), isEpisode = false)
             MediaKind.EPISODE, MediaKind.CHAPTER -> HomeItem.Show(id = id, name = c.title, imageUrl = image, subtitle = c.subtitle.orEmpty(), isEpisode = true)
-            MediaKind.COLLECTION -> HomeItem.Playlist(name = c.title, imageUrl = image.ifBlank { LIKED_COVER }, subtitle = "Playlist", id = LIKED_SONGS_ID)
+            MediaKind.COLLECTION -> HomeItem.Playlist(name = c.title, imageUrl = image.ifBlank { LIKED_COVER }, subtitle = context.getString(R.string.assisted_curation_search_playlist), id = LIKED_SONGS_ID)
             else -> null
         }
     }

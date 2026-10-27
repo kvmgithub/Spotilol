@@ -424,11 +424,11 @@ fun ContextScreen(navController: NavController, type: String, id: String) {
     Box(modifier = Modifier.fillMaxSize().background(PageBackground)) {
         when (val r = resp) {
             is Response.Loading -> Loader(SkeletonKind.Header)
-            is Response.Error -> Text(
-                r.error,
-                color = Color.White,
-                modifier = Modifier.align(Alignment.Center).padding(24.dp),
-            )
+            // A page that failed to load can be asked again (Myspoti 2.1.0).
+            is Response.Error -> com.music.spotui.ui.components.ErrorRetry(
+                stringResource(R.string.page_load_failed),
+                Modifier.align(Alignment.Center),
+            ) { vm.reload() }
             is Response.Success -> ContextContent(navController, vm, r.data)
         }
     }

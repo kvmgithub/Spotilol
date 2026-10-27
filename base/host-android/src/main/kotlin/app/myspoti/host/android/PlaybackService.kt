@@ -49,11 +49,13 @@ data class NowPlayingInfo(
     val buffering: Boolean = false,
     val liked: Boolean = false,
     val shuffle: Boolean = false,
+    /** A podcast episode: the notification offers 15 s skips, the headset next / previous skip 15 s. */
+    val episode: Boolean = false,
 ) {
     /** Everything but the position: a moving position alone is not a new state. */
     fun sameAs(other: NowPlayingInfo) = id == other.id && title == other.title && artist == other.artist &&
         album == other.album && coverUrl == other.coverUrl && durationMs == other.durationMs &&
-        playing == other.playing && buffering == other.buffering && liked == other.liked && shuffle == other.shuffle
+        playing == other.playing && buffering == other.buffering && liked == other.liked && shuffle == other.shuffle && episode == other.episode
 }
 
 /** Commands from the system (notification buttons, headset, car, lock screen). */
@@ -68,6 +70,10 @@ interface PlaybackControls {
     fun playFromSearch(query: String)
     fun setRemoteVolume(volume: Int)
     fun setShuffle(on: Boolean) {}
+    /** What plays is a podcast episode. */
+    val isEpisode: Boolean get() = false
+    /** Skips [deltaMs] within the episode; at its end, goes on to the next item. */
+    fun skipBy(deltaMs: Long) {}
 }
 
 /** Android Auto / media browser content. */
@@ -189,11 +195,37 @@ class PlaybackService : MediaBrowserServiceCompat() {
         if (c == null) android.util.Log.w("Myspoti", "media session: $name dropped, the player is not attached yet") else c.run()
     }
 
+    /** A transport command from the system: on a podcast episode the earbuds skip 15 s (see [HeadsetButtons]). */
+    private fun headset(cmd: HeadsetButtons.Command) {
+        val episode = controls?.isEpisode == true
+        when (val action = HeadsetButtons.map(episode, skipsOnEpisodes(this), cmd)) {
+            HeadsetButtons.Action.NEXT -> command("next") { next() }
+            HeadsetButtons.Action.PREVIOUS -> command("previous") { previous() }
+            HeadsetButtons.Action.SEEK_FORWARD, HeadsetButtons.Action.SEEK_BACK -> {
+                val delta = if (action == HeadsetButtons.Action.SEEK_FORWARD) HeadsetButtons.SKIP_MS else -HeadsetButtons.SKIP_MS
+                command(HeadsetButtons.logLine(cmd, episode, action)) { skipBy(delta) }
+            }
+            HeadsetButtons.Action.NONE -> Logbook.log("media session: " + HeadsetButtons.logLine(cmd, episode, action))
+        }
+    }
+
     private val callback = object : MediaSessionCompat.Callback() {
         override fun onPlay() = command("play") { play() }
         override fun onPause() = command("pause", wake = false) { pause() }
-        override fun onSkipToNext() = command("next") { next() }
-        override fun onSkipToPrevious() = command("previous") { previous() }
+        override fun onSkipToNext() = headset(HeadsetButtons.Command.NEXT)
+        override fun onSkipToPrevious() = headset(HeadsetButtons.Command.PREVIOUS)
+        override fun onFastForward() = headset(HeadsetButtons.Command.FAST_FORWARD)
+        override fun onRewind() = headset(HeadsetButtons.Command.REWIND)
+        override fun onMediaButtonEvent(mediaButtonEvent: Intent): Boolean {
+            // Skip forward / backward keys (some earbuds, cars) have no callback of their own.
+            val event = androidx.core.content.IntentCompat.getParcelableExtra(mediaButtonEvent, Intent.EXTRA_KEY_EVENT, android.view.KeyEvent::class.java)
+            val mapped = event?.let { HeadsetButtons.commandOf(it.keyCode) }
+            if (event != null && mapped != null) {
+                if (event.action == android.view.KeyEvent.ACTION_DOWN && event.repeatCount == 0) headset(mapped)
+                return true
+            }
+            return super.onMediaButtonEvent(mediaButtonEvent)
+        }
         override fun onSeekTo(pos: Long) = command("seek", wake = false) { seekTo(pos) }
         override fun onStop() = command("stop", wake = false) { pause() }
         override fun onPlayFromMediaId(mediaId: String, extras: Bundle?) = command("play $mediaId") { playFromMediaId(mediaId) }
@@ -245,12 +277,12 @@ class PlaybackService : MediaBrowserServiceCompat() {
             else -> PlaybackStateCompat.STATE_PAUSED
         }
         session.setPlaybackState(PlaybackStateCompat.Builder()
-            .setActions(ACTIONS)
+            .setActions(if (info.episode) ACTIONS or SKIP_ACTIONS else ACTIONS)
             // Like on the left of previous / play / next, shuffle on the right: five buttons, so
             // play / pause sits in the middle (lock screen, Samsung Now Bar, Android 13+ shade).
-            .addCustomAction(ACTION_LIKE, if (info.liked) "Unlike" else "Like",
+            .addCustomAction(ACTION_LIKE, getString(if (info.liked) R.string.msp_unlike else R.string.msp_like),
                 if (info.liked) R.drawable.msp_ic_liked else R.drawable.msp_ic_like)
-            .addCustomAction(ACTION_SHUFFLE, if (info.shuffle) "Shuffle off" else "Shuffle on",
+            .addCustomAction(ACTION_SHUFFLE, getString(if (info.shuffle) R.string.msp_shuffle_off else R.string.msp_shuffle_on),
                 if (info.shuffle) R.drawable.msp_ic_shuffle_on else R.drawable.msp_ic_shuffle)
             .setState(state, info.positionMs, if (info.playing && !info.buffering) 1f else 0f)
             .build())
@@ -403,6 +435,7 @@ class PlaybackService : MediaBrowserServiceCompat() {
 
     private fun build(info: NowPlayingInfo?): Notification {
         val playing = info?.playing == true
+        val episode = info?.episode == true
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(R.drawable.msp_ic_notification)
             .setContentTitle(info?.title ?: "")
@@ -414,12 +447,16 @@ class PlaybackService : MediaBrowserServiceCompat() {
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .setOnlyAlertOnce(true)
             .setOngoing(playing)
-            .addAction(R.drawable.msp_ic_previous, "Previous",
-                MediaButtonReceiver.buildMediaButtonPendingIntent(this, PlaybackStateCompat.ACTION_SKIP_TO_PREVIOUS))
-            .addAction(if (playing) R.drawable.msp_ic_pause else R.drawable.msp_ic_play, if (playing) "Pause" else "Play",
+            .addAction(if (episode) R.drawable.msp_ic_replay_15 else R.drawable.msp_ic_previous,
+                getString(if (episode) R.string.msp_back_15 else R.string.msp_previous),
+                MediaButtonReceiver.buildMediaButtonPendingIntent(this,
+                    if (episode) PlaybackStateCompat.ACTION_REWIND else PlaybackStateCompat.ACTION_SKIP_TO_PREVIOUS))
+            .addAction(if (playing) R.drawable.msp_ic_pause else R.drawable.msp_ic_play, getString(if (playing) R.string.msp_pause else R.string.msp_play),
                 MediaButtonReceiver.buildMediaButtonPendingIntent(this, PlaybackStateCompat.ACTION_PLAY_PAUSE))
-            .addAction(R.drawable.msp_ic_next, "Next",
-                MediaButtonReceiver.buildMediaButtonPendingIntent(this, PlaybackStateCompat.ACTION_SKIP_TO_NEXT))
+            .addAction(if (episode) R.drawable.msp_ic_forward_15 else R.drawable.msp_ic_next,
+                getString(if (episode) R.string.msp_forward_15 else R.string.msp_next),
+                MediaButtonReceiver.buildMediaButtonPendingIntent(this,
+                    if (episode) PlaybackStateCompat.ACTION_FAST_FORWARD else PlaybackStateCompat.ACTION_SKIP_TO_NEXT))
             .setStyle(MediaStyle().setMediaSession(session.sessionToken).setShowActionsInCompactView(0, 1, 2))
             .build()
     }
@@ -432,7 +469,7 @@ class PlaybackService : MediaBrowserServiceCompat() {
     private fun createChannel() {
         val manager = getSystemService(NotificationManager::class.java)
         if (manager.getNotificationChannel(CHANNEL_ID) == null) {
-            manager.createNotificationChannel(NotificationChannel(CHANNEL_ID, "Playback", NotificationManager.IMPORTANCE_LOW).apply {
+            manager.createNotificationChannel(NotificationChannel(CHANNEL_ID, getString(R.string.msp_channel_playback), NotificationManager.IMPORTANCE_LOW).apply {
                 setShowBadge(false)
             })
         }
@@ -527,6 +564,15 @@ class PlaybackService : MediaBrowserServiceCompat() {
         fun setKeepsPlayingOnClose(context: Context, on: Boolean) =
             context.getSharedPreferences(CLOSE_PREFS, Context.MODE_PRIVATE).edit().putBoolean(KEEP_PLAYING_KEY, on).apply()
 
+        private const val SKIP_KEY = "headset_skips_on_episodes"
+
+        /** Earbud next / previous skip 15 s on a podcast episode (default); off: next / previous episode. */
+        fun skipsOnEpisodes(context: Context): Boolean =
+            context.getSharedPreferences(CLOSE_PREFS, Context.MODE_PRIVATE).getBoolean(SKIP_KEY, true)
+
+        fun setSkipsOnEpisodes(context: Context, on: Boolean) =
+            context.getSharedPreferences(CLOSE_PREFS, Context.MODE_PRIVATE).edit().putBoolean(SKIP_KEY, on).apply()
+
         const val ROOT_ID = "root"
         /** Root for callers that may control playback but not browse (see onGetRoot). */
         private const val EMPTY_ROOT_ID = "empty"
@@ -539,6 +585,8 @@ class PlaybackService : MediaBrowserServiceCompat() {
             PlaybackStateCompat.ACTION_SKIP_TO_NEXT or PlaybackStateCompat.ACTION_SKIP_TO_PREVIOUS or
             PlaybackStateCompat.ACTION_SEEK_TO or PlaybackStateCompat.ACTION_PLAY_FROM_MEDIA_ID or
             PlaybackStateCompat.ACTION_PLAY_FROM_SEARCH
+        /** Added while an episode plays: the notification's 15 s buttons and the keys of the same name. */
+        private val SKIP_ACTIONS = PlaybackStateCompat.ACTION_FAST_FORWARD or PlaybackStateCompat.ACTION_REWIND
         private val http = app.myspoti.spotify.security.BoundedHttp.client(OkHttpClient(), callTimeoutSeconds = 20)
         /** The largest side kept for artwork: what Android's media controls expect (640 is Spotify's biggest cover). */
         private const val COVER_MAX_PX = 640

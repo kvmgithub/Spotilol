@@ -222,7 +222,7 @@ class WebPlayerHost(private val context: Context) : BridgeHost {
             }
 
             override fun onPageStarted(view: WebView, url: String, favicon: Bitmap?) {
-                log("page start ${url.take(120)}")
+                log("page start ${Logbook.noQuery(url).take(120)}")
                 mainFrameFailed = false
                 // A load that never ends (measured: a reload's document request answered nothing
                 // for 9 minutes, the page stayed "loading", empty, without the bridge).
@@ -237,7 +237,7 @@ class WebPlayerHost(private val context: Context) : BridgeHost {
 
             override fun onReceivedError(view: WebView, request: WebResourceRequest, error: android.webkit.WebResourceError) {
                 if (WebPolicy.isSpotifyApi(request.url.toString()))
-                    log("load error ${error.errorCode} ${error.description} ${request.url.toString().take(120)}")
+                    log("load error ${error.errorCode} ${error.description} ${Logbook.noQuery(request.url.toString()).take(120)}")
                 // ERR_ABORTED: a load this app stopped itself (a timeout, a newer load) — not a failure.
                 if (request.isForMainFrame && WebPolicy.isPlayer(request.url.toString()) && "ERR_ABORTED" !in error.description.toString())
                     playerPageFailed("load error ${error.errorCode}")
@@ -252,7 +252,7 @@ class WebPlayerHost(private val context: Context) : BridgeHost {
             }
 
             override fun onPageFinished(view: WebView, url: String) {
-                log("page finished ${url.take(120)}")
+                log("page finished ${Logbook.noQuery(url).take(120)}")
                 main.removeCallbacks(loadTimeout)
                 if (url.startsWith(PLAYER_URL) && !mainFrameFailed) { pageFailures = 0; main.removeCallbacks(retryPlayerPage) }
                 // A secure-spawned process (GrapheneOS) can lose the first navigation: it then

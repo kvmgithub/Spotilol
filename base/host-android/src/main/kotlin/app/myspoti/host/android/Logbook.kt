@@ -32,6 +32,12 @@ object Logbook {
      * Records [line] and mirrors it to Logcat with the same message, so the exported report
      * and `adb logcat -s Myspoti` show the same thing. Safe from any thread.
      */
+    /**
+     * [url] without its query string and fragment (Myspoti 2.1.0): they carry tokens, ids and
+     * search terms. For every URL put in a log line.
+     */
+    fun noQuery(url: String): String = url.substringBefore('#').substringBefore('?')
+
     fun log(raw: String) {
         // Spotilol: every engine line goes through the shared redactor before Logcat or the buffer.
         val line = app.myspoti.spotify.security.LogRedactor.redact(raw)

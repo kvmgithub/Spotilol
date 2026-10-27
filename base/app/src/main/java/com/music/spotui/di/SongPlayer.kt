@@ -155,6 +155,7 @@ object SongPlayer {
     fun attachEngine(state: CurrentSongState) {
         boundState = state
         restoreLastTrack(state)
+        restoreRepeat(state)
         scope.launch { api.player.state.collect { s -> if (acceptsSessionUpdates()) applyState(s) } }
         // Another device plays (the phone as a remote): the state is read again every few seconds
         // so the notification, the mini player and the slider keep up. Reported: the notification
@@ -249,6 +250,13 @@ object SongPlayer {
         override fun playFromSearch(query: String) {}
         override fun setRemoteVolume(volume: Int) = SongPlayer.setRemoteVolume(volume)
         override fun setShuffle(on: Boolean) = SongPlayer.setShuffle(on)
+        override val isEpisode: Boolean get() = SongPlayer.isEpisode
+        override fun skipBy(deltaMs: Long) {
+            // Past the end of the episode a +15 s is the normal end: on to the next item.
+            val duration = getDuration()
+            if (deltaMs > 0 && duration > 0 && getCurrentPosition() + deltaMs >= duration) SongPlayer.next()
+            else SongPlayer.skipBy(deltaMs)
+        }
     }
 
     // ── Last track: shown at launch (mini player) before the Web Player reports ──
@@ -372,6 +380,7 @@ object SongPlayer {
             buffering = isBuffering && !ad,
             liked = !ad && liked,
             shuffle = st?.shuffle?.value == true,
+            episode = !ad && isEpisode,
         ))
     }
 
@@ -636,7 +645,12 @@ object SongPlayer {
      * the list it was picked from; when null, the last list that registered this track is used.
      */
     /** [order]: the context's track uris in the order to play them (a sorted playlist). */
-    fun playSong(song: String, context: Context? = null, contextUri: String? = null, order: List<String>? = null, positionMs: Long? = null) {
+    /**
+     * [alone]: no list at all, not even the one that registered the track (a search hit), so
+     * Spotify goes on with its own autoplay of related songs instead of, say, Liked Songs
+     * (Myspoti 2.1.0).
+     */
+    fun playSong(song: String, context: Context? = null, contextUri: String? = null, order: List<String>? = null, positionMs: Long? = null, alone: Boolean = false) {
         // Data saver on mobile data: Spotify can't stream, only downloads and Local Files play.
         if (com.music.spotui.data.DataSaver.active) {
             main.post {
@@ -649,7 +663,7 @@ object SongPlayer {
         val episodeId = song.removePrefix("episode:").takeIf { song.startsWith("episode:") }
         val trackId = episodeId ?: spotifyTrackIdForPlayback(song) ?: return
         val itemUri = if (episodeId != null) "spotify:episode:$episodeId" else SPOTIFY_TRACK_PREFIX + trackId
-        val ctx = contextUri ?: contextRegistry[song]
+        val ctx = if (alone) null else contextUri ?: contextRegistry[song]
         // What a smart shuffle ending brings back: the order of the last play that was not one.
         if (ctx != null) {
             val sent = order?.takeIf { ctx == contextUri }
@@ -956,7 +970,22 @@ object SongPlayer {
         Haptics.toggle(mode != 0)
         _repeatMode.value = mode
         boundState?.repeat?.value = mode != 0
+        lastTrackPrefs().edit().putInt("repeat", mode.coerceIn(0, 2)).apply()
         command { api.player.setRepeat(Repeat.entries[mode.coerceIn(0, 2)]) }
+    }
+
+    /**
+     * Reported (Myspoti 2.0.2): the repeat button forgets what it was. The mode is the user's
+     * choice, kept from one run of the app to the next (the page always starts with repeat off):
+     * shown at once and set again on the first song the page reports.
+     */
+    private fun restoreRepeat(state: CurrentSongState) {
+        val p = lastTrackPrefs()
+        if (!p.contains("repeat")) return
+        val mode = p.getInt("repeat", 0).coerceIn(0, 2)
+        _repeatMode.value = mode
+        state.repeat.value = mode != 0
+        MyspotiRuntime.spotify.player.restoreRepeat(Repeat.entries[mode])
     }
 
     fun cycleRepeat() = setRepeatMode((_repeatMode.value + 1) % 3)

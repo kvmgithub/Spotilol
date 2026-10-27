@@ -509,4 +509,6 @@
     <string name="playlist_member_owner">Créateur</string>
     <string name="playlist_member_collab">Collaborateur</string>
     <string name="playlist_members_more">%1$s et %2$d autres</string>
+    <string name="settings_headset_skip_title">Boutons du casque : 15 s en podcast</string>
+    <string name="settings_headset_skip_detail">Désactivé : ils passent à l\'épisode suivant ou précédent</string>
 </resources>

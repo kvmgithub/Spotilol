@@ -90,6 +90,13 @@ fun SettingsScreen(navController: NavController) {
                 checked = keepPlaying,
                 onChecked = { keepPlaying = it; app.myspoti.host.android.PlaybackService.setKeepsPlayingOnClose(ctx, it) },
             )
+            var headsetSkip by remember { mutableStateOf(app.myspoti.host.android.PlaybackService.skipsOnEpisodes(ctx)) }
+            OptionRow(
+                label = stringResource(R.string.settings_headset_skip_title),
+                detail = stringResource(R.string.settings_headset_skip_detail),
+                checked = headsetSkip,
+                onChecked = { headsetSkip = it; app.myspoti.host.android.PlaybackService.setSkipsOnEpisodes(ctx, it) },
+            )
             Divider()
 
             Section(R.string.spotilol_section_accounts)

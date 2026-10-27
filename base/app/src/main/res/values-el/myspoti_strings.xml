@@ -502,4 +502,6 @@
     <string name="playlist_member_owner">Δημιουργός</string>
     <string name="playlist_member_collab">Συνεργάτης</string>
     <string name="playlist_members_more">%1$s και %2$d ακόμα</string>
+    <string name="settings_headset_skip_title">Κουμπιά ακουστικών: 15 δ στα podcast</string>
+    <string name="settings_headset_skip_detail">Απενεργοποιημένο: πηγαίνουν στο επόμενο ή προηγούμενο επεισόδιο</string>
 </resources>

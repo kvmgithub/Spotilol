@@ -510,4 +510,6 @@
     <string name="playlist_member_owner">Creator</string>
     <string name="playlist_member_collab">Collaborator</string>
     <string name="playlist_members_more">%1$s and %2$d others</string>
+    <string name="settings_headset_skip_title">Headphone buttons skip 15 s on podcasts</string>
+    <string name="settings_headset_skip_detail">When off, they go to the next or previous episode</string>
 </resources>

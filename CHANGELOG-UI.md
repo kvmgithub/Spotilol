@@ -6,6 +6,33 @@ Each version section is the text of the GitHub pre-release tagged `ui-v<version>
 
 ## [Unreleased]
 
+Fixes taken from Myspoti 2.1.0, the stable release of the 2.0.2 betas. Its extensions, the Immersive look, the Connect mirror for extension songs, play reports sent by the app (Spotify's `melody` telemetry stays blocked), the update checker and the Chromium network routes for refused commands are not part of MySpotilol.
+
+### Fixed
+- Ads: an ad marked only by its metadata (`is_advertisement`, an `spotify:ad:` uri, an `ad_id`) is left out of the queue like one typed as an ad; a song whose title merely says "ad" never is.
+- A page reloaded to get past a stuck ad stays muted until a real song plays on it, so an ad it starts with is no longer heard.
+- A muted ad that plays is first played past instead of reloading the player at once.
+- A song picked just before an ad that ended in a reload is played on the new page instead of being lost.
+- After a reload, playback waits for the new page instead of sending the next song to the page going away (the music stayed off until Play was pressed).
+- While Spotify limits audio licences, each song the page moves on to by itself is paused once, instead of the page skipping through the queue.
+- The player page always sees itself visible, so its timers are not throttled with the screen off or the app in the background.
+- The repeat mode is kept from one start of the app to the next.
+- A song played from search goes on with related songs (Spotify's autoplay) instead of another list.
+- Tapping the title of a radio song opens its album, also when the radio sent the song without one; a radio's "playing from" header no longer opens Liked Songs.
+- A playlist or album page that failed to load has a Try again button; an album that could not be found has a back button and Try again.
+- When the app was killed before the player page could sign its device off, the next start takes that device off the account: no idle copy of this phone stays among the Spotify Connect devices.
+- A page answering without a field it always had (a new Web Player build) is an error the app recovers from, not a crash.
+
+### Added
+- Headphone and car buttons skip 15 s forward and back on podcast episodes, with 15 s buttons in the notification (Settings, Playback; off: next and previous episode).
+- The notification's buttons and channel are translated; home cards say "Album" and "Playlist" in the app's language.
+- Recent searches are kept for three minutes: typing back to an earlier text shows its results at once.
+
+### Diagnostics
+- `ad break started`, `ad break over after <n> s`, `ad kept in the queue: <why>`, `a song plays after the reload`, `playback held (Spotify limiting): <song> paused`, `previous player device taken off`.
+- A stalled player logs its media element (ready and network state, error).
+- Repeated `page state` lines of a buffering song and successful playback requests are left out of the log; URLs in log lines lose their query string.
+
 ## [0.8.6] - 2026-10-26
 
 Three changes taken from Myspoti 2.0.2-beta.7; the rest of that beta (the Immersive look and its queue, the last session of extension and downloaded songs, extensions) is not part of MySpotilol. Its fix for previous right after a skip only concerns extension songs.

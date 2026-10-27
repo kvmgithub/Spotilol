@@ -19,6 +19,8 @@ class AdBlockTest {
         assertTrue(AdBlock.isAd("https://imasdk.googleapis.com/js/sdkloader/ima3.js"))
         assertTrue(AdBlock.isAd("https://audio-ads.spotify.com/x"))
         assertTrue(AdBlock.isAd("https://audio-fa.scdn.co/mp3-ad/abc"))
+        assertTrue(AdBlock.isAd("https://s0.2mdn.net/ads/richmedia/studio/abc.mp4"))
+        assertFalse(AdBlock.isAd("https://evil.com/s0.2mdn.net/x.mp4"))
         assertFalse(AdBlock.isAd("https://gew4-spclient.spotify.com/track-playback/v1/devices"))
         assertFalse(AdBlock.isAd("https://gew4-spclient.spotify.com/metadata/4/track/abc?ads=1"))
         assertFalse(AdBlock.isAd("https://api-partner.spotify.com/pathfinder/v2/query"))

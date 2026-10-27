@@ -163,6 +163,7 @@ fun PlayerScreen(navController: NavController) {
     val energy by EnergySettings.state.collectAsStateWithLifecycle()
     // Liked state is Spotify's (LibraryAPI), pushed by the engine.
     val isLiked = playerViewModel.likeState
+    val titleScope = androidx.compose.runtime.rememberCoroutineScope()
     var showMenu by remember { mutableStateOf(false) }
     var showLyrics by remember { mutableStateOf(false) }
     var showSavedIn by remember { mutableStateOf(false) }
@@ -538,8 +539,21 @@ fun PlayerScreen(navController: NavController) {
                     likeSong = { nowPlayingSong(playerViewModel) },
                     adPlaying = adPlaying,
                     onTitleClick = {
-                        val albumId = np.albumUri.substringAfterLast(":")
-                        if (albumId.isNotBlank()) navController.navigate(albumRoute(playerViewModel.currentSongAlbum.value, songSinger, albumId))
+                        // A radio's tracks may come without their album (Myspoti 2.1.0): asked from
+                        // the track, else by the album's name (the album page resolves it).
+                        val albumId = np.albumUri.substringAfterLast(":").ifBlank { nowPlayingSong(playerViewModel).albumId }
+                        val albumName = playerViewModel.currentSongAlbum.value
+                        if (albumId.isNotBlank()) navController.navigate(albumRoute(albumName, songSinger, albumId))
+                        else {
+                            val trackId = SongPlayer.currentTrackId
+                            titleScope.launch {
+                                val resolved = if (trackId.isBlank()) "" else kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                                    runCatching { app.myspoti.host.android.MyspotiRuntime.api.catalog.track("spotify:track:$trackId").album?.uri }
+                                        .getOrNull()?.substringAfterLast(":").orEmpty()
+                                }
+                                if (resolved.isNotBlank() || albumName.isNotBlank()) navController.navigate(albumRoute(albumName, songSinger, resolved))
+                            }
+                        }
                     },
                     onArtistClick = {
                         playerViewModel.goToArtist(SongPlayer.currentTrackId, songSinger) { route ->
@@ -749,7 +763,7 @@ private fun playingFromLabels(np: SongPlayer.NowPlaying, fallbackName: String): 
     val type = np.contextUri.split(":").getOrNull(1).orEmpty()
     val name = contextDisplayName(np, fallbackName)
     return when {
-        np.contextUri.contains(":collection") -> stringResource(R.string.context_type_description_collection_your_library) to stringResource(R.string.collection_liked_songs_title)
+        isLikedContext(np.contextUri) -> stringResource(R.string.context_type_description_collection_your_library) to stringResource(R.string.collection_liked_songs_title)
         type == "playlist" -> stringResource(R.string.context_type_description_playlist) to name
         type == "album" -> stringResource(R.string.context_type_description_album) to name
         type == "artist" -> stringResource(R.string.context_type_description_artist) to name
@@ -759,14 +773,28 @@ private fun playingFromLabels(np: SongPlayer.NowPlaying, fallbackName: String): 
     }
 }
 
-/** Route of the page the music is playing from (playlist, album, artist, liked). */
+/** Spotify's uri of the user's Liked Songs: spotify:collection:tracks, or the older spotify:user:<name>:collection (by one artist: ...:artist:<id>). */
+private val LIKED_CONTEXT = Regex("spotify:(collection(:tracks)?|user:[^:]+:collection(:artist:[^:]+)?)")
+
+/** Only Liked Songs itself, not another collection (episodes) nor a radio that mentions one. */
+private fun isLikedContext(uri: String) = LIKED_CONTEXT.matches(uri)
+
+/**
+ * Route of the page the music is playing from (playlist, album, artist, liked); null when there
+ * is none to open. A radio (spotify:station:...) has no page of its own: it never falls back to
+ * Liked Songs (Myspoti 2.1.0).
+ */
 private fun contextRoute(np: SongPlayer.NowPlaying): String? {
     val parts = np.contextUri.split(":")
     val id = parts.getOrNull(2).orEmpty()
     // B26: opening that page again must carry the name the header shows.
     val name = contextDisplayName(np, "")
     return when {
-        np.contextUri.contains(":collection") -> Routes.Liked.route
+        isLikedContext(np.contextUri) -> Routes.Liked.route
+        parts.getOrNull(1) == "station" -> null
+        // The older form of a playlist's uri: spotify:user:<name>:playlist:<id>.
+        parts.getOrNull(1) == "user" && parts.getOrNull(3) == "playlist" && parts.getOrNull(4).orEmpty().isNotBlank() ->
+            com.music.spotui.ui.navigation.playlistRoute(parts[4], name)
         parts.getOrNull(1) == "playlist" && id.isNotBlank() -> com.music.spotui.ui.navigation.playlistRoute(id, name)
         parts.getOrNull(1) == "album" && id.isNotBlank() -> albumRoute(name, "", id)
         parts.getOrNull(1) == "artist" && id.isNotBlank() -> com.music.spotui.ui.navigation.artistRoute(name, id)

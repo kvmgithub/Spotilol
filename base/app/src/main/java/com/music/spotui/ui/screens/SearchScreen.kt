@@ -255,7 +255,7 @@ fun SumUpSearchScreen(
                                         durationMs = item.durationMs,
                                     )
                                     searchViewModel.startRadioFromSong(song)
-                                    SongPlayer.playSong(song.url, context)
+                                    SongPlayer.playSong(song.url, context, alone = true)
                                     searchViewModel.updateSongState(
                                         song.coverUri, song.title, song.singer, true, song.id, 0, song.album)
                                 }
@@ -578,7 +578,7 @@ fun SearchSongRow(
                     // Start a radio from the tapped track (queue = this song + Spotify
                     // recommendations) rather than queuing the whole search list.
                     searchViewModel.startRadioFromSong(song)
-                    SongPlayer.playSong(song.url, context)
+                    SongPlayer.playSong(song.url, context, alone = true)
                     searchViewModel.updateSongState(
                         song.coverUri,
                         song.title,

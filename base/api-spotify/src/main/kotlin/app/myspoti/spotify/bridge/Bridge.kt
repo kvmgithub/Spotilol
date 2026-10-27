@@ -48,6 +48,35 @@ class Bridge(private val host: BridgeHost, scope: CoroutineScope) {
         }
     }
 
+    private var lastStateLine: String? = null
+    private var lastStateKey: String? = null
+    private var lastStateAt = 0L
+
+    /**
+     * The page posts its state several times a second while a song buffers (Myspoti 2.0.2: the
+     * most frequent line of every report). Logged when the song or paused changes; a buffering
+     * flip of the same song at most every [STATE_EVERY_MS].
+     */
+    private fun stateWorthLogging(line: String, key: String): Boolean {
+        val now = System.currentTimeMillis()
+        if (line == lastStateLine) return false
+        val changed = key != lastStateKey
+        if (!changed && now - lastStateAt < STATE_EVERY_MS) return false
+        lastStateLine = line; lastStateKey = key; lastStateAt = now
+        return true
+    }
+
+    /**
+     * The page's resource notes: only failed ones are logged (status 0 is "not readable", left
+     * out too unless it is a command), and no audio licence answer (three lines per answer).
+     */
+    private fun netWorthLogging(msg: JsonObject): Boolean {
+        val url = (msg["url"] as? JsonPrimitive)?.contentOrNull ?: return true
+        val status = (msg["status"] as? JsonPrimitive)?.intOrNull ?: 0
+        if ("widevine-license" in url) return false
+        return status >= 400 || (status == 0 && "player/command" in url)
+    }
+
     private fun handle(raw: String) {
         val msg = runCatching { json.parseToJsonElement(raw) }.getOrNull() as? JsonObject ?: return
         // Lenient reads: a field of an unexpected type counts as missing.
@@ -56,9 +85,12 @@ class Bridge(private val host: BridgeHost, scope: CoroutineScope) {
         logger?.let { log ->
             if (type == "state") {
                 val s = msg["state"] as? JsonObject
-                log("page state: " + (s?.get("track") as? JsonObject)?.get("name") + " paused=" + s?.get("isPaused") + " buffering=" + s?.get("isBuffering"))
+                val line = "page state: " + (s?.get("track") as? JsonObject)?.get("name") + " paused=" + s?.get("isPaused") + " buffering=" + s?.get("isBuffering")
+                if (stateWorthLogging(line, s?.get("track")?.toString() + s?.get("isPaused"))) log(line)
             } else if (type == "result") {
                 // Results are logged by call(); never write their values (tokens) here.
+            } else if (type == "net" && !netWorthLogging(msg)) {
+                // A playback request that went through, or a licence answer.
             } else if (type != "queue") log("page $type: " + raw.take(300))
         }
         when (type) {
@@ -95,10 +127,15 @@ class Bridge(private val host: BridgeHost, scope: CoroutineScope) {
      * injected again, and the calls still waiting fail now instead of each timing out.
      */
     fun pageGone() {
+        pagesGone++
         gone = true
         _ready.value = false
         pending.values.forEach { it.completeExceptionally(BridgeException("page reloaded")) }
     }
+
+    /** How many pages went away ([pageGone]): a reload waits for this to move, not for "ready" alone. */
+    @Volatile var pagesGone = 0
+        private set
 
     /** Between [pageGone] and the new page's "ready". */
     @Volatile private var gone = false
@@ -148,6 +185,9 @@ class Bridge(private val host: BridgeHost, scope: CoroutineScope) {
 
     companion object {
         val json = Json { ignoreUnknownKeys = true }
+
+        /** A buffering flip of the same song is logged at most this often (see stateWorthLogging). */
+        const val STATE_EVERY_MS = 5_000L
     }
 }
 

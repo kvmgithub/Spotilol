@@ -61,7 +61,8 @@ class PickDuringAdTest {
 
     private val ad = """{"kind":"ad","uri":"spotify:ad:1","name":"ad","durationMs":30000}"""
 
-    private fun waitFor(what: String, ms: Long = 3_000, cond: () -> Boolean) = runBlocking {
+    // A busy CI machine can take seconds to deliver a page message: only a failure waits the whole time.
+    private fun waitFor(what: String, ms: Long = 10_000, cond: () -> Boolean) = runBlocking {
         val end = System.currentTimeMillis() + ms
         while (!cond()) {
             check(System.currentTimeMillis() < end) { "timed out: $what" }

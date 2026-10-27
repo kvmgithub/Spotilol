@@ -376,6 +376,9 @@ class SpotifyPlayer(private val bridge: Bridge, private val scope: CoroutineScop
         val networkState: Int = -1,
         val error: String? = null,
     ) {
+        /** Playing, yet without data ahead while the network is still loading it: waiting for the network. */
+        val starved: Boolean get() = !paused && readyState in 0..2 && networkState == NETWORK_LOADING
+
         fun describe() = "paused=$paused muted=$muted volume=$level own=$own t=${"%.1f".format(time)} ready=$readyState net=$networkState error=${error ?: "none"} active=$active lag=$lag"
     }
 
@@ -563,9 +566,22 @@ class SpotifyPlayer(private val bridge: Bridge, private val scope: CoroutineScop
             val reason = s?.let { stallOf(it, now, pausedByUser) } ?: (if (silent) SILENT else null)
             if (recoveryHeld()) { key = null; attempts = 0; continue }
             if (s == null || reason == null) { key = null; attempts = 0; continue }
+            // The element waits for audio data from the network (0.11.1, log seen: a 30 s network
+            // drop, the seek answered nothing, the reload then found no network and broke the page).
+            // It plays on by itself once data comes: a seek is tried after a while, a reload never.
+            val starved = reason == SILENT && media?.starved == true
             val k = "${s.item?.uri}|$reason"
-            if (k != key) { key = k; since = now; attempts = 0; if (reason != SILENT) continue }
-            val wait = when (reason) { "past the end" -> END_STUCK_MS; SILENT -> 0L; else -> STUCK_MS }
+            if (k != key) {
+                key = k; since = now; attempts = 0
+                if (starved) bridge.logger?.invoke("audio waits for the network on ${s.item?.name}; media element: ${media?.describe()}")
+                if (reason != SILENT) continue
+            }
+            val wait = when {
+                starved -> STARVED_WAIT_MS
+                reason == "past the end" -> END_STUCK_MS
+                reason == SILENT -> 0L
+                else -> STUCK_MS
+            }
             if (now - since < wait) continue
             since = now
             attempts++
@@ -575,6 +591,7 @@ class SpotifyPlayer(private val bridge: Bridge, private val scope: CoroutineScop
             val onward = reason == "past the end" || reason == "paused at the end"
             // A frozen page answers nothing: straight to the reload.
             if (attempts == 1 && !bridge.ping()) attempts = 2
+            if (starved && attempts > 1) attempts = 1
             if (attempts == 1) runCatching { if (onward) playOn(s) else seek(s.positionAt(now)) }
             else {
                 attempts = 0
@@ -1623,6 +1640,11 @@ class SpotifyPlayer(private val bridge: Bridge, private val scope: CoroutineScop
     private fun onBoost(msg: JsonObject) {
         // Also at 100 %: a page that has built the graph stays routed through it, silent or not.
         if ((msg["sound"] as? JsonPrimitive)?.booleanOrNull != false) return
+        // Silence while the element waits for audio data is the network's, not Web Audio's.
+        if (!online() || lastMedia?.starved == true) {
+            bridge.logger?.invoke("no sound through Web Audio while the audio waits for the network: boost and crossfade kept")
+            return
+        }
         bridge.logger?.invoke("boost and crossfade off: no sound through Web Audio, the page reloads")
         webAudioOff = true
         boost = 1.0
@@ -1689,6 +1711,10 @@ class SpotifyPlayer(private val bridge: Bridge, private val scope: CoroutineScop
         const val LEVEL_TIMEOUT_MS = 3_000L
         /** A song the page says it plays here while its media element stands still that long. */
         const val SILENT_MS = 6_000L
+        /** An element waiting for audio data from the network is left that long before a seek asks again. */
+        const val STARVED_WAIT_MS = 15_000L
+        /** HTMLMediaElement.NETWORK_LOADING. */
+        const val NETWORK_LOADING = 2
         const val SILENT = "silent"
         /** The next song is preloaded once the current one has played that long. */
         const val PRELOAD_AFTER_MS = 2_000L

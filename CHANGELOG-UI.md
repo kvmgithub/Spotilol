@@ -6,6 +6,14 @@ Each version section is the text of the GitHub pre-release tagged `ui-v<version>
 
 ## [Unreleased]
 
+## [0.11.1] - 2026-10-27
+
+### Fixed
+- A short network drop no longer turns into a long silence. The song's audio running out while the network is gone was taken for a broken Web Audio graph: the boost and the crossfade were switched off until the next start and the player page was reloaded, which then failed without a network and was rebuilt on a new WebView. Now the player waits for the audio data, asks again with a seek every 15 s, and never reloads the page for it; a page that failed to load is only loaded again, not rebuilt.
+
+### Diagnostics
+- `audio waits for the network on <song>` with the media element's state, and `no sound through Web Audio while the audio waits for the network: boost and crossfade kept`.
+
 ## [0.11.0] - 2026-10-27
 
 MySpotilol drops the features that only work with other Spotify users.

@@ -324,7 +324,10 @@
       const player = await localPlayer().catch(() => null);
       const el = player && player._player;
       if (!(el instanceof HTMLMediaElement) || !boost.routed.has(el)) return;
-      const moving = !el.paused && el.currentTime !== last;
+      // Moving means playing: about a second a tick, with data ahead. An element starved by the
+      // network (readyState HAVE_CURRENT_DATA or less) creeps on in silence; that is no proof of
+      // a broken graph (0.11.1, log seen: a network drop turned the boost and crossfade off).
+      const moving = !el.paused && last >= 0 && el.currentTime - last > 0.5 && el.readyState >= 3;
       last = el.currentTime;
       if (!moving) { silent = 0; return; }
       if (boost.ctx.state === 'suspended') { boost.ctx.resume().catch(() => {}); silent = 0; return; }

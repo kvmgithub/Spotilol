@@ -268,7 +268,9 @@ class WebPlayerHost(private val context: Context) : BridgeHost {
                 _loginRequired.value = isLoginPage(url)
                 if (url.startsWith(PLAYER_URL)) {
                     onPageLoaded?.invoke()
-                    if (!drmAsked) { main.removeCallbacks(drmWatch); main.postDelayed(drmWatch, DRM_WATCH_MS) }
+                    // A load that failed (no network) has no player to start: the retry loads it again,
+                    // a new WebView would not help (0.11.1, log seen: rebuilt while offline).
+                    if (!drmAsked && !mainFrameFailed) { main.removeCallbacks(drmWatch); main.postDelayed(drmWatch, DRM_WATCH_MS) }
                 }
             }
 
@@ -392,7 +394,7 @@ class WebPlayerHost(private val context: Context) : BridgeHost {
     /** The player's own URL, not the page's current one: the bridge parks the page on an empty route. */
     fun reload() = main.post {
         // A page whose player never started is not helped by loading it again in the same renderer.
-        if (pageStarts > 0 && !drmAsked && _url.value.startsWith(PLAYER_URL) && newViewAllowed()) {
+        if (pageStarts > 0 && !drmAsked && !mainFrameFailed && _url.value.startsWith(PLAYER_URL) && newViewAllowed()) {
             Logbook.log("reload: the player never started on this page (no DRM request): new WebView instead")
             rebuild()
         } else view.loadUrl(playerRoot())
@@ -418,7 +420,7 @@ class WebPlayerHost(private val context: Context) : BridgeHost {
     }
 
     private val drmWatch: Runnable = Runnable {
-        if (drmAsked || !loadAsked || !_url.value.startsWith(PLAYER_URL) || isLoginPage(_url.value)) return@Runnable
+        if (drmAsked || !loadAsked || mainFrameFailed || !_url.value.startsWith(PLAYER_URL) || isLoginPage(_url.value)) return@Runnable
         if (!newViewAllowed()) { Logbook.log("player never started on this page (no DRM request); new WebViews used up for now"); return@Runnable }
         Logbook.log("player never started on this page (no DRM request ${DRM_WATCH_MS / 1000} s after load): new WebView")
         rebuild()

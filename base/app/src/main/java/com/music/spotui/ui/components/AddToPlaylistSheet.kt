@@ -139,7 +139,7 @@ fun AddToPlaylistSheet(
 
 @OptIn(ExperimentalGlideComposeApi::class)
 @Composable
-private fun PickRow(playlist: EditablePlaylist, onClick: () -> Unit) {
+internal fun PickRow(playlist: EditablePlaylist, onClick: () -> Unit) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 20.dp, vertical = 8.dp),

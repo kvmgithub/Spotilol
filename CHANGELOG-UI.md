@@ -6,6 +6,8 @@ Each version section is the text of the GitHub pre-release tagged `ui-v<version>
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-10-27
+
 Features taken from Myspoti 2.1.0 (from its 2.0.2 betas), without extensions or the Immersive look.
 
 ### Added

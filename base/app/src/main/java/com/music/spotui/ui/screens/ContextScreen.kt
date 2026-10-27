@@ -1055,7 +1055,7 @@ private fun androidx.compose.foundation.lazy.LazyListScope.recommendedItems(vm: 
         RecommendedRow(
             song,
             isCurrent = song.id == currentSongId,
-            onPlay = { SongPlayer.playSong(song.url, context, songs = listOf(song)) },
+            onPlay = { SongPlayer.playSong(song.url, context) },
             onAdd = {
                 vm.takeRec(p, song)
                 com.music.spotui.data.api.SpotifySync.addTrackToPlaylist(context, p.uri.substringAfterLast(':'), song.spotifyTrackId) { ok ->
@@ -1334,9 +1334,7 @@ object SmartShuffle {
         val startSong = mixed.first()
         // Turned on from the player: the song playing goes on where it is, not from its start.
         val position = fromPositionMs?.takeIf { first != null && it > 0 }
-        // The song playing going on where it is stays on Spotify; a new play asks the audio-source extensions first.
-        SongPlayer.playSong(startSong.url, contextUri = p.uri, order = mixed.map { "spotify:track:${it.spotifyTrackId}" }, positionMs = position,
-            songs = mixed, askExtensions = position == null)
+        SongPlayer.playSong(startSong.url, contextUri = p.uri, order = mixed.map { "spotify:track:${it.spotifyTrackId}" }, positionMs = position)
         state.updateSongState(startSong.coverUri, startSong.title, startSong.singer, true, startSong.id, 0, startSong.album)
     }
 

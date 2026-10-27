@@ -53,7 +53,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
-import app.myspoti.api.FriendActivity
 import app.myspoti.api.TimeRange
 import app.myspoti.api.TopContent
 import app.myspoti.api.best
@@ -252,94 +251,5 @@ fun ArtistTopBadge(artistId: String, modifier: Modifier = Modifier) {
         Icon(Icons.Filled.EmojiEvents, contentDescription = null, tint = AppAccent, modifier = Modifier.size(16.dp))
         Spacer(Modifier.width(6.dp))
         Text(stringResource(text, n), color = AppText, fontSize = 13.sp, fontWeight = FontWeight.Bold)
-    }
-}
-
-/**
- * Friend activity, as the official feed shows it: each followed person sharing their listening,
- * their latest track and where it was played from, "Now" for the past 15 minutes. Tapping the
- * person opens their profile, tapping the row plays the track in its context.
- */
-@OptIn(ExperimentalGlideComposeApi::class)
-@Composable
-fun FriendActivityScreen(navController: NavController) {
-    var attempt by remember { mutableIntStateOf(0) }
-    var state by remember { mutableStateOf<Result<List<FriendActivity>>?>(null) }
-    LaunchedEffect(attempt) {
-        state = runCatching { MyspotiRuntime.api.users.friendActivity() }
-    }
-    val now = remember(state) { System.currentTimeMillis() }
-    Column(Modifier.fillMaxSize().background(AppBackground).statusBarsPadding()) {
-        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().padding(8.dp, 12.dp, 8.dp, 8.dp)) {
-            Icon(Icons.AutoMirrored.Filled.ArrowBack, stringResource(R.string.accessibility_navigate_back), tint = AppText,
-                modifier = Modifier.wideClickable(horizontal = 8.dp, vertical = 10.dp) { navController.popBackStack() }.size(40.dp).padding(8.dp))
-            Text(stringResource(R.string.friends_title), fontWeight = FontWeight.Bold, color = AppText, fontSize = 22.sp, maxLines = 1,
-                overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(start = 6.dp).weight(1f))
-            Icon(Icons.Filled.Refresh, stringResource(R.string.friends_refresh), tint = AppText,
-                modifier = Modifier.size(40.dp).clip(CircleShape).clickable { state = null; attempt++ }.padding(8.dp))
-        }
-        val s = state
-        val friends = s?.getOrNull()
-        LazyColumn(contentPadding = PaddingValues(bottom = com.music.spotui.ui.components.bottomBarsSpace())) {
-            when {
-                s == null -> item { com.music.spotui.ui.components.SkeletonList(count = 6, round = true) }
-                friends == null -> item {
-                    com.music.spotui.ui.components.ErrorRetry(stringResource(R.string.friends_failed)) { state = null; attempt++ }
-                }
-                friends.isEmpty() -> item {
-                    Text(stringResource(R.string.friends_empty), color = StatsSubtle, fontSize = 14.sp, modifier = Modifier.padding(16.dp))
-                }
-                else -> items(friends, key = { it.user.uri }) { f -> FriendRow(f, now, navController) }
-            }
-        }
-    }
-}
-
-@OptIn(ExperimentalGlideComposeApi::class)
-@Composable
-private fun FriendRow(f: FriendActivity, now: Long, navController: NavController) {
-    val track = f.track
-    val openProfile = { navController.navigate(profileRoute(f.user.uri.substringAfterLast(':'), f.user.name)) }
-    Row(
-        verticalAlignment = Alignment.Top,
-        modifier = Modifier.fillMaxWidth()
-            .clickable { if (track != null) SongPlayer.playSong(track.uri, contextUri = f.contextUri) else openProfile() }
-            .padding(16.dp, 10.dp),
-    ) {
-        Box(Modifier.clip(CircleShape).clickable(onClick = openProfile)) {
-            com.music.spotui.ui.components.ProfileAvatar(url = f.user.imageUrl, name = f.user.name, size = 48.dp)
-        }
-        Column(Modifier.padding(start = 12.dp).weight(1f)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(f.user.name, color = AppText, fontSize = 15.sp, fontWeight = FontWeight.Bold, maxLines = 1,
-                    overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false).clickable(onClick = openProfile))
-                Spacer(Modifier.weight(1f))
-                if (f.isNowPlaying(now)) {
-                    Box(Modifier.size(8.dp).clip(CircleShape).background(AppAccent))
-                    Spacer(Modifier.width(6.dp))
-                    Text(stringResource(R.string.friends_now), color = AppAccent, fontSize = 12.sp, maxLines = 1)
-                } else if (f.timestampMs > 0) {
-                    Text(
-                        android.text.format.DateUtils.getRelativeTimeSpanString(f.timestampMs, now,
-                            android.text.format.DateUtils.MINUTE_IN_MILLIS, android.text.format.DateUtils.FORMAT_ABBREV_RELATIVE).toString(),
-                        color = StatsSubtle, fontSize = 12.sp, maxLines = 1,
-                    )
-                }
-            }
-            if (track != null) {
-                Text(listOf(track.name, track.artists.joinToString(", ") { it.name }).filter { it.isNotBlank() }.joinToString(" • "),
-                    color = AppText, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 2.dp))
-                val where = f.contextName ?: track.album?.name
-                if (!where.isNullOrBlank()) Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 2.dp)) {
-                    Icon(Icons.Outlined.QueueMusic, contentDescription = null, tint = StatsSubtle, modifier = Modifier.size(14.dp))
-                    Spacer(Modifier.width(4.dp))
-                    Text(where, color = StatsSubtle, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                }
-            }
-        }
-        f.trackImageUrl?.let { cover ->
-            GlideImage(transition = CrossFade, model = spotifyImageUrl(cover.replaceFirst("http://", "https://")), contentDescription = null,
-                contentScale = ContentScale.Crop, modifier = Modifier.padding(start = 10.dp).size(44.dp).clip(RoundedCornerShape(4.dp)))
-        }
     }
 }

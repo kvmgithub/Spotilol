@@ -6,6 +6,20 @@ Each version section is the text of the GitHub pre-release tagged `ui-v<version>
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-10-27
+
+MySpotilol drops the features that only work with other Spotify users.
+
+### Removed
+- Friend activity.
+- Spotify Jam (start, join, invite).
+- Blends: creating, joining by link, the Blend line on its page, rename, invite and leave.
+- Collaborative playlists: invitation links (sending and joining), "Shared with" and its owner actions, leaving, stopping a collaboration, who added each song, the note on collaborative playlists you cannot add to. A collaborative playlist of yours can still be made private; one you can edit stays editable.
+- A playlist page no longer asks Spotify for its members and who added each song.
+
+### Changed
+- Short links (spotify.link, spoti.fi) still resolve; a playlist link carrying an invitation opens that playlist like any other link.
+
 ## [0.10.0] - 2026-10-27
 
 Features taken from Myspoti 2.1.0 (from its 2.0.2 betas), without extensions or the Immersive look.

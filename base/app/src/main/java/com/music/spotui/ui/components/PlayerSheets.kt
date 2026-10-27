@@ -211,7 +211,6 @@ fun DevicesSheet(onDismiss: () -> Unit) {
                 if (list.none { !it.isSelf } && !headphones && remote == null)
                     Text(stringResource(R.string.no_devices), color = Color.White.copy(alpha = 0.7f), modifier = Modifier.padding(20.dp))
             }
-            JamSection(onDismiss)
             // Bluetooth: pair or pick headphones and speakers in the system settings.
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
@@ -290,80 +289,6 @@ private fun codecName(mime: String): String = when {
     "vorbis" in mime -> "Ogg Vorbis"
     "mpeg" in mime -> "MP3"
     else -> mime.substringBefore(';').substringAfter('/').uppercase()
-}
-
-/** Spotify Jam: listen together. Free accounts can join (Spotify keeps starting one to Premium). */
-@Composable
-private fun JamSection(onDismiss: () -> Unit) {
-    val jam = app.myspoti.host.android.MyspotiRuntime.api.jam
-    val context = androidx.compose.ui.platform.LocalContext.current
-    val scope = androidx.compose.runtime.rememberCoroutineScope()
-    val session by jam.session.collectAsState()
-    val availability by androidx.compose.runtime.produceState<app.myspoti.api.JamAvailability?>(null) {
-        value = runCatching { jam.refresh(); jam.availability() }.getOrDefault(app.myspoti.api.JamAvailability.UNKNOWN)
-    }
-    fun failed() = android.widget.Toast.makeText(context, context.getString(R.string.jam_failed), android.widget.Toast.LENGTH_SHORT).show()
-    Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 12.dp)) {
-        Text(stringResource(R.string.jam_title), color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
-        val s = session
-        if (s != null) {
-            Text(stringResource(R.string.jam_members, s.members.size), color = Green, fontSize = 13.sp, modifier = Modifier.padding(top = 4.dp))
-            Text(stringResource(R.string.jam_invite), color = Color.White, fontSize = 15.sp,
-                modifier = Modifier.fillMaxWidth().clickable {
-                    scope.launch {
-                        val url = runCatching { jam.inviteLink() }.getOrNull() ?: return@launch failed()
-                        val send = android.content.Intent(android.content.Intent.ACTION_SEND).setType("text/plain").putExtra(android.content.Intent.EXTRA_TEXT, url)
-                        context.startActivity(android.content.Intent.createChooser(send, null).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK))
-                    }
-                }.padding(vertical = 10.dp))
-            Text(stringResource(R.string.jam_leave), color = Color.White, fontSize = 15.sp,
-                modifier = Modifier.fillMaxWidth().clickable {
-                    scope.launch { runCatching { if (s.isHost) jam.end() else jam.leave() }; onDismiss() }
-                }.padding(vertical = 10.dp))
-            return@Column
-        }
-        if (availability == app.myspoti.api.JamAvailability.AVAILABLE) Text(stringResource(R.string.jam_start), color = Green, fontSize = 15.sp,
-            modifier = Modifier.fillMaxWidth().clickable {
-                scope.launch { if (runCatching { jam.start() }.isFailure) failed() }
-            }.padding(vertical = 10.dp))
-        // Join: an invite link copied from a message.
-        Text(stringResource(R.string.jam_paste_link), color = Green, fontSize = 15.sp,
-            modifier = Modifier.fillMaxWidth().clickable {
-                val clip = context.getSystemService(android.content.ClipboardManager::class.java)?.primaryClip
-                val raw = clip?.takeIf { it.itemCount > 0 }?.getItemAt(0)?.coerceToText(context)?.toString().orEmpty()
-                scope.launch {
-                    val token = JamLinks.token(raw)
-                    if (token == null || runCatching { jam.join(token) }.isFailure) failed() else onDismiss()
-                }
-            }.padding(vertical = 10.dp))
-    }
-}
-
-/** Jam invite codes: `open.spotify.com/socialsession/<token>`, or a spotify.link short link to it. */
-private object JamLinks {
-    private val http = okhttp3.OkHttpClient.Builder().followRedirects(true).followSslRedirects(false)
-        .callTimeout(10, java.util.concurrent.TimeUnit.SECONDS).build()
-
-    suspend fun token(raw: String): String? {
-        // Short links only by exact HTTPS host; nothing else is ever requested.
-        val host = app.myspoti.spotify.security.WebPolicy.httpsHost(raw.trim())
-        val url = if (host == "spotify.link" || host == "spoti.fi") resolve(raw.trim()) ?: raw else raw
-        Regex("socialsession/([A-Za-z0-9_-]+)").find(url)?.let { return it.groupValues[1] }
-        Regex("spotify:socialsession:([A-Za-z0-9_-]+)").find(url)?.let { return it.groupValues[1] }
-        return null
-    }
-
-    /** Where a short link leads (its final URL after redirects). */
-    private suspend fun resolve(link: String): String? = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-        runCatching {
-            http.newCall(okhttp3.Request.Builder().url(link).header("user-agent", "Mozilla/5.0").build()).execute().use { r ->
-                val final = r.request.url.toString()
-                // Some short links answer with a page that holds the target in a meta refresh / link.
-                if (final.contains("socialsession")) final
-                else Regex("https://open\\.spotify\\.com/socialsession/[A-Za-z0-9_-]+").find(app.myspoti.spotify.security.BoundedHttp.text(r.body, 1_048_576))?.value ?: final
-            }
-        }.getOrNull()
-    }
 }
 
 // ── Sleep timer ──

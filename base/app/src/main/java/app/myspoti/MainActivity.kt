@@ -288,7 +288,7 @@ class MainActivity : AppCompatActivity() {
         if (intent.action != Intent.ACTION_VIEW) return
         // Spotify links only, by exact HTTPS host (WebPolicy), never other schemes.
         val link = intent.data?.toString()?.takeIf { app.myspoti.spotify.security.WebPolicy.isDeepLink(it) } ?: return
-        // A collaborative-playlist invitation (…?pt=), a Blend or a spotify.link short link: kept / resolved there.
+        // A spotify.link / spoti.fi short link: resolved there.
         if (com.music.spotui.data.api.InviteLinks.handle(link)) return
         val uri = spotifyUri(link) ?: return
         // A shared list (or artist, podcast) opens on its page, as in the official app; a song or

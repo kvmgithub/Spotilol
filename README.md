@@ -21,7 +21,8 @@ Removed:
 - YouTube music videos (NewPipeExtractor), including 2.0.0's clip sound
 - Third-party lyrics (LRCLIB, NetEase, LyricsPlus, lrc.red, Kugou, Genius), Genius song meanings and Google lyric translation; Spotify's own lyrics stay, word by word where Spotify times them
 - In-app updater (`REQUEST_INSTALL_PACKAGES`), donation prompts, home screen widget
-- Google Play services code scanner for Jam QR codes (it brought ML Kit and Google's data transport logging); joining a Jam by invite link stays
+- Google Play services code scanner for Jam QR codes (it brought ML Kit and Google's data transport logging)
+- Social features (0.11.0): Spotify Jam, Blends, collaborative-playlist invitations and their management, friend activity
 - Podcast episode downloads (beta.9), the in-app update settings and the diagnostic-report export row (the redacted log view covers it)
 - The phone's own device name in Spotify's device lists (beta.9 sends it; this variant keeps the Web Player's name)
 - From 2.0.2/2.1.0: extensions (third-party JavaScript, audio and download sources), the Immersive look, the Connect mirror for extension songs, play reports sent by the app (`melody` stays blocked), Cronet and the Chromium network routes for refused commands, the update popup
@@ -34,13 +35,13 @@ Added from Spotilol:
 
 Added in MySpotilol: a volume boost up to 200 % through a gain and a limiter in the page (Settings → Playback); it turns itself off and reloads the player when no sound comes through Web Audio. A real crossfade: the page plays a song slightly faster while the graph slows it back down (tempo and pitch unchanged), and the reserve that builds up lets the end of one song overlap the start of the next; a switch in the mini player turns it on and off.
 
-Kept from Myspoti: native screens, library tools, Spotify Connect and Jam, local Recap, sleep timer, Canvas, local files, streaming quality, data and energy saver.
+Kept from Myspoti: native screens, library tools, Spotify Connect, local Recap, sleep timer, Canvas, local files, streaming quality, data and energy saver.
 
 From beta.9: the page's ad managers switched off at runtime (the device registration is no longer altered), X-Requested-With suppressed, renderer-crash recovery, per-install browser identity that follows the WebView version, a kept client device id, relayed requests with the page's own browser headers, login that waits for a real token, crossfade, Recents, show/episode pages and the podcast player, playlist add/remove, and the UI fixes.
 
-From 2.1.0: ads marked only by their metadata left out, a reload past a stuck ad that stays muted until a song plays, licence holds that pause instead of skipping, the page always visible to itself, no idle copy of the phone left among the Connect devices, 15 s headphone skips on podcasts, collaborative playlists on the owner's side, adding a playlist or album to a playlist, library filter chips, listening stats and friend activity, likes made offline sent later, page caches, Polish, Russian and Chinese.
+From 2.1.0: ads marked only by their metadata left out, a reload past a stuck ad that stays muted until a song plays, licence holds that pause instead of skipping, the page always visible to itself, no idle copy of the phone left among the Connect devices, 15 s headphone skips on podcasts, adding a playlist or album to a playlist, library filter chips, listening stats, likes made offline sent later, page caches, Polish, Russian and Chinese.
 
-From 2.0.0: ads left out of Spotify's track-playback queue in the relay before the page sees them, and the next song played just before an ad that cannot be left out; a player page Chromium never throttles; failed page loads retried; licence rate limits held; collaborative playlists, Blends, add songs, Spotify Codes; per-network streaming quality; the new welcome screen, player and page animations.
+From 2.0.0: ads left out of Spotify's track-playback queue in the relay before the page sees them, and the next song played just before an ad that cannot be left out; a player page Chromium never throttles; failed page loads retried; licence rate limits held; add songs, Spotify Codes; per-network streaming quality; the new welcome screen, player and page animations.
 
 ## Security rules
 

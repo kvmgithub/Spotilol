@@ -188,12 +188,6 @@ class ContextViewModel(
     val contextSaved = mutableStateOf(false)
     /** The page is a playlist the user may change: only there can a track be removed. */
     val editableContext = mutableStateOf(false)
-    /** Who can change this playlist: more than one when it is collaborative (their faces in the header). */
-    val members = mutableStateOf<List<app.myspoti.api.PlaylistMember>>(emptyList())
-    /** On a collaborative playlist: who added each row (by row id, then by song). */
-    val adders = mutableStateOf<Map<String, app.myspoti.api.PlaylistMember>>(emptyMap())
-    /** Someone else's collaborative playlist this account was never invited to: it can't add to it. */
-    val collabLocked = mutableStateOf(false)
     private var key: String? = null
     private var savedChecked = 0
 
@@ -246,8 +240,7 @@ class ContextViewModel(
         recent.remove(k)
         key = null
         fresh = true
-        // The likes, the members and who added each song are read again with the new list (a
-        // song just added showed no face on a collaborative playlist).
+        // The likes are read again with the new list.
         savedChecked = 0
         load(lastType, lastId)
     }
@@ -349,49 +342,6 @@ class ContextViewModel(
         // offered where it would work (own and collaborative playlists, as Spotify itself).
         if (p.type == "playlist") editableContext.value = withContext(Dispatchers.IO) {
             runCatching { EditablePlaylists.load().any { it.id == p.uri.substringAfterLast(':') } }.getOrDefault(false)
-        }
-        if (p.type == "playlist" && !p.isBlend) members.value = withContext(Dispatchers.IO) {
-            runCatching { MyspotiRuntime.api.playlists.members(p.uri) }.getOrDefault(emptyList())
-        }
-        // Collaborative: each song shows who added it (the official app's small face on the row).
-        val crew = members.value.associateBy { it.username }
-        adders.value = if (crew.size < 2) emptyMap() else withContext(Dispatchers.IO) {
-            runCatching {
-                val out = HashMap<String, app.myspoti.api.PlaylistMember>()
-                MyspotiRuntime.api.playlists.addedBy(p.uri).forEach { r ->
-                    val m = crew[r.username] ?: return@forEach
-                    if (r.rowUid.isNotBlank()) out["row:" + r.rowUid] = m
-                    out.putIfAbsent("song:" + r.trackUri.substringAfterLast(':'), m)
-                }
-                out
-            }.getOrDefault(emptyMap())
-        }
-        // Collaborative yet not editable here: only an invitation link lets this account add songs.
-        // Said on the page instead of leaving the user wondering where the + went.
-        collabLocked.value = p.type == "playlist" && !p.isBlend && !editableContext.value && withContext(Dispatchers.IO) {
-            runCatching { MyspotiRuntime.api.playlists.access(p.uri) == app.myspoti.api.PlaylistAccess.COLLABORATIVE }.getOrDefault(false)
-        }
-    }
-
-    /**
-     * Owner, from the "Shared with" list: a member becomes a collaborator or a listener, or leaves
-     * the playlist ([collaborator] null). The list answers at once; a refusal puts back what Spotify has.
-     */
-    fun changeMember(p: ContextPageModel, m: app.myspoti.api.PlaylistMember, collaborator: Boolean?, onDone: (Boolean) -> Unit) {
-        val before = members.value
-        members.value = if (collaborator == null) before.filter { it.username != m.username }
-        else before.map { if (it.username == m.username) it.copy(isCollaborator = collaborator) else it }
-        viewModelScope.launch {
-            val ok = withContext(Dispatchers.IO) {
-                runCatching {
-                    if (collaborator == null) MyspotiRuntime.api.playlists.removeMember(p.uri, m.username)
-                    else MyspotiRuntime.api.playlists.setMemberCollaborator(p.uri, m.username, collaborator)
-                }.isSuccess
-            }
-            if (!ok) members.value = withContext(Dispatchers.IO) {
-                runCatching { MyspotiRuntime.api.playlists.members(p.uri) }.getOrDefault(before)
-            }
-            onDone(ok)
         }
     }
 
@@ -514,7 +464,6 @@ private fun ContextContent(navController: NavController, vm: ContextViewModel, p
     var playlistMenu by remember { mutableStateOf(false) }
     var albumMenu by remember { mutableStateOf(false) }
     var addingSongs by remember { mutableStateOf(false) }
-    var leaveAsk by remember { mutableStateOf(false) }
     // The profile id comes once per session (and is no Compose state): `name` is set just before it,
     // so reading it here redraws the page when the id is there.
     LaunchedEffect(Unit) { com.music.spotui.data.api.ProfileCache.ensure(context) }
@@ -553,23 +502,6 @@ private fun ContextContent(navController: NavController, vm: ContextViewModel, p
         }
     }
 
-    if (leaveAsk) androidx.compose.material3.AlertDialog(
-        onDismissRequest = { leaveAsk = false },
-        containerColor = tone(0xFF282828),
-        title = { Text(stringResource(R.string.playlist_leave), color = AppText) },
-        text = { Text(stringResource(R.string.playlist_leave_confirm, p.name), color = AppMuted) },
-        confirmButton = {
-            androidx.compose.material3.TextButton(onClick = {
-                leaveAsk = false
-                // As from the playlist menu: the page closes now; a refusal says so and the library is read again.
-                com.music.spotui.data.api.LibraryEdits.run(context, null,
-                    write = { MyspotiRuntime.api.playlists.leave(p.uri) },
-                    onDone = { ok -> if (ok) com.music.spotui.data.api.LibraryEdits.reloadSoon() })
-                navController.navigateUp()
-            }) { Text(stringResource(R.string.playlist_leave_button), color = AppDestructive) }
-        },
-        dismissButton = { androidx.compose.material3.TextButton(onClick = { leaveAsk = false }) { Text(stringResource(R.string.cancel), color = AppText) } },
-    )
     if (addingSongs) com.music.spotui.ui.components.AddSongsScreen(p) { added -> addingSongs = false; if (added) vm.reload() }
     if (albumMenu) com.music.spotui.ui.components.AlbumOptionsSheet(p.uri, p.name) { albumMenu = false }
     if (playlistMenu) com.music.spotui.ui.components.PlaylistOptionsSheet(
@@ -627,10 +559,10 @@ private fun ContextContent(navController: NavController, vm: ContextViewModel, p
     val listState = androidx.compose.foundation.lazy.rememberLazyListState()
     val pullState = androidx.compose.material3.pulltorefresh.rememberPullToRefreshState()
     val refreshing by vm.refreshing
-    // The search field and the Blend line are folded away: the page opens on its songs. A pull
+    // The search field is folded away: the page opens on its songs. A pull
     // down at the top unfolds them in place (that pull does not refresh; the next one does), and
     // they fold again once the songs are scrolled past them, unless a search is typed.
-    val hasExtras = (findable && all.isNotEmpty()) || p.isBlend
+    val hasExtras = findable && all.isNotEmpty()
     var extrasShown by remember(p.uri) { mutableStateOf(false) }
     val revealPull = remember(p.uri) { ExtrasReveal() }
     revealPull.enabled = hasExtras && !extrasShown
@@ -700,38 +632,7 @@ private fun ContextContent(navController: NavController, vm: ContextViewModel, p
                         Spacer(Modifier.height(8.dp))
                         Text(p.description, color = AppText.copy(alpha = 0.7f), fontSize = 14.sp, maxLines = 3, overflow = TextOverflow.Ellipsis)
                     }
-                    val crew = vm.members.value
-                    if (crew.size > 1) {
-                        // Collaborative: everyone who adds to it, as the official app shows them.
-                        Spacer(Modifier.height(10.dp))
-                        var showMembers by remember { mutableStateOf(false) }
-                        if (showMembers) MembersSheet(
-                            members = crew, navController = navController,
-                            // The owner manages everyone; a guest only has "Leave playlist" on their own row.
-                            ownPlaylist = ownPlaylist, me = com.music.spotui.data.api.ProfileCache.id, canLeave = p.canLeave,
-                            onChange = { m, collaborator ->
-                                vm.changeMember(p, m, collaborator) { ok ->
-                                    if (!ok) android.widget.Toast.makeText(context, R.string.playlist_change_refused, android.widget.Toast.LENGTH_SHORT).show()
-                                }
-                            },
-                            onLeave = { showMembers = false; leaveAsk = true },
-                        ) { showMembers = false }
-                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.pressable(0.96f) { showMembers = true }) {
-                            Box(Modifier.width((24 + 16 * (crew.size.coerceAtMost(4) - 1)).dp).height(24.dp)) {
-                                crew.take(4).forEachIndexed { n, m ->
-                                    Box(Modifier.padding(start = (16 * n).dp).size(24.dp).clip(CircleShape).background(tone(0xFF121212)).padding(1.dp)) {
-                                        com.music.spotui.ui.components.ProfileAvatar(m.imageUrl, m.name, 22.dp)
-                                    }
-                                }
-                            }
-                            Spacer(Modifier.width(8.dp))
-                            Text(
-                                if (crew.size <= 2) crew.joinToString(", ") { it.name }
-                                else stringResource(R.string.playlist_members_more, crew.first().name, crew.size - 1),
-                                color = AppText, fontSize = 14.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis,
-                            )
-                        }
-                    } else if (p.ownerName.isNotBlank()) {
+                    if (p.ownerName.isNotBlank()) {
                         Spacer(Modifier.height(10.dp))
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
@@ -861,23 +762,6 @@ private fun ContextContent(navController: NavController, vm: ContextViewModel, p
             }
         }
         // Liked Songs: a track unliked anywhere leaves the list right away.
-        // A Blend: its taste-match card and its members, as on the official Blend page.
-        if (vm.collabLocked.value && !vm.editableContext.value) item(key = "collab-locked") {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp).fillMaxWidth()
-                    .clip(RoundedCornerShape(10.dp)).background(AppText.copy(alpha = 0.06f)).padding(12.dp),
-            ) {
-                Icon(Icons.Outlined.Group, contentDescription = null, tint = AppMuted, modifier = Modifier.size(20.dp))
-                Text(stringResource(R.string.playlist_collab_locked, p.ownerName.ifBlank { stringResource(R.string.playlist_collab_owner) }),
-                    color = AppMuted, fontSize = 13.sp, modifier = Modifier.padding(start = 10.dp))
-            }
-        }
-        if (p.isBlend) item(key = "blend") {
-            androidx.compose.animation.AnimatedVisibility(extrasShown, enter = UnfoldIn, exit = FoldOut) {
-                com.music.spotui.ui.components.BlendPanel(p.uri)
-            }
-        }
         if (findable && all.isNotEmpty()) item(key = "find") {
             androidx.compose.animation.AnimatedVisibility(extrasShown || find.isNotBlank(), enter = UnfoldIn, exit = FoldOut) {
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 8.dp)) {
@@ -900,7 +784,6 @@ private fun ContextContent(navController: NavController, vm: ContextViewModel, p
                 isCurrent = song.id == currentSongId,
                 saved = SongPlayer.library["spotify:track:${song.spotifyTrackId}"] ?: ("spotify:track:${song.spotifyTrackId}" in saved),
                 offline = com.music.spotui.data.offline.OfflineStore.statusOf(song.spotifyTrackId),
-                addedBy = vm.adders.value.let { a -> a["row:" + song.rowUid] ?: a["song:" + song.spotifyTrackId] },
                 onClick = { if (SmartShuffle.on.value == p.uri) vm.playSmart(p, song) else vm.play(p, song, sort) },
                 onMore = { menuSong = song },
             ) }
@@ -955,38 +838,6 @@ private fun ContextContent(navController: NavController, vm: ContextViewModel, p
         // Centred, as on the artist page.
         Text(p.name, color = AppText, fontSize = 18.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis,
             textAlign = androidx.compose.ui.text.style.TextAlign.Center, modifier = Modifier.weight(1f).padding(end = 56.dp))
-    }
-    // Opened from a collaborative-playlist invitation (…?pt=): the playlist is joined from here.
-    val invite by com.music.spotui.data.api.InviteLinks.pending.collectAsState()
-    var joining by remember { mutableStateOf(false) }
-    val offered = invite?.takeIf { p.type == "playlist" && it.uri == p.uri && !vm.editableContext.value }
-    if (offered != null) Row(
-        verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier
-            .align(Alignment.BottomCenter)
-            .padding(start = 16.dp, end = 16.dp, bottom = com.music.spotui.ui.components.bottomBarsSpace())
-            .clip(RoundedCornerShape(12.dp))
-            .background(tone(0xFF282828))
-            .padding(start = 16.dp, end = 8.dp, top = 8.dp, bottom = 8.dp),
-    ) {
-        Text(stringResource(R.string.playlist_invite_banner), color = AppText, fontSize = 14.sp, modifier = Modifier.weight(1f).padding(end = 12.dp))
-        androidx.compose.material3.Button(
-            enabled = !joining,
-            colors = androidx.compose.material3.ButtonDefaults.buttonColors(containerColor = SpotifyGreen, contentColor = Color.Black),
-            onClick = {
-                joining = true
-                com.music.spotui.data.api.InviteLinks.join(context, offered, p) { ok ->
-                    joining = false
-                    if (ok) {
-                        vm.editableContext.value = true
-                        vm.contextSaved.value = true
-                        SongPlayer.library[p.uri] = true
-                        vm.reload()
-                        android.widget.Toast.makeText(context, context.getString(R.string.playlist_invite_joined), android.widget.Toast.LENGTH_SHORT).show()
-                    }
-                }
-            },
-        ) { Text(stringResource(R.string.playlist_invite_join), fontWeight = FontWeight.Bold) }
     }
     androidx.compose.material3.SnackbarHost(
         hostState = snackbar,
@@ -1088,65 +939,6 @@ private fun RecommendedRow(song: SongsModel, isCurrent: Boolean, onPlay: () -> U
     }
 }
 
-/** The people of a collaborative playlist: owner first, then collaborators; a tap opens a profile. */
-@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
-@Composable
-internal fun MembersSheet(
-    members: List<app.myspoti.api.PlaylistMember>,
-    navController: NavController,
-    ownPlaylist: Boolean,
-    me: String?,
-    canLeave: Boolean,
-    /** Owner: [collaborator] true/false changes the member's level, null removes the member. */
-    onChange: (app.myspoti.api.PlaylistMember, Boolean?) -> Unit,
-    onLeave: () -> Unit,
-    onDismiss: () -> Unit,
-) {
-    com.music.spotui.ui.components.LookSheet(onDismissRequest = onDismiss, containerColor = tone(0xFF282828)) {
-        Column(Modifier.navigationBarsPadding().padding(bottom = 12.dp)) {
-            Text(stringResource(R.string.playlist_members_title), color = AppText, fontSize = 18.sp, fontWeight = FontWeight.Bold,
-                modifier = Modifier.padding(20.dp, 0.dp, 20.dp, 12.dp))
-            members.forEach { m ->
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.fillMaxWidth().clickable {
-                        onDismiss(); navController.navigate(com.music.spotui.ui.navigation.profileRoute(m.username, m.name))
-                    }.padding(horizontal = 20.dp, vertical = 10.dp),
-                ) {
-                    com.music.spotui.ui.components.ProfileAvatar(m.imageUrl, m.name, 44.dp)
-                    Column(Modifier.weight(1f).padding(start = 14.dp)) {
-                        Text(m.name, color = AppText, fontSize = 16.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                        Text(stringResource(when {
-                            m.isOwner -> R.string.playlist_member_owner
-                            m.isCollaborator -> R.string.playlist_member_collab
-                            else -> R.string.playlist_member_listener
-                        }), color = AppMuted, fontSize = 13.sp)
-                    }
-                    // As the Web Player's "Shared with": the owner's menu per member, "Leave playlist" on a guest's own row.
-                    val ownRow = canLeave && me != null && m.username == me
-                    if (!m.isOwner && (ownPlaylist || ownRow)) {
-                        var open by remember { mutableStateOf(false) }
-                        Box {
-                            Icon(Icons.Default.MoreVert, contentDescription = null, tint = AppText,
-                                modifier = Modifier.size(40.dp).clip(CircleShape).clickable { open = true }.padding(8.dp))
-                            androidx.compose.material3.DropdownMenu(expanded = open, onDismissRequest = { open = false }, containerColor = tone(0xFF282828)) {
-                                @Composable fun item(label: Int, action: () -> Unit) = androidx.compose.material3.DropdownMenuItem(
-                                    text = { Text(stringResource(label), color = AppText) },
-                                    onClick = { open = false; action() })
-                                if (ownPlaylist) {
-                                    if (m.isCollaborator) item(R.string.playlist_member_remove_collab) { onChange(m, false) }
-                                    else item(R.string.playlist_member_make_collab) { onChange(m, true) }
-                                    item(R.string.playlist_member_remove) { onChange(m, null) }
-                                } else item(R.string.playlist_leave) { onLeave() }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
 /** How long a greyed track is given to start before the app says why it did not. */
 private const val UNAVAILABLE_CHECK_MS = 4_000L
 
@@ -1160,7 +952,6 @@ private fun TrackRow(
     offline: com.music.spotui.data.offline.OfflineStatus?,
     onClick: () -> Unit,
     onMore: () -> Unit,
-    addedBy: app.myspoti.api.PlaylistMember? = null,
 ) {
     // A greyed row is still tried (see the click): the tap is followed by a check, not a refusal.
     val scope = androidx.compose.runtime.rememberCoroutineScope()
@@ -1222,10 +1013,6 @@ private fun TrackRow(
             }
         }
         // Collaborative playlist: who added this song.
-        addedBy?.let { m ->
-            com.music.spotui.ui.components.ProfileAvatar(m.imageUrl, m.name, 20.dp)
-            Spacer(Modifier.width(14.dp))
-        }
         if (saved) {
             Box(
                 contentAlignment = Alignment.Center,

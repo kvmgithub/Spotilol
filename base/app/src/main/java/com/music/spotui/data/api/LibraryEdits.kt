@@ -117,7 +117,7 @@ object LibraryEdits {
         reloadSoon()
     }
 
-    /** A change written elsewhere (a Blend joined): the library is read again a few times, the first read can still be the old one. */
+    /** A change written elsewhere: the library is read again a few times, the first read can still be the old one. */
     fun reloadSoon() {
         scope.launch { for (wait in longArrayOf(1_500, 3_500, 7_000)) { delay(wait); _reloads.tryEmit(Unit) } }
     }

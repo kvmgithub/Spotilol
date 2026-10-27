@@ -56,23 +56,6 @@ fun App() {
     // The playlists at the top of the library, fetched ahead on Wi-Fi (see PagePrefetch).
     LaunchedEffect(Unit) { com.music.spotui.data.api.PagePrefetch.start() }
 
-    // A collaborative-playlist invitation was opened (see InviteLinks): its playlist page offers "Join".
-    val invite by com.music.spotui.data.api.InviteLinks.pending.collectAsState()
-    LaunchedEffect(invite) {
-        val i = invite?.takeIf { !it.opened } ?: return@LaunchedEffect
-        app.myspoti.host.android.MyspotiRuntime.api.ready.first { it }
-        i.opened = true
-        navController.navigate(com.music.spotui.ui.navigation.playlistRoute(i.playlistId))
-    }
-
-    // A Blend invitation was opened (see InviteLinks): who invites, and "Join", over the app.
-    val blendLink by com.music.spotui.data.api.InviteLinks.blend.collectAsState()
-    blendLink?.let { link ->
-        com.music.spotui.ui.screens.BlendInviteSheet(link, navController) {
-            if (com.music.spotui.data.api.InviteLinks.blend.value === link) com.music.spotui.data.api.InviteLinks.blend.value = null
-        }
-    }
-
     // A shared link to a list / artist / podcast: its page, over whatever was open.
     val pageLink by com.music.spotui.data.api.InviteLinks.page.collectAsState()
     LaunchedEffect(pageLink) {

@@ -113,17 +113,6 @@ object SpotifySync {
         }
     }
 
-    /** Stops a collaboration (owner): collaborators become listeners (private) or leave (public). */
-    fun stopPlaylistCollaboration(uri: String, onDone: (Boolean) -> Unit = {}) {
-        scope.launch {
-            val ok = visibilityWrites.withLock {
-                runCatching { api.playlists.stopCollaboration(uri) }
-                    .onFailure { Log.w(TAG, "stopping the collaboration on $uri refused: ${it.message}") }.isSuccess
-            }
-            onDone(ok)
-        }
-    }
-
     /** Whether the playlist is listed on the user's profile. */
     fun setPlaylistPublished(uri: String, published: Boolean, onDone: (Boolean) -> Unit = {}) {
         scope.launch {

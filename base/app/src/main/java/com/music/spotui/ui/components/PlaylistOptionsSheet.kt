@@ -115,10 +115,6 @@ fun PlaylistOptionsSheet(
     var published by remember { mutableStateOf<Boolean?>(null) }
     var editing by remember { mutableStateOf(false) }
     var deleting by remember { mutableStateOf(false) }
-    var renamingBlend by remember { mutableStateOf(false) }
-    var leavingBlend by remember { mutableStateOf(false) }
-    var leavingPlaylist by remember { mutableStateOf(false) }
-    var stoppingCollab by remember { mutableStateOf(false) }
     var mergingInto by remember { mutableStateOf(false) }
     LaunchedEffect(page.uri, mine) {
         if (mine) {
@@ -167,34 +163,9 @@ fun PlaylistOptionsSheet(
             val share = { SpotifyCode.show(ShareTarget(page.uri, page.name, page.ownerName, page.coverUri)); onDismiss() }
             // Every song of this playlist into another one of yours (Web Player: "Add playlist to other playlist").
             if (page.uri.startsWith("spotify:playlist:")) OptionRow(Icons.Outlined.AddCircleOutline, stringResource(R.string.add_playlist_to_playlist)) { mergingInto = true }
-            if (page.isBlend) {
-                // A Blend is Spotify's: renamed, shared and left through its own service.
-                OptionRow(Icons.Outlined.Edit, stringResource(R.string.blend_rename)) { renamingBlend = true }
-                OptionRow(Icons.Outlined.Share, stringResource(R.string.blend_invite_more)) {
-                    scope.launch {
-                        val link = BlendInfo.recent[page.uri]?.group?.link
-                            ?: runCatching { MyspotiRuntime.api.blends.group(page.uri).link }.getOrNull()
-                        if (link == null) android.widget.Toast.makeText(context, R.string.blend_failed, android.widget.Toast.LENGTH_SHORT).show()
-                        else { BlendInfo.share(context, link); onDismiss() }
-                    }
-                }
-                OptionRow(Icons.AutoMirrored.Outlined.Logout, stringResource(R.string.blend_leave)) { leavingBlend = true }
-            } else if (mine) {
+            if (mine) {
                 onAddSongs?.let { add -> OptionRow(Icons.Outlined.AddCircleOutline, stringResource(R.string.add_songs_title)) { onDismiss(); add() } }
                 OptionRow(Icons.Outlined.Edit, stringResource(R.string.playlist_edit_details)) { editing = true }
-                // Collaborative is not enough: only those who open its invitation link can add songs
-                // (a plain link only shows it). Inviting makes it collaborative, as in the official app.
-                OptionRow(Icons.Outlined.PersonAdd, stringResource(R.string.playlist_invite_collaborators)) {
-                    if (access != PlaylistAccess.COLLABORATIVE) setAccess(PlaylistAccess.COLLABORATIVE)
-                    scope.launch {
-                        val link = runCatching { MyspotiRuntime.api.playlists.collaboratorInvite(page.uri) }.getOrNull()
-                        if (link == null) { android.widget.Toast.makeText(context, R.string.playlist_invite_failed, android.widget.Toast.LENGTH_SHORT).show(); return@launch }
-                        val send = android.content.Intent(android.content.Intent.ACTION_SEND).setType("text/plain")
-                            .putExtra(android.content.Intent.EXTRA_TEXT, context.getString(R.string.playlist_invite_message, page.name, link))
-                        context.startActivity(android.content.Intent.createChooser(send, null).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK))
-                        onDismiss()
-                    }
-                }
                 OptionRow(Icons.Outlined.QrCode2, stringResource(R.string.context_menu_share), onClick = share)
                 // Who sees it: one action naming what it does next (not three choices to read).
                 val a = access
@@ -205,7 +176,6 @@ fun PlaylistOptionsSheet(
                 when (a) {
                     null -> OptionRow(Icons.Outlined.Lock, stringResource(R.string.playlist_access_title), enabled = false) {}
                     PlaylistAccess.PRIVATE -> OptionRow(Icons.Outlined.Public, stringResource(R.string.playlist_make_public)) { change(PlaylistAccess.PUBLIC, R.string.playlist_now_public) }
-                    PlaylistAccess.COLLABORATIVE -> OptionRow(Icons.Outlined.GroupRemove, stringResource(R.string.playlist_stop_collab)) { stoppingCollab = true }
                     else -> OptionRow(Icons.Outlined.Lock, stringResource(R.string.playlist_make_private)) { change(PlaylistAccess.PRIVATE, R.string.playlist_now_private) }
                 }
                 // Only a playlist others may see can be listed on the profile.
@@ -220,8 +190,6 @@ fun PlaylistOptionsSheet(
                 OptionRow(Icons.Outlined.Delete, stringResource(R.string.local_delete_playlist)) { deleting = true }
             } else {
                 OptionRow(Icons.Outlined.QrCode2, stringResource(R.string.context_menu_share), onClick = share)
-                // The Web Player offers it only where canCancelMembership is true (a collaborator, not the owner).
-                if (page.canLeave) OptionRow(Icons.AutoMirrored.Outlined.Logout, stringResource(R.string.playlist_leave)) { leavingPlaylist = true }
             }
             if (!mine && !page.isBlend && page.ownerUri.startsWith("spotify:user:")) {
                 OptionRow(Icons.Outlined.Person, stringResource(R.string.go_to_profile)) {
@@ -253,74 +221,6 @@ fun PlaylistOptionsSheet(
             if (!ok || cover != CoverChange.Keep) onChanged()
         })
     }
-
-    if (renamingBlend) com.music.spotui.ui.screens.NameDialog(stringResource(R.string.blend_rename), page.name,
-        stringResource(R.string.local_rename), onDismiss = { renamingBlend = false }) { name ->
-        renamingBlend = false
-        onDismiss()
-        if (name == page.name) return@NameDialog
-        onEdited(name, page.description)
-        com.music.spotui.data.api.LibraryEdits.run(context, com.music.spotui.data.api.LibraryEdits.Rename(page.uri, name),
-            write = { MyspotiRuntime.api.blends.rename(page.uri, name) },
-            onDone = { ok -> if (!ok) onChanged() })
-    }
-
-    if (leavingBlend) AlertDialog(
-        onDismissRequest = { leavingBlend = false },
-        containerColor = tone(0xFF282828),
-        title = { Text(stringResource(R.string.blend_leave), color = AppText) },
-        text = { Text(stringResource(R.string.blend_leave_confirm, page.name), color = AppMuted) },
-        confirmButton = {
-            TextButton(onClick = {
-                leavingBlend = false
-                // The Blend leaves the library and the page closes now; a refusal brings it back.
-                BlendInfo.recent.remove(page.uri)
-                com.music.spotui.data.api.LibraryEdits.run(context, com.music.spotui.data.api.LibraryEdits.Remove(page.uri),
-                    write = { MyspotiRuntime.api.blends.leave(page.uri) })
-                onDismiss(); onDeleted()
-            }) { Text(stringResource(R.string.blend_leave_button), color = AppDestructive) }
-        },
-        dismissButton = { TextButton(onClick = { leavingBlend = false }) { Text(stringResource(R.string.cancel), color = AppText) } },
-    )
-
-    if (stoppingCollab) {
-        // Public (listed on the profile): collaborators are removed; private: they become listeners.
-        val public = published == true
-        AlertDialog(
-            onDismissRequest = { stoppingCollab = false },
-            containerColor = tone(0xFF282828),
-            title = { Text(stringResource(R.string.playlist_stop_collab), color = AppText) },
-            text = { Text(stringResource(if (public) R.string.playlist_stop_collab_public else R.string.playlist_stop_collab_private, page.name), color = AppMuted) },
-            confirmButton = {
-                TextButton(onClick = {
-                    stoppingCollab = false
-                    access = if (public) PlaylistAccess.PUBLIC else PlaylistAccess.PRIVATE
-                    android.widget.Toast.makeText(context, R.string.playlist_now_solo, android.widget.Toast.LENGTH_SHORT).show()
-                    // Written in order with the other visibility taps; a refusal puts back what Spotify has.
-                    com.music.spotui.data.api.SpotifySync.stopPlaylistCollaboration(page.uri) { ok -> if (ok) onChanged() else restore() }
-                }) { Text(stringResource(R.string.playlist_stop_collab), color = AppDestructive) }
-            },
-            dismissButton = { TextButton(onClick = { stoppingCollab = false }) { Text(stringResource(R.string.cancel), color = AppText) } },
-        )
-    }
-
-    if (leavingPlaylist) AlertDialog(
-        onDismissRequest = { leavingPlaylist = false },
-        containerColor = tone(0xFF282828),
-        title = { Text(stringResource(R.string.playlist_leave), color = AppText) },
-        text = { Text(stringResource(R.string.playlist_leave_confirm, page.name), color = AppMuted) },
-        confirmButton = {
-            TextButton(onClick = {
-                leavingPlaylist = false
-                // The page closes now (as in the Web Player); a refusal says so, and the library is read again.
-                com.music.spotui.data.api.LibraryEdits.run(context, null,
-                    write = { MyspotiRuntime.api.playlists.leave(page.uri) },
-                    onDone = { ok -> if (ok) com.music.spotui.data.api.LibraryEdits.reloadSoon() })
-                onDismiss(); onDeleted()
-            }) { Text(stringResource(R.string.playlist_leave_button), color = AppDestructive) }
-        },
-        dismissButton = { TextButton(onClick = { leavingPlaylist = false }) { Text(stringResource(R.string.cancel), color = AppText) } },
-    )
 
     if (deleting) AlertDialog(
         onDismissRequest = { deleting = false },

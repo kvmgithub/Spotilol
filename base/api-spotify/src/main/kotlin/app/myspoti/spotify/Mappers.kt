@@ -105,6 +105,7 @@ internal fun playlist(d: JsonElement?): Playlist? {
         ownerImages = images(d.list("ownerV2.data.avatar.sources")),
         followers = d.long("followers"),
         isBlend = d.str("format") == "blend",
+        canLeave = d.bool("currentUserCapabilities.canCancelMembership") ?: false,
     )
 }
 

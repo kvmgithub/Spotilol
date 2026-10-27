@@ -31,6 +31,8 @@ object Graph {
         com.music.spotui.data.api.SupportReminder.init(application)
         // The (always empty) download index: downloads are removed, the index stays inert.
         com.music.spotui.data.offline.OfflineStore.init(application)
+        // Likes and saves made offline, sent once the network is back.
+        SongPlayer.startLibraryOutbox(application)
         com.music.spotui.data.local.LocalPlaylists.init(application)
         com.music.spotui.data.local.LibraryOrder.init(application)
         runCatching { com.music.spotui.data.DataSaverGlide.install(application) }

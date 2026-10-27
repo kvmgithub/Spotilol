@@ -56,6 +56,8 @@ object SessionActions {
         com.music.spotui.ui.screens.ContextViewModel.clearCache()
         com.music.spotui.data.api.Api.HomeCache.clear()
         com.music.spotui.data.api.Api.LikedCache.tracks = null
+        com.music.spotui.data.api.TopStats.clear()
+        com.music.spotui.data.LibraryOutbox.clear()
         com.music.spotui.data.api.ProfileCache.clearSession()
         SongPlayer.clearSession()
         listOf("PlaybackState", "LibraryCache", "RecentItems", "LikedSongs",

@@ -171,6 +171,30 @@ interface Playlists {
     /** The owner and the collaborators of a playlist (just the owner when it is not shared). */
     suspend fun members(uri: Uri): List<PlaylistMember>
 
+    /**
+     * Leaves a playlist this account joined as a collaborator ([Playlist.canLeave]): the page's
+     * `PlaylistPermissionsAPI.removeMember(uri, ownUsername)`. A private one (owner-only base
+     * permission) also leaves the library, as in the Web Player's dialog.
+     */
+    suspend fun leave(uri: Uri)
+
+    /**
+     * Owner: turns a member into a collaborator or back into a listener (the "Shared with" list's
+     * menu): `PlaylistPermissionsAPI.setMemberPermission(uri, username, "CONTRIBUTOR" | "VIEWER")`.
+     */
+    suspend fun setMemberCollaborator(uri: Uri, username: String, collaborator: Boolean)
+
+    /** Owner: removes a member from the playlist (`PlaylistPermissionsAPI.removeMember(uri, username)`). */
+    suspend fun removeMember(uri: Uri, username: String)
+
+    /**
+     * Owner: stops collaborating. Every collaborator becomes a listener when the playlist is private
+     * (not listed on the profile), or is removed from it when it is public; then the base permission
+     * goes back to private / public. The invitation links already shared are NOT revoked: the Web
+     * Player has no call for it (they expire by themselves, after 7 days).
+     */
+    suspend fun stopCollaboration(uri: Uri)
+
     /** Who added each row of a playlist (shown on collaborative ones). */
     suspend fun addedBy(uri: Uri): List<RowAdder>
 
@@ -220,6 +244,16 @@ interface Users {
     suspend fun follow(userUris: List<Uri>)
     suspend fun unfollow(userUris: List<Uri>)
     suspend fun isFollowing(userUris: List<Uri>): List<Boolean>
+    /** Whether this account blocked [userUri] (the Web Player's profile menu: `GET /socialgraph/v4/{me}/is-blocking/{user}`). */
+    suspend fun isBlocked(userUri: Uri): Boolean
+    /** Blocks [userUri] (`POST /socialgraph/v4/{me}/is-blocking/{user}`); Spotify also drops the follow between the two. */
+    suspend fun blockUser(userUri: Uri)
+    /** Lifts the block ([blockUser]'s `DELETE`). */
+    suspend fun unblockUser(userUri: Uri)
+    /**
+     * What the people the account follows are listening to, latest first. Throws when Spotify
+     * refuses the feed (an empty list means nobody shares their activity).
+     */
     suspend fun friendActivity(): List<FriendActivity>
     /** Contexts played lately (Recents). */
     suspend fun history(): List<HistoryEntry>

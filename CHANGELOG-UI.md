@@ -6,6 +6,22 @@ Each version section is the text of the GitHub pre-release tagged `ui-v<version>
 
 ## [Unreleased]
 
+Features taken from Myspoti 2.1.0 (from its 2.0.2 betas), without extensions or the Immersive look.
+
+### Added
+- Collaborative playlists: leave one you joined (playlist menu, or your row in "Shared with"); as the owner, make a member a collaborator or a listener, remove them, or stop collaborating (collaborators become listeners on a private playlist and are removed from a public one).
+- Add a whole playlist or album to one of your playlists, from its menu or the library's long-press menu, with the choice of what to do about songs already in it.
+- Library filter chips: Playlists, Artists, Albums, Songs.
+- Listening stats from Spotify (top artists and tracks over 4 weeks, 6 months and a year) beside the phone's own Recap, minutes per week, and a "your #N artist" line on artist pages.
+- Friend activity (Home menu): what the people you follow are listening to.
+- Likes and saves made without a connection are kept and sent when the network is back; a sign-out or profile switch drops them.
+- Polish, Russian and Chinese for Myspoti's texts (MySpotilol's own texts stay English there).
+
+### Changed
+- Your own playlists have no save button.
+- Back buttons on playlist, album and stats pages are easier to hit.
+- Playlists of up to 200 songs open complete; a playlist read in full, Liked Songs and albums opened before are kept for a while and open at once, refreshed behind (a pull-to-refresh reads everything again).
+
 ## [0.9.0] - 2026-10-27
 
 Fixes taken from Myspoti 2.1.0, the stable release of the 2.0.2 betas. Its extensions, the Immersive look, the Connect mirror for extension songs, play reports sent by the app (Spotify's `melody` telemetry stays blocked), the update checker and the Chromium network routes for refused commands are not part of MySpotilol.

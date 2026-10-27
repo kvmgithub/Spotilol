@@ -493,6 +493,9 @@
     <string name="playlist_invite_message">Rejoins ma playlist « %1$s » sur Spotify, tu pourras y ajouter des titres : %2$s</string>
     <string name="playlist_invite_failed">Impossible de créer le lien d’invitation</string>
     <string name="playlist_by">De %1$s</string>
+    <string name="playlist_leave">Quitter la playlist</string>
+    <string name="playlist_leave_confirm">Quitter %1$s ? Tu ne seras plus collaborateur et ne pourras plus ajouter ni retirer de titres. Pour revenir, il faudra un nouveau lien d’invitation.</string>
+    <string name="playlist_leave_button">Quitter</string>
     <string name="playlist_make_public">Rendre publique</string>
     <string name="playlist_make_private">Rendre privée</string>
     <string name="playlist_stop_collab">Arrêter la collaboration</string>
@@ -511,4 +514,27 @@
     <string name="playlist_members_more">%1$s et %2$d autres</string>
     <string name="settings_headset_skip_title">Boutons du casque : 15 s en podcast</string>
     <string name="settings_headset_skip_detail">Désactivé : ils passent à l\'épisode suivant ou précédent</string>
+    <string name="add_collection_reading">Lecture des titres…</string>
+    <string name="duplicate_title_all">Déjà ajoutés</string>
+    <string name="duplicate_title_some">Certains titres sont déjà ajoutés</string>
+    <string name="duplicate_text_all">Ces titres sont déjà dans %1$s.</string>
+    <string name="duplicate_text_some">Certains de ces titres sont déjà dans %1$s.</string>
+    <string name="duplicate_add_new">Ajouter les nouveaux</string>
+    <string name="duplicate_dont_add">Ne pas ajouter</string>
+    <string name="duplicate_add_all">Tout ajouter</string>
+    <string name="duplicate_add_anyway">Ajouter quand même</string>
+    <string name="add_collection_done">%1$d titres ajoutés à %2$s</string>
+    <string name="add_collection_nothing">Rien à ajouter</string>
+    <string name="playlist_member_listener">Auditeur</string>
+    <string name="playlist_member_make_collab">Passer en collaborateur</string>
+    <string name="playlist_member_remove">Retirer de la playlist</string>
+    <string name="playlist_member_remove_collab">Retirer des collaborateurs</string>
+    <string name="add_playlist_to_playlist">Ajouter la playlist à une autre playlist</string>
+    <string name="playlist_stop_collab_private">Arrêter la collaboration sur %1$s ? Ses collaborateurs deviennent de simples auditeurs : ils peuvent toujours l’écouter, mais plus ajouter ni retirer de titres. Les liens d’invitation déjà partagés restent valables jusqu’à leur expiration (7 jours maximum) et ne peuvent pas être annulés.</string>
+    <string name="playlist_stop_collab_public">Arrêter la collaboration sur %1$s ? Ses collaborateurs sont retirés de la playlist. Les liens d’invitation déjà partagés restent valables jusqu’à leur expiration (7 jours maximum) et ne peuvent pas être annulés.</string>
+    <string name="library_chip_albums">Albums</string>
+    <string name="library_chip_artists">Artistes</string>
+    <string name="library_chip_playlists">Playlists</string>
+    <string name="library_chip_songs">Titres</string>
+    <string name="spotify_plan">Spotify %1$s</string>
 </resources>

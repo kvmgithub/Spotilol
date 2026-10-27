@@ -485,6 +485,14 @@ private fun ProfileSheet(onOpen: (route: String) -> Unit = {}, onDismiss: () -> 
                 Text(stringResource(R.string.recents_title), color = Color.White, fontSize = 16.sp)
                 Text(stringResource(R.string.recents_detail), color = Color(0xFFB3B3B3), fontSize = 12.sp)
             }
+            // What the followed people are listening to (the official Friend Activity feed, Myspoti 2.1.0).
+            androidx.compose.foundation.layout.Column(
+                Modifier.fillMaxWidth().clickable { onOpen(com.music.spotui.ui.navigation.Routes.Friends.route) }
+                    .padding(horizontal = 20.dp, vertical = 10.dp),
+            ) {
+                Text(stringResource(R.string.friends_title), color = Color.White, fontSize = 16.sp)
+                Text(stringResource(R.string.friends_detail), color = Color(0xFFB3B3B3), fontSize = 12.sp)
+            }
             // The Spotify account page (plan, privacy, devices), in the app's signed-in browser.
             androidx.compose.foundation.layout.Column(
                 Modifier.fillMaxWidth().clickable {

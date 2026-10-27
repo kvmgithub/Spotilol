@@ -189,6 +189,88 @@ class SpotifyWritesTest {
         assertEquals("""["spotify:playlist:p","tok123"]""", host.calls[0].args())
     }
 
+    @Test fun `leaving a collaborative playlist removes this account from its members, by username`() = runBridge({ call ->
+        when (call.method()) {
+            "getUser" -> Bridge.json.parseToJsonElement("""{"username":"user0002"}""")
+            "getBasePermission" -> kotlinx.serialization.json.JsonPrimitive("CONTRIBUTOR")
+            else -> JsonNull
+        }
+    }) { host, bridge ->
+        val playlists = SpotifyPlaylists(FakeGql { _, _ -> JsonNull }, bridge, SpotifyHttp(OkHttpClient(), bridge))
+        playlists.leave("spotify:playlist:p")
+        assertEquals(listOf("getUser", "getBasePermission", "removeMember"), host.calls.map { it.method() })
+        assertEquals("""["spotify:playlist:p","user0002"]""", host.calls.last().args())
+    }
+
+    @Test fun `leaving a private playlist takes it out of the library first, as the page's dialog does`() = runBridge({ call ->
+        when (call.method()) {
+            "getUser" -> Bridge.json.parseToJsonElement("""{"username":"user0002"}""")
+            "getBasePermission" -> kotlinx.serialization.json.JsonPrimitive("BLOCKED")
+            else -> JsonNull
+        }
+    }) { host, bridge ->
+        val playlists = SpotifyPlaylists(FakeGql { _, _ -> JsonNull }, bridge, SpotifyHttp(OkHttpClient(), bridge))
+        playlists.leave("spotify:playlist:p")
+        assertEquals(listOf("getUser", "getBasePermission", "remove", "removeMember"), host.calls.map { it.method() })
+    }
+
+    private val membersReply = """{"members":[
+        {"permissionLevel":"OWNER","isOwner":true,"user":{"username":"owner","displayName":"Owner","images":[]}},
+        {"permissionLevel":"CONTRIBUTOR","isOwner":false,"user":{"username":"guest1","displayName":"Guest 1","images":[]}},
+        {"permissionLevel":"VIEWER","isOwner":false,"user":{"username":"guest2","displayName":"Guest 2","images":[]}}]}"""
+
+    @Test fun `members carry their level, and the owner's menu writes setMemberPermission and removeMember by username`() = runBridge({ call ->
+        if (call.method() == "getMembers") Bridge.json.parseToJsonElement(membersReply) else JsonNull
+    }) { host, bridge ->
+        val playlists = SpotifyPlaylists(FakeGql { _, _ -> JsonNull }, bridge, SpotifyHttp(OkHttpClient(), bridge))
+        assertEquals(listOf(false, true, false), playlists.members("spotify:playlist:p").map { it.isCollaborator })
+        host.calls.clear()
+        playlists.setMemberCollaborator("spotify:playlist:p", "guest1", false)
+        playlists.setMemberCollaborator("spotify:playlist:p", "guest2", true)
+        playlists.removeMember("spotify:playlist:p", "guest2")
+        assertEquals(listOf("setMemberPermission", "setMemberPermission", "removeMember"), host.calls.map { it.method() })
+        assertEquals("""["spotify:playlist:p","guest1","VIEWER"]""", host.calls[0].args())
+        assertEquals("""["spotify:playlist:p","guest2","CONTRIBUTOR"]""", host.calls[1].args())
+        assertEquals("""["spotify:playlist:p","guest2"]""", host.calls[2].args())
+    }
+
+    @Test fun `stopping the collaboration of a private playlist makes the collaborators listeners, then makes it private`() = runBridge({ call ->
+        when (call.method()) {
+            "getMembers" -> Bridge.json.parseToJsonElement(membersReply)
+            "getPublishedState" -> kotlinx.serialization.json.JsonPrimitive("false")
+            else -> JsonNull
+        }
+    }) { host, bridge ->
+        val playlists = SpotifyPlaylists(FakeGql { _, _ -> JsonNull }, bridge, SpotifyHttp(OkHttpClient(), bridge))
+        playlists.stopCollaboration("spotify:playlist:p")
+        val writes = host.calls.filter { it.method().startsWith("set") || it.method() == "removeMember" }
+        assertEquals(listOf("setMemberPermission", "setBasePermission"), writes.map { it.method() })
+        assertEquals("""["spotify:playlist:p","guest1","VIEWER"]""", writes[0].args())
+        assertEquals("""["spotify:playlist:p","BLOCKED"]""", writes[1].args())
+    }
+
+    @Test fun `stopping the collaboration of a public playlist removes the collaborators, not the listeners`() = runBridge({ call ->
+        when (call.method()) {
+            "getMembers" -> Bridge.json.parseToJsonElement(membersReply)
+            "getPublishedState" -> kotlinx.serialization.json.JsonPrimitive("true")
+            else -> JsonNull
+        }
+    }) { host, bridge ->
+        val playlists = SpotifyPlaylists(FakeGql { _, _ -> JsonNull }, bridge, SpotifyHttp(OkHttpClient(), bridge))
+        playlists.stopCollaboration("spotify:playlist:p")
+        val writes = host.calls.filter { it.method().startsWith("set") || it.method() == "removeMember" }
+        assertEquals(listOf("removeMember", "setBasePermission"), writes.map { it.method() })
+        assertEquals("""["spotify:playlist:p","guest1"]""", writes[0].args())
+        assertEquals("""["spotify:playlist:p","VIEWER"]""", writes[1].args())
+    }
+
+    @Test fun `a playlist can be left only when its capabilities say canCancelMembership`() {
+        fun parse(flag: String) = playlist(Bridge.json.parseToJsonElement("""{"uri":"spotify:playlist:p","name":"n","currentUserCapabilities":{"canEditItems":true,"canCancelMembership":$flag}}"""))!!
+        assertEquals(true, parse("true").canLeave)
+        assertEquals(false, parse("false").canLeave)
+        assertEquals(false, playlist(Bridge.json.parseToJsonElement("""{"uri":"spotify:playlist:p","name":"n"}"""))!!.canLeave)
+    }
+
     @Test fun `a Blend invitation id is read from the link the page generates, or given bare`() {
         val blends = SpotifyBlends(SpotifyHttp(OkHttpClient(), Bridge(RecordingHost { JsonNull }, scope)))
         assertEquals("f6c3d87d8beb9a3f", blends.idOf("https://open.spotify.com/blend/taste-match/f6c3d87d8beb9a3f?si=DJpS4omqRFOjF4es_Fnm8A&fallback=getapp&blendDecoration=5f9c38d2"))
@@ -211,6 +293,17 @@ class SpotifyWritesTest {
         assertEquals("spotify:playlist:37i9dQZF1EJMv6aMStShzx", joined.playlist)
     }
 
+    @Test fun `a whole album is added in requests of 100 songs, each at the bottom and in order`() = runBridge({ JsonNull }) { _, bridge ->
+        val gql = FakeGql { _, _ -> JsonNull }
+        val playlists = SpotifyPlaylists(gql, bridge, SpotifyHttp(OkHttpClient(), bridge))
+        val uris = (0 until 230).map { "spotify:track:t$it" }
+        playlists.addTracks("spotify:playlist:p", uris)
+        assertEquals(listOf(100, 100, 30), gql.variables.map { it["playlistItemUris"]!!.jsonArray.size })
+        assertEquals("spotify:track:t100", gql.variables[1]["playlistItemUris"]!!.jsonArray[0].jsonPrimitive.content)
+        assertEquals("BOTTOM_OF_PLAYLIST", gql.variables[2]["newPosition"]!!.jsonObject["moveType"]!!.jsonPrimitive.content)
+        assertEquals("spotify:playlist:p", gql.variables[2]["playlistUri"]!!.jsonPrimitive.content)
+    }
+
     @Test fun `a Blend's members and its taste-match card read as the live service gives them`() {
         val blends = SpotifyBlends(SpotifyHttp(OkHttpClient(), Bridge(RecordingHost { JsonNull }, scope)))
         // Shortened from what the live service answered for a two-person Blend.
@@ -229,5 +322,15 @@ class SpotifyWritesTest {
         assertEquals("The song that brings you together is X", story?.detail)
         assertEquals("#F5F3E4", story?.background)
         assertEquals(null, blends.parseStory(Bridge.json.parseToJsonElement("""{"intro_story":null,"stories":[]}""")))
+    }
+
+    @Test fun `blocking a profile is the social graph's is-blocking path with both usernames, and its protobuf answer is read`() {
+        assertEquals("https://spclient.wg.spotify.com/socialgraph/v4/me.name/is-blocking/other",
+            SpotifyUsers.blockUrl("me.name", "spotify:user:other"))
+        assertEquals("https://spclient.wg.spotify.com/socialgraph/v4/me/is-blocking/a%20b", SpotifyUsers.blockUrl("me", "spotify:user:a b"))
+        org.junit.jupiter.api.Assertions.assertThrows(IllegalArgumentException::class.java) { SpotifyUsers.blockUrl("", "spotify:user:x") }
+        assertEquals(true, SpotifyUsers.blockedAnswer(String(byteArrayOf(8, 1))))
+        assertEquals(false, SpotifyUsers.blockedAnswer(String(byteArrayOf(8, 0))))
+        assertEquals(false, SpotifyUsers.blockedAnswer(""))
     }
 }

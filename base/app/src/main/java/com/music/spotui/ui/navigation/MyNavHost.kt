@@ -144,6 +144,14 @@ fun MyNavHost(
             com.music.spotui.ui.screens.RecapScreen(navHostController)
         }
 
+        page(Routes.Friends.route) {
+            LaunchedEffect(playerState) {
+                bottomBarState.value = true
+                bottomBarPlayerState.value = playerState != ""
+            }
+            com.music.spotui.ui.screens.FriendActivityScreen(navHostController)
+        }
+
         // Spotify's own list for the account (every device), not this phone's counter.
         page(Routes.Recent.route) {
             LaunchedEffect(playerState) {

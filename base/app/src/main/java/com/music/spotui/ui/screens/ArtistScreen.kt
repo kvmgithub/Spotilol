@@ -278,6 +278,9 @@ private fun ArtistOverviewContent(
             }
         }
 
+        // ── "Your #3 artist of the past 4 weeks", from the account's Spotify top artists (Myspoti 2.1.0) ──
+        item { ArtistTopBadge(overview.id) }
+
         // ── Action row: Follow + shuffle + play ──
         item {
             Row(

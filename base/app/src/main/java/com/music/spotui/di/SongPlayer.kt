@@ -1196,19 +1196,23 @@ object SongPlayer {
         val track = uri.startsWith(SPOTIFY_TRACK_PREFIX)
         if (track) likedTaps.tryEmit(trackIdOf(uri) to on)
         val write = libraryWrites.incrementAndGet()
+        // No connection: the change stays on screen and is sent when the network is back (Myspoti 2.0.2).
+        if (!com.music.spotui.data.offline.OfflineStore.isOnline(Graph.app)) {
+            com.music.spotui.data.LibraryOutbox.put(uri, on)
+            return
+        }
         scope.launch {
             // One write at a time; a refused one is undone on screen if no newer tap replaced it.
             libraryLock.withLock {
-                runCatching {
-                    if (uri.startsWith("spotify:playlist:")) {
-                        if (on) api.playlists.follow(uri) else api.playlists.unfollow(uri)
-                    } else {
-                        if (on) api.library.add(listOf(uri)) else api.library.remove(listOf(uri))
-                    }
-                }.onSuccess {
+                runCatching { writeLibrary(uri, on) }.onSuccess {
                     if (track) likedChanges.value++
                 }.onFailure {
                     Log.w(TAG, "library change failed: ${it.message}")
+                    // The connection went while it was sent: kept for later, like an offline tap.
+                    if (it is java.io.IOException && !com.music.spotui.data.offline.OfflineStore.isOnline(Graph.app)) {
+                        com.music.spotui.data.LibraryOutbox.put(uri, on)
+                        return@withLock
+                    }
                     if (write == libraryWrites.get()) {
                         intentUntil = 0
                         onLibraryItem(uri, !on)
@@ -1221,6 +1225,28 @@ object SongPlayer {
     }
     private val libraryLock = kotlinx.coroutines.sync.Mutex()
     private val libraryWrites = java.util.concurrent.atomic.AtomicInteger()
+
+    private suspend fun writeLibrary(uri: String, on: Boolean) {
+        if (uri.startsWith("spotify:playlist:")) {
+            if (on) api.playlists.follow(uri) else api.playlists.unfollow(uri)
+        } else {
+            if (on) api.library.add(listOf(uri)) else api.library.remove(listOf(uri))
+        }
+    }
+
+    /** The library changes made offline ([com.music.spotui.data.LibraryOutbox]), sent once Spotify is reachable. */
+    fun startLibraryOutbox(context: Context) = com.music.spotui.data.LibraryOutbox.init(context,
+        sender = { uri, on -> libraryLock.withLock { writeLibrary(uri, on) }; if (uri.startsWith(SPOTIFY_TRACK_PREFIX)) likedChanges.value++ },
+        onAvailable = { scope.launch { kotlinx.coroutines.delay(3_000); flushLibraryOutbox() } },
+    ).also { scope.launch { flushLibraryOutbox() } }
+
+    private suspend fun flushLibraryOutbox() {
+        if (com.music.spotui.data.LibraryOutbox.waiting == 0) return
+        // The engine is started after the app's graph: wait for it, then for Spotify to answer.
+        while (!MyspotiRuntime.isStarted) kotlinx.coroutines.delay(1_000)
+        api.ready.first { it }
+        com.music.spotui.data.LibraryOutbox.flush()
+    }
 
     /** The app is on screen (MainActivity onStart/onStop): background lookups wait otherwise. */
     @Volatile var inForeground = false

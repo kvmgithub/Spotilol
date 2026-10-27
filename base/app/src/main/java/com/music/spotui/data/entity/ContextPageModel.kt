@@ -17,4 +17,6 @@ data class ContextPageModel(
     val complete: Boolean = true,
     /** A Spotify Blend: its page shows the members and the taste match. */
     val isBlend: Boolean = false,
+    /** A member who is not the owner and may leave (`canCancelMembership`). */
+    val canLeave: Boolean = false,
 )

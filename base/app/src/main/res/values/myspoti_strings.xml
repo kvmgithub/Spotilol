@@ -494,6 +494,9 @@
     <string name="playlist_invite_message">Join my playlist “%1$s” on Spotify, you can add songs to it: %2$s</string>
     <string name="playlist_invite_failed">Couldn’t make the invitation link</string>
     <string name="playlist_by">By %1$s</string>
+    <string name="playlist_leave">Leave playlist</string>
+    <string name="playlist_leave_confirm">Leave %1$s? You will no longer be a collaborator and won’t be able to add or remove songs. To join again, you will need a new invitation link.</string>
+    <string name="playlist_leave_button">Leave</string>
     <string name="playlist_make_public">Make public</string>
     <string name="playlist_make_private">Make private</string>
     <string name="playlist_stop_collab">Stop collaborating</string>
@@ -512,4 +515,27 @@
     <string name="playlist_members_more">%1$s and %2$d others</string>
     <string name="settings_headset_skip_title">Headphone buttons skip 15 s on podcasts</string>
     <string name="settings_headset_skip_detail">When off, they go to the next or previous episode</string>
+    <string name="add_collection_reading">Reading the songs…</string>
+    <string name="duplicate_title_all">Already added</string>
+    <string name="duplicate_title_some">Some are already added</string>
+    <string name="duplicate_text_all">These songs are already in %1$s.</string>
+    <string name="duplicate_text_some">Some of these songs are already in %1$s.</string>
+    <string name="duplicate_add_new">Add new ones</string>
+    <string name="duplicate_dont_add">Don\'t add</string>
+    <string name="duplicate_add_all">Add all</string>
+    <string name="duplicate_add_anyway">Add anyway</string>
+    <string name="add_collection_done">Added %1$d songs to %2$s</string>
+    <string name="add_collection_nothing">Nothing to add</string>
+    <string name="playlist_member_listener">Listener</string>
+    <string name="playlist_member_make_collab">Make collaborator</string>
+    <string name="playlist_member_remove">Remove from playlist</string>
+    <string name="playlist_member_remove_collab">Remove as collaborator</string>
+    <string name="add_playlist_to_playlist">Add playlist to another playlist</string>
+    <string name="playlist_stop_collab_private">Stop collaborating on %1$s? Its collaborators become listeners: they can still listen to it, but no longer add or remove songs. Invitation links already shared stay valid until they expire (up to 7 days) and cannot be cancelled.</string>
+    <string name="playlist_stop_collab_public">Stop collaborating on %1$s? Its collaborators are removed from the playlist. Invitation links already shared stay valid until they expire (up to 7 days) and cannot be cancelled.</string>
+    <string name="library_chip_albums">Albums</string>
+    <string name="library_chip_artists">Artists</string>
+    <string name="library_chip_playlists">Playlists</string>
+    <string name="library_chip_songs">Songs</string>
+    <string name="spotify_plan">Spotify %1$s</string>
 </resources>

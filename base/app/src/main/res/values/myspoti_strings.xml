@@ -537,5 +537,14 @@
     <string name="library_chip_artists">Artists</string>
     <string name="library_chip_playlists">Playlists</string>
     <string name="library_chip_songs">Songs</string>
+    <plurals name="queue_list_added">
+        <item quantity="one">%d song added to queue</item>
+        <item quantity="other">%d songs added to queue</item>
+    </plurals>
+    <plurals name="queue_list_next">
+        <item quantity="one">%d song will play next</item>
+        <item quantity="other">%d songs will play next</item>
+    </plurals>
+    <string name="queue_list_none">None of these songs can be queued</string>
     <string name="spotify_plan">Spotify %1$s</string>
 </resources>

@@ -1840,6 +1840,39 @@ object SongPlayer {
         command { api.player.addToQueue(listOf(SPOTIFY_TRACK_PREFIX + trackId)) }
     }
 
+    /** Songs per call of Spotify's queue: a whole playlist in one call is a long wait for the page. */
+    private const val QUEUE_BATCH = 100
+
+    /**
+     * "Play next" / "Add to queue" for a whole list, in the list's order (Myspoti 2.2.0); [done] is
+     * told on the main thread how many songs went to Spotify's queue. As for a single song, only
+     * what Spotify streams goes (tracks and episodes); greyed songs are left out.
+     */
+    fun queueSongs(songs: List<SongsModel>, next: Boolean, done: (Int) -> Unit) {
+        Haptics.confirm()
+        val uris = songs.filter { it.playable }.mapNotNull { s ->
+            when {
+                s.url.startsWith("episode:") -> "spotify:episode:" + s.url.removePrefix("episode:")
+                s.spotifyTrackId.isNotBlank() -> SPOTIFY_TRACK_PREFIX + s.spotifyTrackId
+                else -> null
+            }
+        }
+        if (uris.isNotEmpty()) {
+            val batches = uris.chunked(QUEUE_BATCH)
+            queueCommand {
+                if (!next) batches.forEach { api.player.addToQueue(it) }
+                // Each batch goes in front of the one sent before it, so the last is sent first;
+                // Spotify's queue is shown again between two (playNext reads its first row).
+                else batches.asReversed().forEachIndexed { i, batch ->
+                    val before = api.player.queue.value
+                    api.player.playNext(batch)
+                    if (i < batches.lastIndex) awaitQueue { it !== before }
+                }
+            }
+        }
+        main.post { done(uris.size) }
+    }
+
     fun skipTo(item: QueueItem) {
         if (item.provider == LOCAL) { item.uid.toIntOrNull()?.let(LocalPlayer::skipTo); return }
         cancelBurst()

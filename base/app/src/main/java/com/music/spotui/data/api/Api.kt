@@ -212,7 +212,7 @@ class Api constructor(
         artists = a.artists.joinToString(", ") { it.name },
         coverUri = cover(a.images),
         name = a.name,
-        time = a.releaseDate?.take(4).orEmpty(),
+        time = a.releaseDate?.take(10).orEmpty(),
         type = a.type,
     )
 
@@ -635,7 +635,8 @@ class Api constructor(
             headerImage = big(page.headerImages).ifBlank { avatar },
             avatarImage = avatar,
             topTracks = top.map { (song, plays) -> ArtistTrackUi(song, plays) },
-            popularReleases = page.popularReleases.map(::albumOf),
+            // Newest first by full date (the sort is stable: same-day releases keep Spotify's order).
+            popularReleases = page.popularReleases.sortedByDescending { it.releaseDate.orEmpty().take(10) }.map(::albumOf),
             appearsOn = page.appearsOn.map(::albumOf),
             relatedArtists = page.related.map(::artistOf),
             featuring = page.featuring.map(::playlistEntry),
@@ -660,7 +661,7 @@ class Api constructor(
         }.getOrNull().orEmpty()
         val known = page.popularReleases.map { it.uri }.toSet()
         if (all.any { it.uri !in known }) {
-            val merged = (page.popularReleases + all).distinctBy { it.uri }.sortedByDescending { it.releaseDate.orEmpty() }
+            val merged = (page.popularReleases + all).distinctBy { it.uri }.sortedByDescending { it.releaseDate.orEmpty().take(10) }
             val full = model.copy(popularReleases = merged.map(::albumOf))
             ArtistCache.map[uri] = System.currentTimeMillis() to full
             emit(Response.Success(full))
@@ -939,7 +940,13 @@ class Api constructor(
             // Kept before the emit: a collector that stops at the complete page ends the flow there.
             if (done && !failed) PlaylistFresh.put(uri, songs.toList())
             val total = songs.sumOf { it.durationMs.toLong() }
-            val meta = listOf(saves, if (total > 0) durationLabel(total) else "").filter { it.isNotBlank() }.joinToString(" • ")
+            // The song count rides along with the duration ("1 h 2 min / 12 songs") so the two
+            // numbers that grow together as pages arrive stay next to each other.
+            val durationAndCount = if (songs.isNotEmpty()) {
+                val count = context.resources.getQuantityString(R.plurals.liked_songs_header_metadata_text, songs.size, songs.size)
+                if (total > 0) "${durationLabel(total)} / $count" else count
+            } else ""
+            val meta = listOf(saves, durationAndCount).filter { it.isNotBlank() }.joinToString(" • ")
             // A playlist without a cover of its own shows the mosaic of its songs' albums, as in the official app.
             val cover = header.coverUri.ifBlank { com.music.spotui.ui.components.mosaicCoverFor(songs.take(200).map { it.coverUri }) }
             return Response.Success(header.copy(coverUri = cover, metaLine = meta, tracks = songs.toList(), complete = done))

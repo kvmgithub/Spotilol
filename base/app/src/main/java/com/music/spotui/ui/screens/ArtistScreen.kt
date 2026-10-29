@@ -708,7 +708,7 @@ private fun ReleaseCard(album: AlbumsModel, onClick: () -> Unit) {
         Spacer(Modifier.height(6.dp))
         Text(text = album.name, color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
         Text(
-            text = album.time.ifBlank { album.artists }.let { if (album.time.isNotBlank()) "${album.time} • Album" else it },
+            text = album.year.ifBlank { album.artists }.let { if (album.year.isNotBlank()) "${album.year} • Album" else it },
             color = Color.Gray,
             fontSize = 11.sp,
             maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
@@ -771,7 +771,7 @@ private fun ShowAllButton(onClick: () -> Unit) {
 }
 
 /** Release-year helper: Spotify release dates come as "2024" or "2024-05-17". */
-private fun releaseYear(album: AlbumsModel): String = album.time.take(4)
+private fun releaseYear(album: AlbumsModel): String = album.year
 
 @OptIn(ExperimentalGlideComposeApi::class)
 @Composable

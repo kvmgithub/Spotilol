@@ -156,7 +156,7 @@ class SpotifyCatalog(private val gql: Gql, private val http: app.myspoti.spotify
             ?: throw GqlException("queryArtistOverview", "bad artist")
         return app.myspoti.api.ArtistPage(
             artist = base,
-            biography = a.str("profile.biography.text")?.let { stripTags(it) },
+            biography = a.str("profile.biography.text")?.let { stripHtml(it) },
             headerImages = images(a.list("headerImage.data.sources")),
             topTracks = a.list("discography.topTracks.items").mapNotNull { row ->
                 track(row.at("track"), row.str("uid"))?.let { app.myspoti.api.TopTrack(it, row.long("track.playcount")) }
@@ -169,8 +169,6 @@ class SpotifyCatalog(private val gql: Gql, private val http: app.myspoti.spotify
             playlists = a.list("profile.playlistsV2.items").mapNotNull { playlist(it.at("data")) },
         )
     }
-
-    private fun stripTags(html: String) = html.replace(Regex("<[^>]+>"), "").replace("&amp;", "&").replace("&quot;", "\"").replace("&#39;", "'").trim()
 
     override suspend fun discography(uri: Uri, offset: Int, limit: Int): Page<Album> {
         val all = gql.query("queryArtistDiscographyAll", vars("uri" to uri, "offset" to offset, "limit" to limit, "order" to "DATE_DESC"))

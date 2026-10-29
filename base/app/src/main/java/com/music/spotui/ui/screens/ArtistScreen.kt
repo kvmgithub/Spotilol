@@ -1,5 +1,6 @@
 package com.music.spotui.ui.screens
 
+import com.music.spotui.ui.theme.AppAccent
 import com.music.spotui.ui.components.SkeletonKind
 import com.music.spotui.ui.components.pressable
 import androidx.compose.ui.res.stringResource
@@ -490,7 +491,7 @@ private fun ArtistOverviewContent(
                             )
                         }
                         Text(
-                            text = overview.biography.orEmpty(),
+                            text = com.music.spotui.ui.components.rememberLinkedText(overview.biography.orEmpty(), AppAccent),
                             color = Color.Gray,
                             fontSize = 13.sp,
                             modifier = Modifier.padding(14.dp, 4.dp, 14.dp, 16.dp),

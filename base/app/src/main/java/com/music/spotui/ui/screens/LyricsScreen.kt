@@ -20,6 +20,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.Orientation
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.draggable
 import androidx.compose.foundation.gestures.rememberDraggableState
@@ -190,6 +192,35 @@ private fun sungChars(words: List<LyricWord>, starts: List<Int>, p: Long): Float
 }
 
 /** Seek to a tapped synced line and make sure we're playing. */
+/**
+ * Where a tap at character [offset] of [drawn] (the line as laid out) plays from (Myspoti 2.2.0):
+ * on a word-synced line the start of the word under the finger, or of the word before when the
+ * tap lands between two; the first word, and a line without word timings, from the line's start.
+ */
+internal fun wordTapTime(line: LyricLine, drawn: String, offset: Int): Long {
+    val words = line.words?.takeIf { it.isNotEmpty() } ?: return line.timeMs
+    var hit: com.music.spotui.data.entity.LyricWord? = null
+    var count = 0
+    var from = 0
+    for (w in words) {
+        val t = w.text.trim()
+        if (t.isEmpty()) continue
+        val at = drawn.indexOf(t, from)
+        if (at < 0 || at > offset) break
+        hit = w
+        count++
+        from = at + t.length
+    }
+    return if (count <= 1 || hit == null) minOf(line.timeMs, words.first().startMs) else hit.startMs
+}
+
+/** Where the finger last went down, seen before the click handler below it and never consumed. */
+private fun Modifier.lastPress(onDown: (androidx.compose.ui.geometry.Offset) -> Unit): Modifier = pointerInput(onDown) {
+    awaitEachGesture {
+        onDown(awaitFirstDown(requireUnconsumed = false, pass = androidx.compose.ui.input.pointer.PointerEventPass.Initial).position)
+    }
+}
+
 private fun jumpTo(timeMs: Long) {
     com.music.spotui.di.Haptics.click()
     SongPlayer.seekTo(timeMs)
@@ -253,7 +284,8 @@ private fun LyricLineText(
     fontSize: TextUnit,
     position: () -> Long,
     translation: String?,
-    onTap: (() -> Unit)?,
+    /** Gets the time to play from: the start of the word tapped on a word-synced line. */
+    onTap: ((Long) -> Unit)?,
     modifier: Modifier = Modifier,
     annotated: Boolean = false,
     onHold: (() -> Unit)? = null,
@@ -263,18 +295,21 @@ private fun LyricLineText(
         else -> palette.highlight
     }
     val color by animateColorAsState(target, tween(220), label = "lyricColor")
+    // Explained by Genius: a light dotted line under each row of the text.
+    var layout by remember { mutableStateOf<androidx.compose.ui.text.TextLayoutResult?>(null) }
+    var pressAt by remember { mutableStateOf(androidx.compose.ui.geometry.Offset.Zero) }
     val lineModifier = modifier
         .fillMaxWidth()
         .then(
-            if (onTap != null || onHold != null) Modifier.combinedClickable(
+            if (onTap != null || onHold != null) Modifier.lastPress { pressAt = it }.combinedClickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,
                 onLongClick = onHold,
-                onClick = { onTap?.invoke() },
+                onClick = {
+                    onTap?.invoke(layout?.let { l -> wordTapTime(line, l.layoutInput.text.text, l.getOffsetForPosition(pressAt)) } ?: line.timeMs)
+                },
             ) else Modifier
         )
-    // Explained by Genius: a light dotted line under each row of the text.
-    var layout by remember { mutableStateOf<androidx.compose.ui.text.TextLayoutResult?>(null) }
     val underline = if (!annotated) Modifier else Modifier.drawBehind {
         val t = layout ?: return@drawBehind
         val dot = 2.dp.toPx()
@@ -491,7 +526,7 @@ fun LyricsScreen(
                                 fontSize = 24.sp,
                                 position = position,
                                 translation = if (state.showTranslation) state.translations?.getOrNull(i) else null,
-                                onTap = if (l.synced) ({ jumpTo(line.timeMs) }) else null,
+                                onTap = if (l.synced) ({ jumpTo(it) }) else null,
                                 modifier = Modifier.revealIn(reveal, 0.35f + 0.045f * (i - staggerBase).coerceIn(0, 8), 22f),
                             )
                         }

@@ -92,7 +92,7 @@ The standalone regression suite requires a JDK, Node.js and Python 3. It also ch
 
 Login security checks may navigate to exact HTTPS `challenge.spotify.com`. Challenge documents run without player injections or native bridge authority. Logs redact their session identifiers and record blocked main-frame destinations by hostname only. A reCAPTCHA `requestStorageAccess` warning alone does not establish that its network connection failed.
 
-Automatic update checks query this fork and only show a notification. The original upstream repository is unavailable. Future source updates require review of the actual source tree and the security invariants documented in [AGENTS.md](AGENTS.md).
+Automatic update checks query this fork and only show a notification. The original upstream repository is unavailable. Future source updates require review of the actual source tree and the security invariants documented in [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md).
 
 ---
 

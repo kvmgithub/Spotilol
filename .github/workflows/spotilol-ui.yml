@@ -148,6 +148,25 @@ jobs:
       - name: Remove signing material
         if: always()
         run: rm -f "$RUNNER_TEMP/release.p12"
+      - name: Remove merged work branches
+        # Work branches (try-*, ui-merge-*) whose every change is in the commit just built
+        # (git cherry: no "+" line, so rebased copies count too), and the failure log of an
+        # earlier run: once myspoti-ui builds, they only clutter the branch list.
+        if: success() && github.ref == 'refs/heads/myspoti-ui'
+        working-directory: ${{ github.workspace }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git fetch -q --unshallow origin myspoti-ui || git fetch -q origin myspoti-ui
+          git fetch -q origin '+refs/heads/try-*:refs/remotes/origin/try-*' '+refs/heads/ui-merge-*:refs/remotes/origin/ui-merge-*'
+          gone=()
+          for b in $(git for-each-ref --format='%(refname:strip=3)' 'refs/remotes/origin/try-*' 'refs/remotes/origin/ui-merge-*'); do
+            if git cherry "$GITHUB_SHA" "origin/$b" | grep -q '^+'; then echo "$b kept: changes not in this build"; else gone+=("$b"); fi
+          done
+          if git ls-remote --exit-code -q origin refs/heads/ui-ci-logs; then gone+=(ui-ci-logs); fi
+          if [ ${#gone[@]} -eq 0 ]; then echo "nothing to remove"; exit 0; fi
+          echo "removing: ${gone[*]}"
+          git push -q "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" --delete "${gone[@]}"
 
   notes:
     # Every published ui-v release shows its section of CHANGELOG-UI.md (and the standard footer).

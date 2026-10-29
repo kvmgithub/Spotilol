@@ -6,10 +6,17 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <application>
-        <!-- Not exported: no Android Auto or external media browsers (Spotilol scope). -->
+        <!-- Not exported: no Android Auto or external media browsers (Spotilol scope).
+             MEDIA_BUTTON: the app's own MediaButtonReceiver (headset buttons while the session
+             is idle, a dismissed notification) hands its key events to this service, and threw
+             "Could not find any Service that handles MEDIA_BUTTON" without it (crash seen 27/10). -->
         <service
             android:name="app.myspoti.host.android.PlaybackService"
             android:exported="false"
-            android:foregroundServiceType="mediaPlayback" />
+            android:foregroundServiceType="mediaPlayback">
+            <intent-filter>
+                <action android:name="android.intent.action.MEDIA_BUTTON" />
+            </intent-filter>
+        </service>
     </application>
 </manifest>

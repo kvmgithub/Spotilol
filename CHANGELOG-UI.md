@@ -6,6 +6,15 @@ Each version section is the text of the GitHub pre-release tagged `ui-v<version>
 
 ## [Unreleased]
 
+## [0.11.2] - 2026-10-29
+
+### Fixed
+- Crossfade: short dropouts from the middle of a song on, more frequent and longer towards its end. To build the crossfade reserve, Spotify's player plays the song slightly ahead of what is heard, but it is shown the heard time, so it counted the reserve as audio still to play and fetched the next part of the song too late. Past about 5 s of reserve its media element ran out of audio for 1–5 s at a time (log seen: five gaps in two minutes, the first while Spotify answered in 0.3 s). The player now also sees its buffered audio moved back by the reserve, so it fetches by what the element really has ahead. Should the player then fetch the same audio over and over (more than 20 requests in 30 s), the ranges are shown as they are again for that page.
+- A headset button while nothing played, or swiping away the paused notification, could crash the app ("Could not find any Service that handles MEDIA_BUTTON"): the playback service now takes these key events itself. It stays unreachable for other apps.
+
+### Diagnostics
+- `page xfade` `starve` lines: the media element ran out of audio while playing, with the gap in seconds, the reserve at that moment, whether the buffered ranges were moved, how often the player read them (element / SourceBuffer) and the audio requests in the last 30 s.
+
 ## [0.11.1] - 2026-10-27
 
 ### Fixed

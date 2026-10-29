@@ -464,4 +464,22 @@
     <string name="settings_headset_skip_title">Przyciski słuchawek: 15 s w podcastach</string>
     <string name="settings_headset_skip_detail">Gdy wyłączone, przechodzą do następnego lub poprzedniego odcinka</string>
     <string name="spotify_plan">Spotify %1$s</string>
+    <string name="episode_new">Nowy</string>
+    <string name="show_filter_all">Domyślna kolejność</string>
+    <string name="show_filter_all_played">Wszystkie odcinki zostały odsłuchane.</string>
+    <string name="show_filter_hide_played">Ukryj odsłuchane</string>
+    <string name="show_filter_unplayed_first">Najpierw nieodsłuchane</string>
+    <plurals name="queue_list_added">
+        <item quantity="one">Dodano %d utwór do kolejki</item>
+        <item quantity="few">Dodano %d utwory do kolejki</item>
+        <item quantity="many">Dodano %d utworów do kolejki</item>
+        <item quantity="other">Dodano %d utworu do kolejki</item>
+    </plurals>
+    <plurals name="queue_list_next">
+        <item quantity="one">%d utwór zagra jako następny</item>
+        <item quantity="few">%d utwory zagrają jako następne</item>
+        <item quantity="many">%d utworów zagra jako następne</item>
+        <item quantity="other">%d utworu zagra jako następne</item>
+    </plurals>
+    <string name="queue_list_none">Żadnego z tych utworów nie można dodać do kolejki</string>
 </resources>

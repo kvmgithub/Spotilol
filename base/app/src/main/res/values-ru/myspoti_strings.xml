@@ -464,4 +464,22 @@
     <string name="settings_headset_skip_title">Кнопки наушников: 15 с в подкастах</string>
     <string name="settings_headset_skip_detail">Если выключено, переключают на следующий или предыдущий выпуск</string>
     <string name="spotify_plan">Spotify %1$s</string>
+    <string name="episode_new">Новый</string>
+    <string name="show_filter_all">Порядок по умолчанию</string>
+    <string name="show_filter_all_played">Все выпуски прослушаны.</string>
+    <string name="show_filter_hide_played">Скрыть прослушанные</string>
+    <string name="show_filter_unplayed_first">Сначала непрослушанные</string>
+    <plurals name="queue_list_added">
+        <item quantity="one">%d трек добавлен в очередь</item>
+        <item quantity="few">%d трека добавлены в очередь</item>
+        <item quantity="many">%d треков добавлено в очередь</item>
+        <item quantity="other">%d трека добавлено в очередь</item>
+    </plurals>
+    <plurals name="queue_list_next">
+        <item quantity="one">%d трек заиграет следующим</item>
+        <item quantity="few">%d трека заиграют следующими</item>
+        <item quantity="many">%d треков заиграют следующими</item>
+        <item quantity="other">%d трека заиграют следующими</item>
+    </plurals>
+    <string name="queue_list_none">Ни один из этих треков нельзя добавить в очередь</string>
 </resources>

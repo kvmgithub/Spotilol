@@ -532,4 +532,18 @@
     <string name="library_chip_playlists">Λίστες αναπαραγωγής</string>
     <string name="library_chip_songs">Τραγούδια</string>
     <string name="spotify_plan">Spotify %1$s</string>
+    <string name="episode_new">Νέο</string>
+    <string name="show_filter_all">Προεπιλεγμένη σειρά</string>
+    <string name="show_filter_all_played">Όλα τα επεισόδια έχουν ακουστεί.</string>
+    <string name="show_filter_hide_played">Απόκρυψη όσων ακούστηκαν</string>
+    <string name="show_filter_unplayed_first">Πρώτα όσα δεν ακούστηκαν</string>
+    <plurals name="queue_list_added">
+        <item quantity="one">Προστέθηκε %d τραγούδι στην ουρά</item>
+        <item quantity="other">Προστέθηκαν %d τραγούδια στην ουρά</item>
+    </plurals>
+    <plurals name="queue_list_next">
+        <item quantity="one">%d τραγούδι θα παίξει μετά</item>
+        <item quantity="other">%d τραγούδια θα παίξουν μετά</item>
+    </plurals>
+    <string name="queue_list_none">Κανένα από αυτά τα τραγούδια δεν μπορεί να μπει στην ουρά</string>
 </resources>

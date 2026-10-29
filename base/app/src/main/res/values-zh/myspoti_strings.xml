@@ -455,4 +455,16 @@
     <string name="settings_headset_skip_title">耳机按键在播客中快进/快退 15 秒</string>
     <string name="settings_headset_skip_detail">关闭后，切换到下一集或上一集</string>
     <string name="spotify_plan">Spotify %1$s</string>
+    <string name="episode_new">新</string>
+    <string name="show_filter_all">默认顺序</string>
+    <string name="show_filter_all_played">所有单集都已收听。</string>
+    <string name="show_filter_hide_played">隐藏已收听</string>
+    <string name="show_filter_unplayed_first">未收听的优先</string>
+    <plurals name="queue_list_added">
+        <item quantity="other">已将 %d 首歌曲加入队列</item>
+    </plurals>
+    <plurals name="queue_list_next">
+        <item quantity="other">接下来将播放 %d 首歌曲</item>
+    </plurals>
+    <string name="queue_list_none">这些歌曲都无法加入队列</string>
 </resources>

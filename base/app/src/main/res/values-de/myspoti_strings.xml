@@ -531,4 +531,18 @@
     <string name="library_chip_playlists">Playlists</string>
     <string name="library_chip_songs">Titel</string>
     <string name="spotify_plan">Spotify %1$s</string>
+    <string name="episode_new">Neu</string>
+    <string name="show_filter_all">Standardreihenfolge</string>
+    <string name="show_filter_all_played">Alle Folgen sind gehört.</string>
+    <string name="show_filter_hide_played">Gehörte ausblenden</string>
+    <string name="show_filter_unplayed_first">Ungehörte zuerst</string>
+    <plurals name="queue_list_added">
+        <item quantity="one">%d Song zur Warteschlange hinzugefügt</item>
+        <item quantity="other">%d Songs zur Warteschlange hinzugefügt</item>
+    </plurals>
+    <plurals name="queue_list_next">
+        <item quantity="one">%d Song wird als Nächstes gespielt</item>
+        <item quantity="other">%d Songs werden als Nächstes gespielt</item>
+    </plurals>
+    <string name="queue_list_none">Keiner dieser Songs kann eingereiht werden</string>
 </resources>

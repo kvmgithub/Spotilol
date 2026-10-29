@@ -547,4 +547,9 @@
     </plurals>
     <string name="queue_list_none">None of these songs can be queued</string>
     <string name="spotify_plan">Spotify %1$s</string>
+    <string name="episode_new">New</string>
+    <string name="show_filter_all">Default order</string>
+    <string name="show_filter_all_played">Every episode is played.</string>
+    <string name="show_filter_hide_played">Hide played</string>
+    <string name="show_filter_unplayed_first">Unplayed first</string>
 </resources>

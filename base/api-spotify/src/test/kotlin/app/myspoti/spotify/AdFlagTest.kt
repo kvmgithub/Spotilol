@@ -90,6 +90,8 @@ class AdFlagTest {
         // The break ends and B plays, but that push is lost: only a read of the page says so.
         host.pageState = stateOf(track("B"))
         waitFor("ad flag cleared", ms = 15_000) { !player.adPlaying.value }
-        assertEquals("spotify:track:B", player.state.value?.item?.uri)
+        // The flag drops a moment before the state is set in the same onState call (another
+        // thread here): the song is waited for, briefly, instead of read at once.
+        waitFor("song B shown", ms = 2_000) { player.state.value?.item?.uri == "spotify:track:B" }
     }
 }

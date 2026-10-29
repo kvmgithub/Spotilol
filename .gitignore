@@ -11,11 +11,4 @@ tools/captures/
 base/tools/captures/
 __pycache__/
 .idea/
-PROMPT-*.md
-# internal working notes (account, device, local paths): kept on the machine, never published
-HANDOFF.md
-ANNEXE-ETAT.txt
-docs/RESTE-A-FAIRE.md
-tools/handoff_state.sh
-REDDIT-*.md
 tools/qa-results/

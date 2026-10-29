@@ -43,8 +43,13 @@ internal class ControlRelay(private val view: WebView, private val fingerprint: 
     /** The page's player registered its playback device (it started, and takes commands). */
     @Volatile var onDeviceRegistered: (() -> Unit)? = null
     private val main = Handler(Looper.getMainLooper())
+    // Spotify answers these requests in well under a second: 10 s without a byte is a dead
+    // connection (the phone moved between Wi-Fi and mobile data, a connection the mobile network
+    // dropped while idle), failed then instead of after a longer wait (Myspoti 2.2.0). The ping
+    // finds one before a command does. The pool is BoundedHttp's, dropped on network changes.
     private val http: OkHttpClient = BoundedHttp.client(callTimeoutSeconds = 20).newBuilder()
-        .readTimeout(15, TimeUnit.SECONDS)
+        .readTimeout(10, TimeUnit.SECONDS)
+        .pingInterval(15, TimeUnit.SECONDS)
         .build()
 
     /** The identity the page presents (user agent, client hints, languages); null until it says. */

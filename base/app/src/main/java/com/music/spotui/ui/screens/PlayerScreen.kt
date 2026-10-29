@@ -161,6 +161,8 @@ fun PlayerScreen(navController: NavController) {
     val songId = playerViewModel.currentSongId.value
     val context = LocalContext.current
     val energy by EnergySettings.state.collectAsStateWithLifecycle()
+    // The heart of the song shown, asked again when its state is old (Myspoti 2.2.0).
+    LaunchedEffect(Unit) { SongPlayer.refreshLikedIfStale() }
     // Liked state is Spotify's (LibraryAPI), pushed by the engine.
     val isLiked = playerViewModel.likeState
     val titleScope = androidx.compose.runtime.rememberCoroutineScope()

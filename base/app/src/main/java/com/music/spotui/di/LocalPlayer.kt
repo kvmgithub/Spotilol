@@ -38,6 +38,8 @@ object LocalPlayer {
                 override fun onEvents(player: Player, events: Player.Events) = publish()
             })
             exo = p
+            // A new local session takes the repeat the player shows (it started off).
+            setRepeatMode(SongPlayer.repeatMode.value)
         }
 
     fun play(list: List<LocalTrack>, index: Int, shuffle: Boolean = false, context: String? = null) {

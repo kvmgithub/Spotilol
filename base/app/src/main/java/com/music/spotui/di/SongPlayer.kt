@@ -550,8 +550,14 @@ object SongPlayer {
         if (!holding || s.shuffle == shuffleWanted) state.shuffle.value = s.shuffle
         // The page reports a speed other than 1 only for episodes: music stays at 1.
         _speed.value = s.speed.takeIf { it > 0.0 } ?: 1.0
-        _repeatMode.value = s.repeat.ordinal
-        state.repeat.value = s.repeat != Repeat.OFF
+        // A local file keeps its own repeat, and a tap on a Spotify song is held until the page
+        // shows it: an older report turned the button back off right after the tap (Myspoti 2.2.0).
+        val repeatHeld = SystemClock.elapsedRealtime() < repeatWantedUntil
+        if (repeatHeld && s.repeat.ordinal == repeatWanted) repeatWantedUntil = 0L
+        if (!LocalPlayer.active.value && (!repeatHeld || s.repeat.ordinal == repeatWanted)) {
+            _repeatMode.value = s.repeat.ordinal
+            state.repeat.value = s.repeat != Repeat.OFF
+        }
         if (item == null) {
             state.updatePlayingState(playing)
             pushNotification(null, state.likeState.value)
@@ -572,6 +578,9 @@ object SongPlayer {
         pushNotification(song, liked)
         saveLastTrack(song, uri, liked)
         trackListen(uri, song, com.music.spotui.data.local.ListenHistory.Source.SPOTIFY, playing)
+        // A song never asked about (the one restored at launch is not a change): its state is asked
+        // once, not read as "not liked" until the next song. A failed ask is not repeated by every state.
+        if (!trackChanged && library[uri] == null) refreshCurrentLiked(fromState = true)
         if (trackChanged) {
             refreshCurrentLiked()
             refreshDevice()
@@ -583,15 +592,51 @@ object SongPlayer {
         }
     }
 
-    private fun refreshCurrentLiked() {
+    /** Songs whose saved state is being asked for by [refreshCurrentLiked] (one check in flight per song). */
+    private val likeChecking = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
+    /** When a check of each song got no answer (even after its retry): states do not start another for a while. */
+    private val likeCheckFailedAt = java.util.concurrent.ConcurrentHashMap<String, Long>()
+    /** The last line [refreshCurrentLiked] logged, so the same answer for the same song is logged once. */
+    @Volatile private var lastLikeLog = ""
+
+    /**
+     * Asks Spotify whether the song shown is liked (a state it confirmed less than [SAVED_FRESH_MS]
+     * ago is not asked for again). [fromState]: called because the page state shows a song with no
+     * answer yet, so a song whose check just failed waits [LIKE_RETRY_AFTER_MS] before the next one.
+     * An answer that never comes leaves the heart as it is: no "not liked" is written for it.
+     */
+    private fun refreshCurrentLiked(fromState: Boolean = false) {
         val uri = _nowPlaying.value.uri.takeIf { it.startsWith(SPOTIFY_TRACK_PREFIX) || it.startsWith("spotify:episode:") } ?: return
+        if (fromState && SystemClock.elapsedRealtime() - (likeCheckFailedAt[uri] ?: -LIKE_RETRY_AFTER_MS) < LIKE_RETRY_AFTER_MS) return
+        if (!likeChecking.add(uri)) return
         scope.launch {
-            // Through the shared, cached request path: a state Spotify confirmed less than
-            // [SAVED_FRESH_MS] ago is not asked for again (its row asked for it already).
-            libraryContains(listOf(uri))
-            library[uri]?.let { onLibraryItem(uri, it) }
+            try {
+                // Through the shared, cached request path: a state Spotify confirmed less than
+                // [SAVED_FRESH_MS] ago is not asked for again (its row asked for it already).
+                var check = checkLibrary(listOf(uri))
+                if (check.failed) {
+                    // The page was not ready, or the request was lost: once more, for this song only.
+                    kotlinx.coroutines.delay(LIKE_RETRY_MS)
+                    if (_nowPlaying.value.uri == uri) check = checkLibrary(listOf(uri))
+                }
+                val answer = when {
+                    check.failed -> "failed, from Spotify, song $uri, reason ${savedError.ifBlank { "no answer" }}"
+                    uri in check.asked -> "${if (uri in check.saved) "liked" else "not liked"}, from Spotify, song $uri"
+                    else -> "${if (uri in check.saved) "liked" else "not liked"}, from memory, song $uri"
+                }
+                val line = "liked check: answer $answer"
+                if (line != lastLikeLog) { lastLikeLog = line; app.myspoti.host.android.Logbook.log(line) }
+                if (check.failed) { likeCheckFailedAt[uri] = SystemClock.elapsedRealtime(); return@launch }
+                likeCheckFailedAt.remove(uri)
+                if (uri in check.asked) onLibraryItem(uri, uri in check.saved)
+            } finally {
+                likeChecking.remove(uri)
+            }
         }
     }
+
+    /** The app is on screen again, or a player opens: the song shown is asked for if its state is old (see [SAVED_FRESH_MS]). */
+    fun refreshLikedIfStale() = refreshCurrentLiked()
 
     /** Back from the local player: the Spotify queue again. */
     fun restoreEngineQueue() = main.post { _queue.value = EngineQueue(); applyQueue(apiQueue) }
@@ -1230,10 +1275,16 @@ object SongPlayer {
 
     fun setRepeat(on: Boolean) = setRepeatMode(if (on) 1 else 0)
 
+    /** The repeat mode last tapped, held against the page's older reports like [shuffleWanted]. */
+    @Volatile private var repeatWanted = 0
+    @Volatile private var repeatWantedUntil = 0L
+
     fun setRepeatMode(mode: Int) {
         if (LocalPlayer.active.value) { _repeatMode.value = mode; LocalPlayer.setRepeatMode(mode); return }
         Haptics.toggle(mode != 0)
         _repeatMode.value = mode
+        repeatWanted = mode
+        repeatWantedUntil = SystemClock.elapsedRealtime() + SHUFFLE_HOLD_MS
         boundState?.repeat?.value = mode != 0
         lastTrackPrefs().edit().putInt("repeat", mode.coerceIn(0, 2)).apply()
         command { api.player.setRepeat(Repeat.entries[mode.coerceIn(0, 2)]) }
@@ -1318,6 +1369,12 @@ object SongPlayer {
     /** Confirmed by Spotify less than that long ago: not asked for again (see [libraryContains]). */
     private const val SAVED_FRESH_MS = 60_000L
 
+    /** A check of the song shown that got no answer is made once more after this long. */
+    private const val LIKE_RETRY_MS = 2_500L
+
+    /** After a check that failed twice, page states do not start another before this long. */
+    private const val LIKE_RETRY_AFTER_MS = 30_000L
+
     /** When Spotify (or the user's own tap) last settled each uri. */
     private val savedAt = java.util.concurrent.ConcurrentHashMap<String, Long>()
 
@@ -1325,6 +1382,8 @@ object SongPlayer {
     private val savedFlights =
         java.util.concurrent.ConcurrentHashMap<String, kotlinx.coroutines.Deferred<List<Boolean>?>>()
     private val savedFlightLock = kotlinx.coroutines.sync.Mutex()
+    /** Why the last request for saved states got no answer (logged by [refreshCurrentLiked]). */
+    @Volatile private var savedError = ""
 
     // The user's last like/unlike wins briefly over states that were already in flight.
     @Volatile private var intentUri = ""
@@ -1358,7 +1417,8 @@ object SongPlayer {
 
     /** Make sure [uri]'s saved state ends up in [library]. */
     fun requestSaved(uri: String) {
-        if (uri.isBlank() || library.containsKey(uri)) return
+        // An entry older than [SAVED_FRESH_MS] is asked again (it may have changed in another app); [libraryContains] skips the fresh ones.
+        if (uri.isBlank() || (library.containsKey(uri) && SystemClock.elapsedRealtime() - (savedAt[uri] ?: 0L) < SAVED_FRESH_MS)) return
         if (wantedSaved.add(uri)) { main.removeCallbacks(flushSaved); main.postDelayed(flushSaved, 32) }
     }
 
@@ -1426,17 +1486,22 @@ object SongPlayer {
         }
     }
 
+    /** What [checkLibrary] found: [saved] of the uris asked about, [asked] the ones that went to Spotify, [failed] when that got no answer. */
+    private class LibraryCheck(val saved: Set<String>, val asked: Set<String>, val failed: Boolean)
+
     /** Which of [uris] are saved in the user's library (Liked Songs / saved albums…). */
-    suspend fun libraryContains(uris: List<String>): Set<String> {
-        if (uris.isEmpty()) return emptySet()
+    suspend fun libraryContains(uris: List<String>): Set<String> = checkLibrary(uris).saved
+
+    private suspend fun checkLibrary(uris: List<String>): LibraryCheck {
+        if (uris.isEmpty()) return LibraryCheck(emptySet(), emptySet(), false)
         val now = SystemClock.elapsedRealtime()
         // A page prefetch and the page opening ask for the same list within a second, and the
         // rows of a list ask again for what the list just confirmed: only what is unknown (or
         // old enough to have changed elsewhere) goes to Spotify.
         val (known, unknown) = uris.partition { library.containsKey(it) && now - (savedAt[it] ?: 0L) < SAVED_FRESH_MS }
         val out = known.filterTo(mutableSetOf()) { library[it] == true }
-        if (unknown.isEmpty()) return out
-        val flags = savedFlags(unknown) ?: return out
+        if (unknown.isEmpty()) return LibraryCheck(out, emptySet(), false)
+        val flags = savedFlags(unknown) ?: return LibraryCheck(out, emptySet(), true)
         val saved = unknown.filterIndexed { i, _ -> flags.getOrNull(i) == true }.toSet()
         main.post {
             for (u in unknown) {
@@ -1445,7 +1510,7 @@ object SongPlayer {
                 savedAt[u] = now
             }
         }
-        return out + saved
+        return LibraryCheck(out + saved, unknown.toSet(), false)
     }
 
     /** [uris] in one request; two callers asking the same list share that one request. */
@@ -1458,6 +1523,7 @@ object SongPlayer {
                 } catch (e: kotlinx.coroutines.CancellationException) {
                     throw e
                 } catch (e: Exception) {
+                    savedError = e.message ?: e.javaClass.simpleName
                     null
                 }
             }.also { d ->

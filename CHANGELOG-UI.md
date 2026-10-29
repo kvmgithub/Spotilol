@@ -6,6 +6,33 @@ Each version section is the text of the GitHub pre-release tagged `ui-v<version>
 
 ## [Unreleased]
 
+## [0.12.0] - 2026-10-29
+
+Taken from Myspoti 2.2.0. Not taken: Chromecast, Android Auto, tablet layouts, downloads, extensions, the Immersive look and the dependency updates.
+
+### Added
+- Tap a word in word-synced lyrics to play from that word (between two words, from the one before).
+- Links in show, episode, artist and playlist descriptions can be tapped: Spotify playlists, albums, artists and shows open in the app, other links in the browser (always over HTTPS).
+- Each artist name in the player is its own tap target.
+- Playlists, albums and Liked Songs can be queued whole: Play next and Add to queue in their menu and in the library's long-press menu, in the list's sort order.
+- Podcasts: unplayed first or hide played on a show page (kept per show), a New mark on episodes released since your last visit, a dot on followed shows on Home with a new episode, played ticks and progress bars.
+- The playlist header shows the song count next to the duration.
+
+### Changed
+- Artist releases and the latest release are ordered by the full release date, not the year alone.
+- Playlist pickers show the covers of playlists without their own cover.
+- No empty strip under the player for songs without lyrics; tighter mini player lines; cover colours dark enough for white text; edge to edge on Android 14 and older.
+
+### Fixed
+- Slow networks: the clock stops while the sound waits for data, a stuck ad break is read again, a command stuck for 3 s gives way to a newer one, the skipped-to song is shown at once from every control and put back when the skip never lands, a seek is held against older positions and sent again, connections to Spotify that went dead fail after 10 s instead of 15.
+- A song picked at row 100 or later of a big list plays that song, not another one.
+- Skips and pauses without a click: the sound stays down until the next song really plays, and the old song is cut only once its fade is low.
+- One skip no longer goes two songs on when the song ends while the skip waits.
+- The liked heart of a song restored at start is checked (once more when the check fails), and again when you return to the app or open the player.
+- The repeat button keeps a tap until Spotify shows it; a local file keeps its own repeat.
+- Connect volume changes are sent one at a time, so the device ends on the last one.
+- Discover: new releases of followed podcasts open their show or episode.
+
 ## [0.11.2] - 2026-10-29
 
 ### Fixed

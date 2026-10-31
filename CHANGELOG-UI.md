@@ -6,6 +6,15 @@ Each version section is the text of the GitHub pre-release tagged `ui-v<version>
 
 ## [Unreleased]
 
+## [0.12.1] - 2026-10-31
+
+### Fixed
+- With crossfade on, a short stall of the connection is no longer heard. The crossfade keeps the last seconds of the song in reserve, but when Spotify's player ran out of audio, the silence went into that reserve too and was heard in full a few seconds later (log seen: 4.5 s and 11.6 s without data with the screen off, each heard in full with 6 s in reserve). The reserve now plays on through the stall and the silence is cut out: a stall shorter than the reserve goes unheard, a longer one is heard only for what the reserve did not cover. The reserve then builds up again.
+- Spotify's player holding its speed at 0 while it waits for data no longer counts as a speed change of its own: three stalls in one song switched its crossfade off.
+
+### Diagnostics
+- `page xfade` `hold` lines replace the `starve` lines: each stall with its length (`gap`), the reserve it met, what of it was heard (`heard`), and whether it came from the player waiting for data (`wait`) or holding at speed 0.
+
 ## [0.12.0] - 2026-10-29
 
 Taken from Myspoti 2.2.0. Not taken: Chromecast, Android Auto, tablet layouts, downloads, extensions, the Immersive look and the dependency updates.

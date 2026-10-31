@@ -413,7 +413,7 @@
   const xf = { seconds: 0, el: null, k: 1, ours: false, pageRate: 1, pitch: null, segs: [{ at: 0, k: 1 }], cur: 0,
     switchAt: -1e9, lastRem: Infinity, kind: null, durationMs: 0, speed: 1, planned: null, noted: '',
     resets: 0, sets: 0, endingUntil: 0, overlapUntil: 0, probes: [], masked: new WeakSet(),
-    rangesOff: false, sbMasked: false, reads: { el: 0, sb: 0 }, starve: null };
+    rangesOff: false, sbMasked: false, reads: { el: 0, sb: 0 }, holdWait: false, holdRate: false, hold: null };
 
   // The element's own speed, time and buffered ranges, past the masks below.
   const RATE = Object.getOwnPropertyDescriptor(HTMLMediaElement.prototype, 'playbackRate');
@@ -594,6 +594,33 @@
     return c;
   };
 
+  // A stall: the element waits for data ('waiting'), or the page holds it at speed 0 while it
+  // rebuffers. Nothing reaches the delay from then on, so the stream is marked 0 there (no song
+  // written) and laid out again: what is heard plays on from the reserve, and once the element
+  // plays again the read side skips the stretch nothing was written in. A stall shorter than the
+  // reserve is then not heard at all; a longer one only for the part the reserve did not cover
+  // (0.12.1, log seen: 4.5 s and 11.6 s without data on a stalled connection, each heard in full
+  // 6 s later, with 6 s in reserve). which: 'holdWait' | 'holdRate'.
+  const xfHold = (which, on) => {
+    const was = xf.holdWait || xf.holdRate;
+    xf[which] = on;
+    const held = xf.holdWait || xf.holdRate;
+    if (!boost || held === was) return;
+    const el = xf.el;
+    if (held) xf.hold = { at: performance.now(), reserve: r1(el ? pageLag(el) : 0), by: which === 'holdWait' ? 'wait' : 'speed 0' };
+    else if (xf.hold) {
+      // Diagnosis: the stall, the reserve it met, what of it was heard, and (see pageRanges) whether
+      // the ranges were moved, the page's reads of them since the last note and its audio requests in 30 s.
+      const h = xf.hold, gap = (performance.now() - h.at) / 1000;
+      xf.hold = null;
+      if (gap >= 0.2) xfNote('hold', { gap: r1(gap), reserve: h.reserve, heard: r1(Math.max(0, gap - h.reserve)), by: h.by,
+        moved: !xf.rangesOff, reads: xf.reads, fetches: xfFetches.length, el: el && el.__mspId });
+      xf.reads = { el: 0, sb: 0 };
+    }
+    xfMark(held ? 0 : (xf.ours ? xf.k : 1));
+    xfLay();
+  };
+
   // Only a speed set here is ever put back: a podcast speed chosen in the page stays.
   const xfRate = k => {
     const el = xf.el;
@@ -611,20 +638,24 @@
       xf.ours = true;
       xf.sets++;
     }
-    xfMark(xf.ours ? k : 1);
+    xfMark(xf.holdWait || xf.holdRate ? 0 : (xf.ours ? k : 1));
     xfLay();
   };
 
   // The page set the speed itself (a new source starts at 1, a podcast speed): ours is over.
+  // Speed 0 is the page holding its element while it waits for data (see xfHold), not a speed of
+  // its own: it does not count towards XF_MAX_RESETS, or three stalls ended the song's crossfade.
   const xfPageRate = el => {
     if (!boost) return;
-    if (xf.ours) {
+    const rate = realRate(el);
+    if (xf.ours && rate > 0) {
       xf.resets++;
-      if (xf.resets <= XF_MAX_RESETS) xfNote('reset', { by: 'page', speed: realRate(el), count: xf.resets });
+      if (xf.resets <= XF_MAX_RESETS) xfNote('reset', { by: 'page', speed: rate, count: xf.resets });
     }
     xf.ours = false;
-    xf.k = realRate(el);
-    xfMark(1);
+    xf.k = rate;
+    xfHold('holdRate', rate === 0);
+    xfMark(xf.holdWait || xf.holdRate ? 0 : 1);
     xfLay();
   };
 
@@ -732,7 +763,9 @@
 
   // A new source on the element: the song ended by itself, or was skipped.
   const xfSwitch = () => {
-    xf.starve = null;
+    // A stall of the old song ends with it (its reserve is counted without the stretch, see xfHold).
+    xf.holdWait = false;
+    xf.hold = null;
     if (!boost || performance.now() - xf.switchAt < 2000) return;
     xf.switchAt = performance.now();
     const ending = xf.switchAt < xf.endingUntil;
@@ -752,24 +785,13 @@
     on('emptied', xfSwitch);
     on('loadstart', xfSwitch);
     on('seeking', () => { if (performance.now() - xf.switchAt > 2000) xfFlush('seek'); });
-    on('pause', () => { xf.starve = null; if (!xfAtEnd(el)) boost.ctx.suspend().catch(() => {}); });
+    on('pause', () => { xfHold('holdWait', false); if (!xfAtEnd(el)) boost.ctx.suspend().catch(() => {}); });
     on('play', () => boost.ctx.resume().catch(() => {}));
-    on('playing', () => { boost.ctx.resume().catch(() => {}); xfStarveEnd(el); });
+    on('playing', () => { boost.ctx.resume().catch(() => {}); xfHold('holdWait', false); });
+    // Not while seeking or while a new song loads: the reserve was dropped or starts again then.
     on('waiting', () => {
-      if (!xf.starve && !el.paused && !el.seeking && realTime(el) > 1) xf.starve = { at: performance.now(), reserve: r1(pageLag(el)) };
+      if (!el.paused && !el.seeking && realTime(el) > 1 && performance.now() - xf.switchAt > 2000) xfHold('holdWait', true);
     });
-  };
-
-  // Diagnosis: the element ran out of audio while playing and how long until it played again,
-  // with the reserve the page's view lagged by, whether its ranges were moved, its reads of the
-  // element's and the SourceBuffer's ranges since the last note, and the audio requests in 30 s.
-  const xfStarveEnd = el => {
-    const s = xf.starve;
-    if (!s) return;
-    xf.starve = null;
-    xfNote('starve', { gap: r1((performance.now() - s.at) / 1000), reserve: s.reserve, moved: !xf.rangesOff,
-      reads: xf.reads, fetches: xfFetches.length, el: el.__mspId });
-    xf.reads = { el: 0, sb: 0 };
   };
 
   // How far what is heard lags the element, in seconds (0 while a new song fades in over the old one).

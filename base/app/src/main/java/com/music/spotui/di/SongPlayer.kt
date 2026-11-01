@@ -1743,6 +1743,7 @@ object SongPlayer {
         // command. A new page claims playback for itself at the first command.
         if (pulled == null) {
             Log.w(TAG, "pull here hangs: player page reloaded")
+            app.myspoti.host.android.Logbook.log("pull here hangs (no answer in ${PULL_BACK_WAIT_MS / 1000} s): player page reloaded")
             MyspotiRuntime.spotify.player.reloadPage()
         }
         _activeDevice.value = null

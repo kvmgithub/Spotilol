@@ -1037,14 +1037,20 @@
     // player itself wants there. playerVolume: what the page player itself is set to, read
     // here too so the host's periodic volume check costs no second call.
     // lag: seconds what is heard lags the element (the crossfade's reserve).
-    // -> {paused, muted, volume, level, own, time, readyState, ended, playerVolume, active, lag} | null (no element yet)
+    // keys: the element has media keys (1) or not (0); keyWaits: how many times it stopped for a
+    // decryption key it did not have ("waitingforkey": a licence refused), counted from the first read.
+    // -> {paused, muted, volume, level, own, time, readyState, networkState, error, keys, keyWaits, ended, playerVolume, active, lag} | null (no element yet)
     'media.state': async () => {
       const player = await localPlayer();
       const el = player && player._player;
       if (!(el instanceof HTMLMediaElement)) return null;
+      if (!el.__mspKeyWatch) {
+        el.__mspKeyWatch = true;
+        el.addEventListener('waitingforkey', () => { el.__mspKeyWaits = (el.__mspKeyWaits || 0) + 1; });
+      }
       let playerVolume = null;
       try { playerVolume = await need().playback.getVolume(); } catch (e) { /* unknown */ }
-      return { paused: el.paused, muted: el.muted, volume: el.volume, level: levelOf(el), own: ownLevel(player), time: el.currentTime, readyState: el.readyState, networkState: el.networkState, error: el.error ? el.error.code + ':' + String(el.error.message || '').slice(0, 80) : null, ended: el.ended, playerVolume, active: await activeDevice(), lag: Math.round(heardLag() * 100) / 100 };
+      return { paused: el.paused, muted: el.muted, volume: el.volume, level: levelOf(el), own: ownLevel(player), time: el.currentTime, readyState: el.readyState, networkState: el.networkState, keys: el.mediaKeys ? 1 : 0, keyWaits: el.__mspKeyWaits || 0, error: el.error ? el.error.code + ':' + String(el.error.message || '').slice(0, 80) : null, ended: el.ended, playerVolume, active: await activeDevice(), lag: Math.round(heardLag() * 100) / 100 };
     },
     // The media element's volume, on this phone only: no Spotify Connect command (refused on
     // some accounts, slow on a busy network) and nothing reported to Spotify, as the player's

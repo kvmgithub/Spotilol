@@ -528,7 +528,7 @@ object SongPlayer {
             return
         }
         app.myspoti.host.android.Logbook.log("hidden: $id skipped (not interested)")
-        main.post { if (_nowPlaying.value.uri == uri && !LocalPlayer.active.value) next(by = "hidden song") }
+        main.post { if (_nowPlaying.value.uri == uri && !LocalPlayer.active.value) next() }
     }
 
     private const val HIDDEN_SKIPS_MAX = 30
@@ -545,7 +545,7 @@ object SongPlayer {
         _queue.value.let { it.queued + it.nextUp }.filter { it.provider != LOCAL && it.uri == SPOTIFY_TRACK_PREFIX + id }.forEach(::removeFromQueue)
         // Spotilol: the local player holds the phone's own files only, never a Spotify song.
         val playingNow = !LocalPlayer.active.value && trackIdOf(_nowPlaying.value.uri) == id
-        if (playingNow) next(by = "not interested")
+        if (playingNow) next()
     }
 
     /** The autoplay item already paused on, so it is paused once, not on every state. */

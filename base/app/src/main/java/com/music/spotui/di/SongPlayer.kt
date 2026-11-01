@@ -1598,6 +1598,9 @@ object SongPlayer {
         val write = libraryWrites.incrementAndGet()
         // No connection: the change stays on screen and is sent when the network is back (Myspoti 2.0.2).
         if (!com.music.spotui.data.offline.OfflineStore.isOnline(Graph.app)) {
+            app.myspoti.host.android.Logbook.log("library: $uri ${if (on) "saved" else "removed"} kept for later (offline)")
+            // Sent as soon as Spotify answers (put asks for it), not only when Android reports a
+            // network coming up: a network already there never reports one (Myspoti 2.3.0).
             com.music.spotui.data.LibraryOutbox.put(uri, on)
             return
         }
@@ -1605,9 +1608,11 @@ object SongPlayer {
             // One write at a time; a refused one is undone on screen if no newer tap replaced it.
             libraryLock.withLock {
                 runCatching { writeLibrary(uri, on) }.onSuccess {
+                    app.myspoti.host.android.Logbook.log("library: $uri ${if (on) "saved" else "removed"} on Spotify")
                     if (track) likedChanges.value++
                 }.onFailure {
                     Log.w(TAG, "library change failed: ${it.message}")
+                    app.myspoti.host.android.Logbook.log("library: $uri change failed: ${it.javaClass.simpleName} ${it.message}")
                     // The connection went while it was sent: kept for later, like an offline tap.
                     if (it is java.io.IOException && !com.music.spotui.data.offline.OfflineStore.isOnline(Graph.app)) {
                         com.music.spotui.data.LibraryOutbox.put(uri, on)
@@ -1635,18 +1640,28 @@ object SongPlayer {
     }
 
     /** The library changes made offline ([com.music.spotui.data.LibraryOutbox]), sent once Spotify is reachable. */
-    fun startLibraryOutbox(context: Context) = com.music.spotui.data.LibraryOutbox.init(context,
-        sender = { uri, on -> libraryLock.withLock { writeLibrary(uri, on) }; if (uri.startsWith(SPOTIFY_TRACK_PREFIX)) likedChanges.value++ },
-        onAvailable = { scope.launch { kotlinx.coroutines.delay(3_000); flushLibraryOutbox() } },
-    ).also { scope.launch { flushLibraryOutbox() } }
-
-    private suspend fun flushLibraryOutbox() {
-        if (com.music.spotui.data.LibraryOutbox.waiting == 0) return
-        // The engine is started after the app's graph: wait for it, then for Spotify to answer.
-        while (!MyspotiRuntime.isStarted) kotlinx.coroutines.delay(1_000)
-        api.ready.first { it }
-        com.music.spotui.data.LibraryOutbox.flush()
+    /** Kept per account (Myspoti 2.3.0): another account signed in on the phone never receives them. */
+    fun startLibraryOutbox(context: Context) {
+        com.music.spotui.data.LibraryOutbox.init(context, scope,
+            sender = { uri, on -> libraryLock.withLock { writeLibrary(uri, on) }; if (uri.startsWith(SPOTIFY_TRACK_PREFIX)) likedChanges.value++ },
+            // The engine is started after the app's graph: wait for it, then for Spotify to answer,
+            // then for the session's account (unknown after a session lost: it may be another one).
+            ready = { awaitEngine(); api.ready.first { it }; com.music.spotui.data.api.ProfileCache.awaitId(context, ACCOUNT_WAIT_MS) },
+            account = { com.music.spotui.data.api.ProfileCache.id },
+            onAvailable = { scope.launch { kotlinx.coroutines.delay(3_000); com.music.spotui.data.LibraryOutbox.request() } },
+        )
+        // The Web Player ready again (a reload, a new sign-in): what waits is sent, once the
+        // session's account is read (nothing is asked when nothing waits).
+        scope.launch {
+            awaitEngine()
+            api.ready.collect { if (it) { com.music.spotui.data.api.ProfileCache.awaitId(context, ACCOUNT_WAIT_MS); com.music.spotui.data.LibraryOutbox.request() } }
+        }
     }
+
+    private suspend fun awaitEngine() { while (!MyspotiRuntime.isStarted) kotlinx.coroutines.delay(1_000) }
+
+    /** The library changes kept for later wait that long for the account's id (see ProfileCache.awaitId). */
+    private const val ACCOUNT_WAIT_MS = 10_000L
 
     /** The app is on screen (MainActivity onStart/onStop): background lookups wait otherwise. */
     @Volatile var inForeground = false

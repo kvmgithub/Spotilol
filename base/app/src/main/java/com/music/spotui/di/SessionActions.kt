@@ -57,7 +57,8 @@ object SessionActions {
         com.music.spotui.data.api.Api.HomeCache.clear()
         com.music.spotui.data.api.Api.LikedCache.tracks = null
         com.music.spotui.data.api.TopStats.clear()
-        com.music.spotui.data.LibraryOutbox.clear()
+        // Likes kept for later stay this account's, sent when it signs in again; the next account gets none.
+        com.music.spotui.data.LibraryOutbox.signedOut()
         com.music.spotui.data.api.ProfileCache.clearSession()
         SongPlayer.clearSession()
         listOf("PlaybackState", "LibraryCache", "RecentItems", "LikedSongs",
@@ -69,4 +70,16 @@ object SessionActions {
 
     /** The new account is signed in. */
     fun signedIn() { _signedOut.value = false; _switching.value = false }
+
+    /**
+     * The Spotify session was lost without a sign-out (an anonymous token, Spotify's sign-in page
+     * back): whose account comes next is not known, maybe another one. The profile is forgotten (read
+     * again as soon as the next session is ready) and the likes kept for later stay their account's,
+     * sent to it only. Nothing else of a sign-out is done (Myspoti 2.3.0).
+     */
+    fun sessionLost() {
+        app.myspoti.host.android.Logbook.log("session lost without a sign-out: the account is read again at the next session")
+        com.music.spotui.data.api.ProfileCache.clearSession()
+        com.music.spotui.data.LibraryOutbox.signedOut()
+    }
 }

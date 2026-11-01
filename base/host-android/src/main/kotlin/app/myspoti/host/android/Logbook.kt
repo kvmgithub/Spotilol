@@ -48,6 +48,22 @@ object Logbook {
         }
     }
 
+    /** When each [logEvery] key last wrote, and how many lines it held back since. */
+    private val every = HashMap<String, LongArray>()
+
+    /** [line] at most once per [intervalMs] for [key]; the next line says how many were held back (Myspoti 2.3.0). */
+    fun logEvery(key: String, intervalMs: Long, line: String) {
+        val now = android.os.SystemClock.elapsedRealtime()
+        val held = synchronized(every) {
+            val e = every.getOrPut(key) { longArrayOf(Long.MIN_VALUE / 2, 0) }
+            if (now - e[0] < intervalMs) { e[1]++; return }
+            val n = e[1]
+            e[0] = now; e[1] = 0
+            n
+        }
+        log(if (held > 0) "$line (+$held like it since)" else line)
+    }
+
     /** The buffered lines, oldest first. */
     fun recent(): String = synchronized(lines) { lines.joinToString("\n") }
 

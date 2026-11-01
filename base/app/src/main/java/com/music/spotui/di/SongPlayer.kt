@@ -1378,7 +1378,7 @@ object SongPlayer {
     @Volatile private var repeatWantedUntil = 0L
 
     fun setRepeatMode(mode: Int) {
-        if (LocalPlayer.active.value) { _repeatMode.value = mode; LocalPlayer.setRepeatMode(mode); return }
+        if (LocalPlayer.active.value) { _repeatMode.value = mode; LocalPlayer.setRepeatMode(mode); lastTrackPrefs().edit().putInt("repeat", mode.coerceIn(0, 2)).apply(); return }
         Haptics.toggle(mode != 0)
         _repeatMode.value = mode
         repeatWanted = mode

@@ -198,4 +198,42 @@ class SpotifyPlayerCharacterizationTest {
         adBreak()
         waitFor("music on after the ad", ms = SpotifyPlayer.AD_PLAYING_SKIP_MS + 15_000) { sent("player.play").isNotEmpty() }
     }
+
+    @Test fun `a pick then a pause during an ad that ends by itself plays nothing, the resume plays the pick once`() = runBlocking {
+        adBreak()
+        player.play("spotify:playlist:C", trackUri = "spotify:track:P", order = listOf("spotify:track:P", "spotify:track:Q"))
+        player.pause()
+        waitFor("pause sent") { sent("player.pause").isNotEmpty() }
+        // The break ends before the watcher gets past it, on the old queue's next song, paused.
+        host.post(state(track("B"), track("C2"), paused = true))
+        waitFor("break over") { !player.adPlaying.value }
+        delay(SpotifyPlayer.AD_END_SETTLE_MS + 2_500)
+        assertTrue(sent("player.play").isEmpty() && sent("player.resume").isEmpty(), "music started after the user's pause: ${host.calls.map { it.first }}")
+        player.resume()
+        waitFor("play after the resume") { sent("player.play").isNotEmpty() }
+        delay(1_500)
+        val plays = sent("player.play").map { it.second }
+        assertEquals(1, plays.size, "one play: ${host.calls.map { it.first }}")
+        assertTrue("spotify:track:P" in plays.single() && "spotify:track:Q" in plays.single(), "the pick, in its order: ${plays.single()}")
+        assertTrue(sent("player.resume").isEmpty(), "the pick is played, not the old song resumed: ${host.calls.map { it.first }}")
+    }
+
+    @Test fun `a pick then a pause during an ad the watcher gets past plays nothing, the resume plays the pick once`() = runBlocking {
+        reloadingHost()
+        adBreak()
+        player.play("spotify:playlist:C", trackUri = "spotify:track:P", order = listOf("spotify:track:P", "spotify:track:Q"))
+        player.pause()
+        waitFor("pause sent") { sent("player.pause").isNotEmpty() }
+        host.post(pausedAd)
+        waitFor("the ad got past", ms = SpotifyPlayer.AD_PLAYING_SKIP_MS + 15_000) { reloads > 0 || sent("player.play").isNotEmpty() }
+        waitFor("break over") { !player.adPlaying.value }
+        delay(2_500)
+        assertTrue(sent("player.play").isEmpty() && sent("player.resume").isEmpty(), "music started after the user's pause: ${host.calls.map { it.first }}")
+        player.resume()
+        waitFor("play after the resume") { sent("player.play").isNotEmpty() }
+        delay(1_500)
+        val plays = sent("player.play").map { it.second }
+        assertEquals(1, plays.size, "one play: ${host.calls.map { it.first }}")
+        assertTrue("spotify:track:P" in plays.single() && "spotify:track:Q" in plays.single(), "the pick, in its order, not the song after A: ${plays.single()}")
+    }
 }

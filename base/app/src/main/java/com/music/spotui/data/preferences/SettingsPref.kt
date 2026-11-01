@@ -170,3 +170,18 @@ fun getLyricTranslateLang(c: Context): String =
 
 fun setLyricTranslateLang(c: Context, code: String) =
     prefs(c).edit().putString(KEY_LYRIC_TRANSLATE_LANG, code.trim()).apply()
+
+/**
+ * "Lyrics preview in the player" (Settings > Display, Classic look): the lyrics card under the
+ * player. On by default; off, the lyrics still open with a flick up on the cover.
+ */
+object PlayerLyricsCardPref {
+    private const val KEY = "player_lyrics_card"
+    var on by androidx.compose.runtime.mutableStateOf(prefs(com.music.spotui.di.Graph.app).getBoolean(KEY, true))
+        private set
+
+    fun set(c: Context, value: Boolean) {
+        on = value
+        prefs(c).edit().putBoolean(KEY, value).apply()
+    }
+}

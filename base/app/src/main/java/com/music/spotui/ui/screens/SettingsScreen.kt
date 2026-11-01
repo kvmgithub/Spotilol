@@ -155,6 +155,12 @@ fun SettingsScreen(navController: NavController) {
                 onChecked = app.myspoti.power.EnergySettings::setCanvasEnabled,
             )
             OptionRow(
+                label = stringResource(R.string.settings_player_lyrics_card_title),
+                detail = stringResource(R.string.settings_player_lyrics_card_detail),
+                checked = com.music.spotui.data.preferences.PlayerLyricsCardPref.on,
+                onChecked = { com.music.spotui.data.preferences.PlayerLyricsCardPref.set(ctx, it) },
+            )
+            OptionRow(
                 label = stringResource(R.string.settings_solid_nav_title),
                 detail = stringResource(R.string.settings_solid_nav_detail),
                 checked = com.music.spotui.data.preferences.SolidNavBar.on,

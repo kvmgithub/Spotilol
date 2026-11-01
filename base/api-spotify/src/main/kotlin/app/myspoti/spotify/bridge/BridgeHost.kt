@@ -20,6 +20,13 @@ interface BridgeHost {
     /** Runs [script] in the page. Fire and forget: answers come back through [messages]. */
     suspend fun evaluate(script: String)
 
+    /**
+     * Runs [script] like [evaluate] and returns the JSON of its value once the page ran it, or
+     * null when this host cannot tell. Throws when the script could not be handed to the page,
+     * so a call fails at once instead of waiting for an answer that cannot come.
+     */
+    suspend fun evaluateValue(script: String): String? { evaluate(script); return null }
+
     /** JSON strings posted by the bridge (`MyspotiHost.postMessage` / `__mspHostPost`). */
     val messages: Flow<String>
 }

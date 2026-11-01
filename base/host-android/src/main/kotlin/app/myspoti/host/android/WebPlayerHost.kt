@@ -321,6 +321,8 @@ class WebPlayerHost(private val context: Context) : BridgeHost {
                 // that was already replaced must not tear down the healthy new one.
                 if (gone !== this@WebPlayerHost.view) return true
                 Logbook.log("renderer gone (crashed=${detail.didCrash()}): rebuilding the page")
+                // The page is gone with it: the calls it had fail now, not each after its timeout.
+                onPageStarting?.invoke()
                 rebuild()
                 return true
             }
@@ -628,9 +630,20 @@ class WebPlayerHost(private val context: Context) : BridgeHost {
         val done = CompletableDeferred<Unit>()
         main.post {
             runCatching { view.evaluateJavascript(script, null) }
+                .onFailure { Logbook.log("script not run in the page: ${it.message}") }
             done.complete(Unit)
         }
         done.await()
+    }
+
+    /** The page's own answer: a call that never reached the bridge fails now, not after its timeout. */
+    override suspend fun evaluateValue(script: String): String? {
+        val done = CompletableDeferred<String?>()
+        main.post {
+            runCatching { view.evaluateJavascript(script) { value -> done.complete(value) } }
+                .onFailure { done.completeExceptionally(app.myspoti.spotify.bridge.BridgeException("page not reachable: ${it.message}")) }
+        }
+        return done.await()
     }
 
     /**

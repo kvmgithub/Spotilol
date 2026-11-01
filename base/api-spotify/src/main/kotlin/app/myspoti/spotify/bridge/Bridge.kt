@@ -2,7 +2,9 @@ package app.myspoti.spotify.bridge
 
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -127,7 +129,9 @@ class Bridge(private val host: BridgeHost, scope: CoroutineScope) {
         // injection into the SAME page must not announce "ready" again, or every ready
         // collector (state refresh, web token, audio quality, volume) runs twice. The page
         // re-announces only when the host is not ready (a page it thought it had lost).
-        host.evaluate("window.__mspReannounce = ${!_ready.value}; ${BridgeScript.source}")
+        // The page's generation goes in with it: a call made for a page that went away is refused
+        // by the next one (see [call]) instead of running there.
+        host.evaluate("window.__mspPage = $pagesGone; window.__mspReannounce = ${!_ready.value}; ${BridgeScript.source}")
     }
 
     /**
@@ -163,21 +167,38 @@ class Bridge(private val host: BridgeHost, scope: CoroutineScope) {
     /** [label]: who sends it, written in its log line (a play's origin). */
     suspend fun call(method: String, args: JsonObject = JsonObject(emptyMap()), timeoutMs: Long = 20_000, quiet: Boolean = false, label: String? = null): JsonElement {
         // The page is reloading: nothing would answer, the call would only wait for its timeout.
+        val page = pagesGone
         if (gone) throw BridgeException("not ready")
         val id = ids.incrementAndGet()
         val waiter = CompletableDeferred<JsonElement>()
         pending[id] = waiter
         try {
+            // The page went away between the check above and the waiter's registration: pageGone
+            // did not see this call, and nothing of that page will answer it.
+            if (gone || pagesGone != page) throw BridgeException("page reloaded")
             val started = System.currentTimeMillis()
             if (!quiet) logger?.invoke("call #$id $method${label?.let { " ($it)" }.orEmpty()} ${args.toString().take(200)}")
-            host.evaluate("window.Myspoti && window.Myspoti.call($id, ${json.encodeToString(JsonElement.serializer(), kotlinx.serialization.json.JsonPrimitive(method))}, $args).catch(() => {})")
+            // Run only by the page it was made for (the generation set by inject), which says so.
+            val script = "(window.Myspoti && window.__mspPage === $page) ? (window.Myspoti.call($id, ${json.encodeToString(JsonElement.serializer(), kotlinx.serialization.json.JsonPrimitive(method))}, $args).catch(() => {}), true) : false"
             return try {
                 // withTimeoutOrNull, not withTimeout: a timeout must surface as a
                 // BridgeException, not as a CancellationException — callers in plain
                 // launch {} blocks would otherwise end silently, indistinguishable
                 // from the caller itself being cancelled (which still throws).
-                val result = withTimeoutOrNull(timeoutMs) { waiter.await() }
-                    ?: throw BridgeException("timeout after $timeoutMs ms: $method")
+                val result = withTimeoutOrNull(timeoutMs) {
+                    coroutineScope {
+                        // A script the host could not run, or one that found no bridge of this
+                        // page, fails the call now instead of after its timeout.
+                        val sent = launch {
+                            val value = try { host.evaluateValue(script) } catch (e: CancellationException) { throw e } catch (e: Exception) {
+                                waiter.completeExceptionally(e as? BridgeException ?: BridgeException("not sent: ${e.message}"))
+                                return@launch
+                            }
+                            if (value == "false") waiter.completeExceptionally(BridgeException("the bridge is not in this page"))
+                        }
+                        try { waiter.await() } finally { sent.cancel() }
+                    }
+                } ?: throw BridgeException("timeout after $timeoutMs ms: $method")
                 result.also {
                     if (quiet) return@also
                     val shown = if (method == "token.get") "(token hidden)" else it.toString().take(200)

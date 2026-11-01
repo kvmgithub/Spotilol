@@ -554,4 +554,6 @@
     <string name="show_filter_unplayed_first">Unplayed first</string>
     <string name="settings_hide_dj_title">Hide the DJ</string>
     <string name="settings_hide_dj_detail">Removes Spotify\'s DJ from Home</string>
+    <string name="login_failed_title">Sign-in did not finish</string>
+    <string name="login_failed_detail">Spotify\'s page did not load or did not start. Check your connection and try again. If it keeps failing, try another network.</string>
 </resources>

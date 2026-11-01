@@ -966,6 +966,7 @@ class SpotifyPlayer(private val bridge: Bridge, private val scope: CoroutineScop
     }
 
     private val skipChain = TrackChanges.Chain()
+    private val commandsExplained = TrackChanges.Commands()
     private val _skipChained = kotlinx.coroutines.flow.MutableSharedFlow<Unit>(extraBufferCapacity = 1)
     /**
      * The page moved on by itself through several songs after a few seconds each (it cannot play
@@ -987,10 +988,15 @@ class SpotifyPlayer(private val bridge: Bridge, private val scope: CoroutineScop
         // reserve: the page left the song that much further on. The reserve is the last tick's.
         val reserve = if (crossfadeSeconds > 0) ((lastMedia?.lag ?: 0.0) * 1000).toLong() else 0L
         val played = old.positionAt(now) + reserve
-        val sinceCommand = now - maxOf(userMoveAt, lastPlay?.third ?: 0L)
-        val cause = TrackChanges.cause(played, from.durationMs, sinceCommand, adJustEnded, crossfadeArmed)
+        val play = lastPlay
+        val commandAt = maxOf(userMoveAt, play?.third ?: 0L)
+        // The song a play asked for; a skip (newer than the last play) names none.
+        val target = play?.takeIf { it.third >= userMoveAt }?.second
+        val used = commandsExplained.used(commandAt, to.uri, target)
+        val cause = TrackChanges.cause(played, from.durationMs, now - commandAt, adJustEnded, crossfadeArmed, commandUsed = used)
+        val list = if (old.contextUri == s.contextUri) "in ${s.contextUri}" else "${old.contextUri} -> ${s.contextUri}"
         val held = playbackHeld()
-        bridge.logger?.invoke("track change: ${from.name} -> ${to.name} (${cause.text}, left at ${TrackChanges.clock(played)} of ${TrackChanges.clock(from.durationMs)}${if (reserve > 0) ", ${reserve / 100 / 10.0} s reserve still heard" else ""}${if (held) ", playback held" else ""})")
+        bridge.logger?.invoke("track change: ${from.name} -> ${to.name} (${cause.text}, left at ${TrackChanges.clock(played)} of ${TrackChanges.clock(from.durationMs)}${if (reserve > 0) ", ${reserve / 100 / 10.0} s reserve still heard" else ""}, $list${if (held) ", playback held" else ""})")
         if (held) { skipChain.reset(); return }
         if (skipChain.record(cause, played, now)) {
             bridge.logger?.invoke("skip chain: the page moved on by itself three times in a row after a few seconds each (now on ${to.name}): paused")

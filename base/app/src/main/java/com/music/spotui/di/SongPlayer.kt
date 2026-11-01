@@ -305,6 +305,20 @@ object SongPlayer {
                 android.widget.Toast.makeText(Graph.app, app.myspoti.engine.R.string.songs_skipped_by_spotify, android.widget.Toast.LENGTH_LONG).show()
             }
         }
+<<<<<<< ours
+=======
+        scope.launch {
+            MyspotiRuntime.spotify.player.licencesRefused.collect {
+                android.widget.Toast.makeText(Graph.app, app.myspoti.engine.R.string.licences_refused_by_spotify, android.widget.Toast.LENGTH_LONG).show()
+            }
+        }
+        // Said once the page has asked its WebView: a device that cannot decrypt Spotify's streams
+        // plays nothing (no sound, 0:00), and nothing else in the app says why.
+        scope.launch {
+            MyspotiRuntime.spotify.player.drmMissing.first { it }
+            android.widget.Toast.makeText(Graph.app, app.myspoti.engine.R.string.drm_missing, android.widget.Toast.LENGTH_LONG).show()
+        }
+>>>>>>> theirs
         scope.launch {
             MyspotiRuntime.host.licenseLimitedUntil.collect { until ->
                 if (until > SystemClock.elapsedRealtime()) main.post {

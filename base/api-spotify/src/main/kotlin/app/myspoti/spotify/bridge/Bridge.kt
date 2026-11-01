@@ -77,6 +77,17 @@ class Bridge(private val host: BridgeHost, scope: CoroutineScope) {
         return status >= 400 || (status == 0 && "player/command" in url)
     }
 
+<<<<<<< ours
+=======
+    private fun licenceNote(msg: JsonObject) {
+        val url = (msg["url"] as? JsonPrimitive)?.contentOrNull ?: return
+        if ("widevine-license" !in url) return
+        app.myspoti.spotify.report.Refusal402.licence((msg["status"] as? JsonPrimitive)?.intOrNull ?: 0)
+        // The player reads them too: refusals in a row stop playback (see SpotifyPlayer.onLicence).
+        _events.tryEmit("licence" to msg)
+    }
+
+>>>>>>> theirs
     private fun handle(raw: String) {
         val msg = runCatching { json.parseToJsonElement(raw) }.getOrNull() as? JsonObject ?: return
         // Lenient reads: a field of an unexpected type counts as missing.

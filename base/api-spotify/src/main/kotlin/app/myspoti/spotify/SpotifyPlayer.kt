@@ -86,6 +86,11 @@ class SpotifyPlayer(private val bridge: Bridge, private val scope: CoroutineScop
     @Volatile private var adMuteTries = 0
     /** A pause asked through [pause]; it holds until playback is asked for again, never expires. */
     @Volatile private var pausedByUser = false
+    /**
+     * The song before an ad the user paused during, got past by a reload with nothing resumed (see
+     * the watcher): the user's next [resume] plays on from it when the new page has no song of its own.
+     */
+    @Volatile private var onwardAfterPausedAd: PlayerState? = null
     /** The order given to the last [play] (context uri to songs), kept for a stall restart. */
     @Volatile private var lastOrder: Pair<Uri, List<Uri>>? = null
 
@@ -682,6 +687,22 @@ class SpotifyPlayer(private val bridge: Bridge, private val scope: CoroutineScop
                 if (stuck && licenceRefusedHold) {
                     bridge.logger?.invoke("ad stuck on ${ad?.item?.name}: left as it is, Spotify refuses this account's licences")
                     adSince = System.currentTimeMillis()
+                } else if (stuck && pausedByUser) {
+                    // The user paused during the ad: getting past it never plays (a play of the next
+                    // song, or a reload that resumed the song, started the music the user had paused).
+                    // The page is reloaded once with nothing resumed, as for a mirror; the user's
+                    // resume plays on from the song before the ad if the new page has none.
+                    if (!adReloaded && reloadHost != null) {
+                        adAttempts++
+                        adReloaded = true
+                        muteUntilSong = true
+                        // A song picked before the pause is not played either.
+                        pickBeforeAd = null
+                        onwardAfterPausedAd = lastTrackState
+                        bridge.logger?.invoke("ad stuck on ${ad?.item?.name}: paused by the user, reloading the player with nothing resumed (attempt $adAttempts)")
+                        reloadAndPlayOn(null)
+                    } else bridge.logger?.invoke("ad stuck on ${ad?.item?.name}: paused by the user, left as it is")
+                    adSince = System.currentTimeMillis()
                 } else if (stuck) {
                     adAttempts++
                     val last = lastTrackState
@@ -1240,6 +1261,8 @@ class SpotifyPlayer(private val bridge: Bridge, private val scope: CoroutineScop
         noteTrackChange(lastTrackState, s, adJustEnded)
         lastTrackState = s
         _state.value = s
+        // A song plays: nothing left to play on from after a paused ad.
+        if (s?.item != null && !s.isPaused) onwardAfterPausedAd = null
         // Reported (2.0.2-beta.3, log seen): Spotify refusing the audio licences (429), the page
         // skips on by itself through every song it gets no licence for, to the end of the list and
         // round again. The hold's one pause was sent while the page was loading the next song and
@@ -1481,6 +1504,7 @@ class SpotifyPlayer(private val bridge: Bridge, private val scope: CoroutineScop
     override suspend fun play(contextUri: Uri, trackUri: Uri?, index: Int?, positionMs: Long?, order: List<Uri>?) {
         userMoveAt = System.currentTimeMillis()
         userPlays()
+        onwardAfterPausedAd = null
         // The ad due after the song that played before: a new play brings its own queue, and the
         // put-back of an earlier ad skip would queue that old song after the pick.
         adRestore?.cancel()
@@ -1630,6 +1654,17 @@ class SpotifyPlayer(private val bridge: Bridge, private val scope: CoroutineScop
 
     override suspend fun resume() {
         userPlays()
+        // An ad the user paused during was got past by a reload with nothing resumed: a new page
+        // with no song of its own has nothing to resume, so the music goes on from the song before
+        // the ad, as the recovery would have played it (one play).
+        val onward = onwardAfterPausedAd
+        onwardAfterPausedAd = null
+        if (onward != null && !_adPlaying.value && _state.value?.item == null && liveIntent() == null) {
+            pausedByUser = false
+            bridge.logger?.invoke("resume after an ad got past while paused: playing on from ${onward.item?.name}")
+            playOnNewPage { playOn(onward) }
+            return
+        }
         resumePage()
     }
 

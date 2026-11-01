@@ -149,4 +149,53 @@ class SpotifyPlayerCharacterizationTest {
         waitFor("break over") { !player.adPlaying.value }
         waitFor("resume sent", ms = SpotifyPlayer.AD_END_SETTLE_MS + 8_000) { sent("player.resume").isNotEmpty() }
     }
+
+    /** A page reloaded by the host: the old one goes, the new one says ready and reports nothing playing. */
+    @Volatile private var reloads = 0
+
+    private fun reloadingHost() {
+        player.reloadHost = {
+            reloads++
+            scope.launch {
+                delay(500)
+                bridge.pageGone()
+                delay(300)
+                host.post("""{"type":"ready"}""")
+                delay(300)
+                host.post("""{"type":"state","state":{"track":null,"contextUri":null,"next":null,"isPaused":true,"isBuffering":false,
+                    |"positionMs":0,"timestamp":${System.currentTimeMillis()},"restrictions":{}}}""".trimMargin())
+            }
+        }
+    }
+
+    private val pausedAd get() =
+        """{"type":"state","state":{"track":$ad,"contextUri":"spotify:playlist:C","next":null,"isPaused":true,"isBuffering":false,
+            |"positionMs":0,"timestamp":${System.currentTimeMillis()},"restrictions":{}}}""".trimMargin()
+
+    @Test fun `an ad paused by the user that the watcher gets past starts no music, the user's resume plays once`() = runBlocking {
+        reloadingHost()
+        adBreak()
+        player.pause()
+        waitFor("pause sent") { sent("player.pause").isNotEmpty() }
+        host.post(pausedAd)
+        // Past the delay after which the watcher gets past a playing ad (it used to play the next song).
+        waitFor("the ad got past", ms = SpotifyPlayer.AD_PLAYING_SKIP_MS + 15_000) { reloads > 0 || sent("player.play").isNotEmpty() }
+        waitFor("break over") { !player.adPlaying.value }
+        delay(2_500)
+        assertTrue(sent("player.play").isEmpty() && sent("player.resume").isEmpty(), "music started after the user's pause: ${host.calls.map { it.first }}")
+        assertEquals(1, reloads)
+        // The user plays again: the music goes on from the song before the ad, in one play.
+        player.resume()
+        waitFor("play after the resume") { sent("player.play").isNotEmpty() }
+        delay(1_500)
+        assertEquals(1, sent("player.play").size, "one play: ${host.calls.map { it.first }}")
+        assertTrue(sent("player.resume").isEmpty(), "nothing to resume on a page without a song: ${host.calls.map { it.first }}")
+    }
+
+    /** The other side of the test above: nobody paused, the watcher gets past the ad and the music goes on. */
+    @Test fun `an ad nobody paused is got past and the music goes on`() = runBlocking {
+        reloadingHost()
+        adBreak()
+        waitFor("music on after the ad", ms = SpotifyPlayer.AD_PLAYING_SKIP_MS + 15_000) { sent("player.play").isNotEmpty() }
+    }
 }

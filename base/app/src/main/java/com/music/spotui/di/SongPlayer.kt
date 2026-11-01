@@ -404,6 +404,11 @@ object SongPlayer {
     /** Call on the main thread before navigating to logout. */
     fun clearSession() {
         main.removeCallbacksAndMessages(null)
+        // A play, pause or skip still waiting (a slow page, a page still loading) belongs to the
+        // session that ends: it is dropped, not sent once the next account's page is ready.
+        sessionGen.incrementAndGet()
+        transportGen.incrementAndGet()
+        runningTransport?.cancel()
         pendingTrackId = null
         pendingItemUri = null
         pendingUntil = 0L
@@ -712,6 +717,9 @@ object SongPlayer {
     private val transportLock = kotlinx.coroutines.sync.Mutex()
     private val transportGen = java.util.concurrent.atomic.AtomicInteger()
 
+    /** Moved by [clearSession]: a transport started for an account that signed out is never sent. */
+    private val sessionGen = java.util.concurrent.atomic.AtomicInteger()
+
     /**
      * Play, pause, skip: sent one at a time and only the newest one counts. Taps sent all
      * at once raced in the Web Player (a skip and a play crossing, a player stuck on one
@@ -740,6 +748,7 @@ object SongPlayer {
         block: suspend (isLatest: () -> Boolean) -> Unit,
     ) {
         val gen = transportGen.incrementAndGet()
+        val session = sessionGen.get()
         runningTransport?.let { job ->
             val held = SystemClock.elapsedRealtime() - runningSince
             if (job.isActive && held >= TRANSPORT_STUCK_MS) {
@@ -772,6 +781,8 @@ object SongPlayer {
                     if (gen != transportGen.get()) return@withLock
                     val checkLater = pullBack && checkAfter && _activeDevice.value == null
                     if (pullBack && !checkLater && api.ready.value) takeBackPlayback()
+                    // Both may wait (a mirror's end, a device check): the session may have ended meanwhile.
+                    if (session != sessionGen.get()) return@withLock
                     // A cancellation of the caller is never swallowed (it must unwind); only the
                     // transport's own timeout and a real failure are logged here.
                     try {

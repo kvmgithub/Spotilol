@@ -620,7 +620,7 @@ const val LOCAL_PLAYLIST_PREFIX = "local-playlist:"
 private fun prefetchLibraryEntry(entry: LibraryEntry) = when {
     LibraryEdits.isPending(entry.spotifyId) -> Unit
     entry.isFolder || entry.spotifyId.startsWith(LOCAL_PLAYLIST_PREFIX) || entry.spotifyId.startsWith(Api.HomeCache.SHOW_PREFIX) -> Unit
-    entry.spotifyId == Api.HomeCache.LOCAL_FILES_ID || entry.spotifyId == Api.HomeCache.DOWNLOADS_ID || entry.spotifyId == Api.HomeCache.EPISODES_ID -> Unit
+    entry.spotifyId == Api.HomeCache.LOCAL_FILES_ID || entry.spotifyId == Api.HomeCache.DOWNLOADS_ID || entry.spotifyId == Api.HomeCache.EPISODES_ID || entry.spotifyId == Api.HomeCache.NEW_EPISODES_ID -> Unit
     entry.spotifyId == Api.HomeCache.LIKED_SONGS_ID -> ContextViewModel.prefetch("liked", "")
     entry.isPlaylist -> ContextViewModel.prefetch("playlist", entry.spotifyId)
     else -> ContextViewModel.prefetch("album", entry.spotifyId)
@@ -635,6 +635,7 @@ private fun openLibraryEntry(entry: LibraryEntry, navController: NavController) 
     else if (entry.spotifyId == Api.HomeCache.LOCAL_FILES_ID) navController.navigate(Routes.LocalFiles.route)
     else if (entry.spotifyId == Api.HomeCache.LIKED_SONGS_ID) navController.navigate(Routes.Liked.route)
     else if (entry.spotifyId == Api.HomeCache.EPISODES_ID) navController.navigate(Routes.Episodes.route)
+    else if (entry.spotifyId == Api.HomeCache.NEW_EPISODES_ID) navController.navigate(Routes.NewEpisodes.route)
     else if (entry.isPlaylist) navController.navigate(playlistRoute(entry.spotifyId, entry.name))
     else navController.navigate(albumRoute(entry.name, entry.artists, entry.spotifyId))
 }

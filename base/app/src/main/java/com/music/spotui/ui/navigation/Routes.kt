@@ -28,6 +28,7 @@ sealed class Routes(
     object Category : Routes(0, "Category", "category")
     object NewReleases : Routes(0, "NewReleases", "newreleases")
     object Episodes : Routes(0, "Episodes", "episodes")
+    object NewEpisodes : Routes(0, "NewEpisodes", "newepisodes")
     object Recap : Routes(0, "Recap", "recap")
     object Recent : Routes(0, "Recent", "recent")
     object Settings : Routes(0, "Settings", "settings")

@@ -65,6 +65,14 @@ class Api constructor(
         const val EPISODES_ID = "your-episodes"
         /** Prefix of the library id of a followed show in the Podcasts chip (a plain show id otherwise). */
         const val SHOW_PREFIX = "show:"
+        /** "New episodes" (unplayed episodes of the followed shows), first of the Podcasts chip's shows. */
+        const val NEW_EPISODES_ID = "new-episodes"
+        /** Episodes asked for each followed show by the new episodes list, and the most it keeps. */
+        private const val NEW_PER_SHOW = 3
+        private const val NEW_EPISODES_MAX = 60
+        /** The new episodes list is asked for again only after this long (the shows are many queries). */
+        private const val NEW_EPISODES_TTL_MS = 30 * 60_000L
+        @Volatile var newEpisodes: Pair<Long, List<SongsModel>>? = null
         /** "Recently played": Spotify's own list for the account, pinned in the library. */
         const val RECENT_ID = "recently-played"
         /** Pages of 50 asked for a show's episodes / chapters, at most (500 rows). */
@@ -88,7 +96,7 @@ class Api constructor(
         fun clear() {
             PlaylistFresh.drop(null)
             albums = null; artists = null; home = null; library = null
-            libraryRoot = null; folders.clear()
+            libraryRoot = null; folders.clear(); newEpisodes = null
             facets.clear()
             LikedCache.tracks = null
             ArtistCache.map.clear()
@@ -306,7 +314,31 @@ class Api constructor(
             }
             offset = page.nextOffset ?: break
         }
-        return out
+        if (out.isEmpty()) return out
+        val news = LibraryEntry(NEW_EPISODES_ID, context.getString(R.string.new_episodes_title), context.getString(R.string.new_episodes_subtitle),
+            out.first().coverUri, isPlaylist = true)
+        return listOf(news) + out
+    }
+
+    /**
+     * The episodes not played yet of the shows the user follows, newest first: the show page's own
+     * episodes query, asked for the latest few of each show, four shows at a time. Kept for half
+     * an hour, so opening the screen again asks nothing.
+     */
+    suspend fun getNewEpisodes(): List<SongsModel> {
+        if (!ready()) return emptyList()
+        newEpisodes?.let { (at, list) -> if (System.currentTimeMillis() - at < NEW_EPISODES_TTL_MS) return list }
+        val shows = getFollowedShows().filter { it.spotifyId.startsWith(SHOW_PREFIX) }.map { it.spotifyId.removePrefix(SHOW_PREFIX) }
+        val gate = kotlinx.coroutines.sync.Semaphore(PLAYLIST_PARALLEL)
+        val found = coroutineScope {
+            shows.map { id ->
+                async(Dispatchers.IO) { gate.withPermit { runCatching { api.podcasts.episodes("spotify:show:$id", 0, NEW_PER_SHOW).items }.getOrDefault(emptyList()) } }
+            }.map { it.await() }.flatten()
+        }
+        val list = found.map(::episodeSong).filter { !it.played && it.releaseDate.isNotBlank() }
+            .sortedByDescending { it.releaseDate }.take(NEW_EPISODES_MAX)
+        if (list.isNotEmpty()) newEpisodes = System.currentTimeMillis() to list
+        return list
     }
 
     /** The user's top artists. */

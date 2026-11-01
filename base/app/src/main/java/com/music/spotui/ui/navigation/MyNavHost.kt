@@ -141,7 +141,7 @@ fun MyNavHost(
                 bottomBarState.value = true
                 bottomBarPlayerState.value = playerState != ""
             }
-            if (isImmersive()) com.music.spotui.ui.immersive.pages.ImmersiveNewEpisodesScreen(navHostController) else com.music.spotui.ui.screens.NewEpisodesScreen(navHostController)
+            com.music.spotui.ui.screens.NewEpisodesScreen(navHostController)
         }
 
         page(Routes.Recap.route) {

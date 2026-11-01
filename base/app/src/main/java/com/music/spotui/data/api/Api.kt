@@ -57,6 +57,8 @@ class Api constructor(
         const val DISCOGRAPHY_MAX = 300
         /** Sentinel id for the pinned "Liked Songs" library entry. */
         const val LIKED_SONGS_ID = "liked-songs"
+        /** The Liked Songs artwork, as the library and the home shortcuts draw it. */
+        const val LIKED_COVER = "https://misc.scdn.co/liked-songs/liked-songs-640.png"
         /** The "Local Files" folder pinned under Liked Songs in the library (not a Spotify item). */
         const val LOCAL_FILES_ID = "local-files"
         /** "Downloaded" (songs kept for offline listening), pinned under Local Files. */
@@ -249,8 +251,6 @@ class Api constructor(
             else -> null
         }
     }
-
-    private val LIKED_COVER = "https://misc.scdn.co/liked-songs/liked-songs-640.png"
 
     private fun likedEntry() = LibraryEntry(
         spotifyId = LIKED_SONGS_ID,

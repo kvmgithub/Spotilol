@@ -74,8 +74,10 @@ import app.myspoti.engine.R
 import com.music.spotui.data.api.Response
 import com.music.spotui.data.entity.AlbumsModel
 import com.music.spotui.data.entity.ArtistsModel
+import com.music.spotui.data.api.Api
 import com.music.spotui.data.entity.HomeFeedModel
 import com.music.spotui.data.entity.HomeItem
+import com.music.spotui.data.entity.withLikedFirst
 import com.music.spotui.data.entity.withoutDj
 import com.music.spotui.data.entity.HomeSection
 import com.music.spotui.ui.components.Loader
@@ -139,7 +141,9 @@ fun HomeScreen(navController: NavController){
 private fun prefetchHomeItem(item: HomeItem) {
     when (item) {
         is HomeItem.Album -> if (item.id.isNotBlank()) ContextViewModel.prefetch("album", item.id)
-        is HomeItem.Playlist -> if (item.id.isNotBlank()) ContextViewModel.prefetch("playlist", item.id)
+        is HomeItem.Playlist ->
+            if (item.id == Api.HomeCache.LIKED_SONGS_ID) ContextViewModel.prefetch("liked", "")
+            else if (item.id.isNotBlank()) ContextViewModel.prefetch("playlist", item.id)
         else -> {}
     }
 }
@@ -153,7 +157,8 @@ private fun onHomeItemClick(navController: NavController, item: HomeItem) {
             else navController.navigate(com.music.spotui.ui.navigation.showRoute(item.id, item.name))
         // Load the real playlist content by its Spotify id (daily mixes, etc).
         is HomeItem.Playlist ->
-            if (item.id.isNotBlank()) navController.navigate(playlistRoute(item.id, item.name))
+            if (item.id == Api.HomeCache.LIKED_SONGS_ID) navController.navigate(Routes.Liked.route)
+            else if (item.id.isNotBlank()) navController.navigate(playlistRoute(item.id, item.name))
             else navController.navigate(albumRoute(item.name))
     }
 }
@@ -177,12 +182,15 @@ fun HomeFeedContent(navController: NavController, feed: HomeFeedModel, facet: St
     }
     val gridSection = remember(sections) { sections.firstOrNull()?.takeIf { it.title.isBlank() } }
     val carousels = remember(sections, gridSection) { if (gridSection != null) sections.drop(1) else sections }
+    // Liked Songs leads the shortcuts when Spotify's grid does not carry it.
+    val likedName = stringResource(R.string.collection_liked_songs_title)
+    val shortcuts = remember(gridSection, likedName) { gridSection?.items?.withLikedFirst(likedName) }
     // The shortcuts at the top load in the background, ready before a tap.
-    androidx.compose.runtime.LaunchedEffect(gridSection?.items?.map { it.name }) {
-        val top = gridSection?.items.orEmpty().take(8).mapNotNull { item ->
+    androidx.compose.runtime.LaunchedEffect(shortcuts?.map { it.name }) {
+        val top = shortcuts.orEmpty().mapNotNull { item ->
             when (item) {
                 is HomeItem.Album -> item.id.takeIf { it.isNotBlank() }?.let { "album" to it }
-                is HomeItem.Playlist -> item.id.takeIf { it.isNotBlank() }?.let { "playlist" to it }
+                is HomeItem.Playlist -> if (item.id == Api.HomeCache.LIKED_SONGS_ID) "liked" to "" else item.id.takeIf { it.isNotBlank() }?.let { "playlist" to it }
                 else -> null
             }
         }
@@ -226,9 +234,9 @@ fun HomeFeedContent(navController: NavController, feed: HomeFeedModel, facet: St
                 HomeHeaderRow(navController, facet, onFacet)
             }
         }
-        gridSection?.let { section ->
+        shortcuts?.let { tiles ->
             item {
-                HomeShortcutGrid(navController, section.items.take(8))
+                HomeShortcutGrid(navController, tiles)
             }
         }
         items(carousels.size) { i ->

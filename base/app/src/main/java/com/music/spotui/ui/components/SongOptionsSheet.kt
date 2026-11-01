@@ -39,6 +39,7 @@ import androidx.compose.material.icons.outlined.Block
 import androidx.compose.material.icons.outlined.Bookmark
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Speed
+import androidx.compose.material.icons.outlined.ThumbDownOffAlt
 import kotlinx.coroutines.launch
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
@@ -210,6 +211,14 @@ fun SongOptionsSheet(
                 playerViewModel.goToArtist(song.spotifyTrackId, song.singer) { route -> navController.navigate(route) }
             }
             MenuRow(Icons.Outlined.Info, stringResource(R.string.track_credits), enabled = hasId) { showCredits = true }
+            // "Not interested": kept on this phone only; the song leaves the queue and lists skip it.
+            if (hasId && !song.url.startsWith("episode:")) {
+                val hidden = com.music.spotui.data.preferences.HiddenSongs.isHidden(song.spotifyTrackId)
+                MenuRow(Icons.Outlined.ThumbDownOffAlt, stringResource(if (hidden) R.string.show_song_again else R.string.hide_song)) {
+                    if (hidden) com.music.spotui.data.preferences.HiddenSongs.show(context, song.spotifyTrackId) else SongPlayer.hideSong(song)
+                    onDismiss()
+                }
+            }
             // Taste profile: the server says whether the track is excluded (the page's own cache can lag).
             val trackUri = "spotify:track:${song.spotifyTrackId}"
             val excluded by androidx.compose.runtime.produceState<Boolean?>(null, trackUri) {

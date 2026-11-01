@@ -97,6 +97,14 @@ fun SettingsScreen(navController: NavController) {
                 checked = headsetSkip,
                 onChecked = { headsetSkip = it; app.myspoti.host.android.PlaybackService.setSkipsOnEpisodes(ctx, it) },
             )
+            // Songs marked "Not interested": skipped by lists, listed here to be shown again.
+            Column(
+                Modifier.fillMaxWidth().clickable { navController.navigate(com.music.spotui.ui.navigation.Routes.HiddenSongs.route) }
+                    .padding(horizontal = 20.dp, vertical = 10.dp),
+            ) {
+                Text(stringResource(R.string.hidden_songs_title), color = Color.White, fontSize = 16.sp)
+                Text(stringResource(R.string.hidden_songs_detail), color = Color(0xFFB3B3B3), fontSize = 12.sp)
+            }
             Divider()
 
             Section(R.string.spotilol_section_accounts)

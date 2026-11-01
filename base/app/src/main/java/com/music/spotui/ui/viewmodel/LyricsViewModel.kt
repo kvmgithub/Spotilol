@@ -28,15 +28,61 @@ class LyricsViewModel constructor() : ViewModel() {
         object NotFound : State()
     }
 
+    companion object {
+        /** How many consecutive lines one share takes (Spotify's own card takes five). */
+        const val MAX_SHARED_LINES = 6
+    }
+
     private val _state = MutableStateFlow<State>(State.Loading)
     val state: StateFlow<State> = _state
 
     private var loadedKey: String? = null
 
+    // Lines picked to share (both looks): a run of consecutive lines, by index in the lyrics' lines.
+    // Kept here so the song options sheet of the Immersive look can open the same mode as a long press.
+    private val _selecting = MutableStateFlow(false)
+    val selecting: StateFlow<Boolean> = _selecting
+    private val _picked = MutableStateFlow<IntRange?>(null)
+    val picked: StateFlow<IntRange?> = _picked
+
+    /** Enters the selection mode, on [line] when it came from a long press on one. */
+    fun startSelecting(line: Int? = null) {
+        _picked.value = line?.let { it..it }
+        _selecting.value = true
+    }
+
+    fun stopSelecting() {
+        _selecting.value = false
+        _picked.value = null
+    }
+
+    /**
+     * A tap on [line] while selecting: outside the run it extends it to there, on its first line
+     * it drops that one, on any other it cuts the run just before it. False when the run would
+     * go past [MAX_SHARED_LINES].
+     */
+    fun pick(line: Int): Boolean {
+        val run = _picked.value
+        when {
+            run == null -> _picked.value = line..line
+            line in run -> _picked.value = when {
+                line == run.first -> if (run.first == run.last) null else (run.first + 1)..run.last
+                else -> run.first..(line - 1)
+            }
+            else -> {
+                val wider = minOf(run.first, line)..maxOf(run.last, line)
+                if (wider.last - wider.first + 1 > MAX_SHARED_LINES) return false
+                _picked.value = wider
+            }
+        }
+        return true
+    }
+
     fun load(track: LyricsApi.Track, force: Boolean = false) {
         val key = track.key
         if (!force && loadedKey == key && _state.value !is State.NotFound) return
         loadedKey = key
+        stopSelecting()
         if (force) LyricsApi.forget(track)
         // Already resolved (prefetched while the track started): no loading flash.
         LyricsApi.cached(track)?.let { _state.value = loadedState(it); return }

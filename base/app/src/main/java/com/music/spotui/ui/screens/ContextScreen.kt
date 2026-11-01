@@ -965,7 +965,8 @@ private fun TrackRow(
         horizontalArrangement = Arrangement.Start,
         modifier = Modifier
             .fillMaxWidth()
-            .then(if (song.playable) Modifier else Modifier.alpha(0.4f))
+            // A song marked "Not interested" is dimmed too (lists skip it; a tap still plays it).
+            .then(if (song.playable && !com.music.spotui.data.preferences.HiddenSongs.isHidden(song.spotifyTrackId)) Modifier else Modifier.alpha(0.4f))
             .clickable {
                 onClick()
                 // Spotify's playability flag is per market and can be wrong (testers heard greyed

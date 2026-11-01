@@ -86,5 +86,7 @@ fun App() {
         }
         // Over the pages and the bottom bar: pulling it down shows them, already in place.
         com.music.spotui.ui.navigation.PlayerOverlay(navController)
+        // "Not interested" and its Undo, over the pages and the player (Myspoti 2.3.0).
+        com.music.spotui.ui.components.HiddenSongUndo()
     }
 }

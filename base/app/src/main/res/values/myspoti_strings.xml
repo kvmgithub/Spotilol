@@ -566,4 +566,12 @@
     <string name="library_chip_podcasts">Podcasts</string>
     <string name="settings_player_lyrics_card_title">Lyrics preview in the player</string>
     <string name="settings_player_lyrics_card_detail">The lyrics card under the player. Off, a flick up on the cover still opens the lyrics.</string>
+    <string name="lyrics_select_hint">Tap lines to pick what to share</string>
+    <string name="lyrics_select_max">You can share up to %d lines</string>
+    <string name="hide_song">Not interested</string>
+    <string name="show_song_again">Show again</string>
+    <string name="hidden_song_toast">%1$s hidden. It won\'t play on its own.</string>
+    <string name="hidden_songs_title">Hidden songs</string>
+    <string name="hidden_songs_detail">Songs marked Not interested are skipped in lists and radios</string>
+    <string name="hidden_songs_empty">No hidden songs yet. Choose Not interested in a song\'s menu.</string>
 </resources>

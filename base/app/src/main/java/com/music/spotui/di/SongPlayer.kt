@@ -508,6 +508,46 @@ object SongPlayer {
         ))
     }
 
+    /** The hidden songs ("Not interested") skipped in a row; one met twice means the list holds nothing else. */
+    private val hiddenSkipped = mutableSetOf<String>()
+    /** The hidden song the user asked for by hand: it plays, it is not skipped. */
+    private var playedByHand = ""
+
+    /**
+     * A hidden song the player moved on to by itself (the list, the radio, the queue, a skip) is
+     * skipped. Songs picked by hand play; a run of skips ends at the first song met twice, or at
+     * [HIDDEN_SKIPS_MAX], and that song then plays.
+     */
+    private fun skipHidden(id: String, uri: String) {
+        val byHand = uri == playedByHand
+        if (!byHand) playedByHand = ""
+        if (byHand || !com.music.spotui.data.preferences.HiddenSongs.isHidden(id)) { hiddenSkipped.clear(); return }
+        if (!hiddenSkipped.add(id) || hiddenSkipped.size > HIDDEN_SKIPS_MAX) {
+            app.myspoti.host.android.Logbook.log("hidden: only hidden songs left, $id plays")
+            hiddenSkipped.clear(); playedByHand = uri
+            return
+        }
+        app.myspoti.host.android.Logbook.log("hidden: $id skipped (not interested)")
+        main.post { if (_nowPlaying.value.uri == uri && !LocalPlayer.active.value) next(by = "hidden song") }
+    }
+
+    private const val HIDDEN_SKIPS_MAX = 30
+
+    /**
+     * "Not interested": the song is kept in a list on this phone (nothing goes to Spotify), taken
+     * out of the queue, and skipped if it plays now. From then on lists skip it ([skipHidden]).
+     */
+    fun hideSong(song: SongsModel) {
+        val id = song.spotifyTrackId
+        if (id.isBlank()) return
+        com.music.spotui.data.preferences.HiddenSongs.hide(Graph.app, song)
+        Haptics.confirm()
+        _queue.value.let { it.queued + it.nextUp }.filter { it.provider != LOCAL && it.uri == SPOTIFY_TRACK_PREFIX + id }.forEach(::removeFromQueue)
+        // Spotilol: the local player holds the phone's own files only, never a Spotify song.
+        val playingNow = !LocalPlayer.active.value && trackIdOf(_nowPlaying.value.uri) == id
+        if (playingNow) next(by = "not interested")
+    }
+
     /** The autoplay item already paused on, so it is paused once, not on every state. */
     private var autoplayHandledUri = ""
 
@@ -558,6 +598,7 @@ object SongPlayer {
             autoplayHandledUri = uri
             if (!s.isPaused) pauseSilently()
         }
+        if (item != null && trackChanged && playing && !adState.value && uri.startsWith(SPOTIFY_TRACK_PREFIX)) skipHidden(id, uri)
         currentContextUri = s.contextUri.orEmpty()
         if (item != null) { checkEndOfTrackTimer(id); currentTrackId = id }
         _nowPlaying.value = NowPlaying(
@@ -931,6 +972,7 @@ object SongPlayer {
             if (com.music.spotui.ui.screens.SmartShuffle.on.value != ctx) { plainOrder = ctx to sent; smartPlayed = null }
             else if (sent != null) smartPlayed = ctx
         }
+        playedByHand = itemUri
         markPending(if (episodeId != null) "" else trackId, itemUri)
         transport { isLatest ->
             playChecked(itemUri, isLatest) {
@@ -1998,6 +2040,7 @@ object SongPlayer {
     fun skipTo(item: QueueItem) {
         if (item.provider == LOCAL) { item.uid.toIntOrNull()?.let(LocalPlayer::skipTo); return }
         cancelBurst()
+        playedByHand = item.uri
         val id = trackIdOf(item.uri)
         if (id.isNotBlank()) markPending(id)
         boundState?.updateSongState(item.song.coverUri, item.song.title, item.song.singer, true, item.song.id, 0, item.song.album)

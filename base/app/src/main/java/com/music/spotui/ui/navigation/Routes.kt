@@ -23,6 +23,7 @@ sealed class Routes(
     object Queue : Routes(0, "Queue", "queue")
     object Liked : Routes(0, "Liked", "liked")
     object LocalFiles : Routes(0, "LocalFiles", "localfiles")
+    object HiddenSongs : Routes(0, "HiddenSongs", "hiddensongs")
     object Folder : Routes(0, "Folder", "folder")
     object LocalPlaylist : Routes(0, "LocalPlaylist", "localplaylist")
     object Category : Routes(0, "Category", "category")

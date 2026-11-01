@@ -120,6 +120,14 @@ fun MyNavHost(
             com.music.spotui.ui.screens.LocalFilesScreen(navHostController)
         }
 
+        page(Routes.HiddenSongs.route) {
+            LaunchedEffect(playerState) {
+                bottomBarState.value = true
+                bottomBarPlayerState.value = playerState != ""
+            }
+            com.music.spotui.ui.screens.HiddenSongsScreen(navHostController)
+        }
+
         page(Routes.NewReleases.route) {
             LaunchedEffect(playerState) {
                 bottomBarState.value = true

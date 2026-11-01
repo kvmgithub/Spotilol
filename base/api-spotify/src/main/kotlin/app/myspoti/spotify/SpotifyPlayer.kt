@@ -269,9 +269,11 @@ class SpotifyPlayer(private val bridge: Bridge, private val scope: CoroutineScop
                 val lost = playingAtLoss
                 playingAtLoss = null
                 // A pick held over a reload that was not ours, or whose own play did not run: played now.
+                // Each waits for the new page's device to join Spotify Connect: a play sent right after
+                // "ready" was answered DEVICE_NOT_FOUND (Myspoti 2.3.0).
                 if (!ownReload && pickAfterReload != null) scope.launch { delay(RESTORE_GAP_MS); playPickAfterReload() }
                 else if (!ownReload && (lost != null || liveIntent() != null)) scope.launch {
-                    runCatching { if (lost != null) resumeAfterReload(lost) else { delay(RESTORE_GAP_MS); playIntent() } }
+                    runCatching { if (lost != null) { awaitDeviceJoined(); resumeAfterReload(lost) } else { delay(RESTORE_GAP_MS); awaitDeviceJoined(); playIntent() } }
                 }
                 repeatRestoreUntil = System.currentTimeMillis() + REPEAT_RESTORE_MS
                 if (audioQuality != "auto") applyAudioQuality()
@@ -309,7 +311,7 @@ class SpotifyPlayer(private val bridge: Bridge, private val scope: CoroutineScop
                 if (!reloadAndWait(reload)) return@runCatching
                 if (playPickAfterReload()) return@runCatching
                 if (s == null) return@runCatching
-                if (next) { delay(1_500); playOn(s) } else resumeAfterReload(s)
+                if (next) { delay(1_500); playOnNewPage { playOn(s) } } else { awaitDeviceJoined(); resumeAfterReload(s) }
             }
         } finally {
             ownReload = false
@@ -326,7 +328,10 @@ class SpotifyPlayer(private val bridge: Bridge, private val scope: CoroutineScop
         if (repairsHeld()) { bridge.logger?.invoke("reload held: a sign-in page is open or Spotify is limiting or refusing playback"); return false }
         ownReload = true
         try {
-            return reloadAndWait(reload)
+            val back = reloadAndWait(reload)
+            // A song picked during the reload was held for this page ([play]).
+            if (back) playPickAfterReload()
+            return back
         } finally {
             ownReload = false
             playingAtLoss = null
@@ -340,8 +345,53 @@ class SpotifyPlayer(private val bridge: Bridge, private val scope: CoroutineScop
      */
     private suspend fun reloadAndWait(reload: suspend () -> Unit): Boolean {
         val gone = bridge.pagesGone
-        reload()
-        return withTimeoutOrNull(45_000) { delay(1_500); bridge.ready.first { it && bridge.pagesGone != gone } } != null
+        // The old page still says "ready" for a moment: its device is not one to command from now.
+        app.myspoti.spotify.bridge.PageDevice.pageGone()
+        reloadUnderWay = true
+        try {
+            reload()
+            return withTimeoutOrNull(45_000) { delay(1_500); bridge.ready.first { it && bridge.pagesGone != gone } } != null
+        } finally {
+            reloadUnderWay = false
+        }
+    }
+
+    /** Between our reload's start and its new page's "ready": a pick then is held ([play]). */
+    @Volatile private var reloadUnderWay = false
+
+    /**
+     * The new page's device joins Spotify Connect a moment after the page says "ready" (log seen:
+     * a play 0.3 s after "ready" answered DEVICE_NOT_FOUND): waited for, [JOIN_WAIT_MS] at most,
+     * when the relay reports the joins.
+     */
+    private suspend fun awaitDeviceJoined() {
+        val device = app.myspoti.spotify.bridge.PageDevice
+        if (!device.reported || device.joined.value) return
+        val started = System.currentTimeMillis()
+        val joined = withTimeoutOrNull(JOIN_WAIT_MS) { device.joined.first { it } } != null
+        bridge.logger?.invoke(if (joined) "page device joined after ${System.currentTimeMillis() - started} ms: playing" else "page device not joined after ${JOIN_WAIT_MS / 1000} s: playing anyway")
+    }
+
+    /**
+     * Our play on a page just loaded: sent once its device has joined, and sent again once when
+     * Spotify answered DEVICE_NOT_FOUND to it (the page's call itself answers "ok" before that),
+     * unless something else was played or skipped meanwhile.
+     */
+    private suspend fun playOnNewPage(play: suspend () -> Unit) {
+        awaitDeviceJoined()
+        val sent = System.currentTimeMillis()
+        val movedAt = userMoveAt
+        play()
+        val p = lastPlay?.takeIf { it.third >= sent } ?: return
+        scope.launch {
+            val device = app.myspoti.spotify.bridge.PageDevice
+            withTimeoutOrNull(DEVICE_LOST_WAIT_MS) { while (device.commandLostAt < sent) delay(100) } ?: return@launch
+            if (userMoveAt != movedAt || lastPlay?.third != p.third) return@launch
+            bridge.logger?.invoke("play on the new page answered DEVICE_NOT_FOUND: sent again once the device has joined")
+            awaitDeviceJoined()
+            if (userMoveAt != movedAt || lastPlay?.third != p.third) return@launch
+            runCatching { playNow(p.first, trackUri = p.second, index = lastIndex, order = lastOrder?.takeIf { it.first == p.first }?.second, refusable = lastPlayRefusable) }
+        }
     }
 
     /** The pick held over our reload ([pickAfterReload]), played on the new page. True when there was one. */
@@ -349,8 +399,8 @@ class SpotifyPlayer(private val bridge: Bridge, private val scope: CoroutineScop
         val pick = pickAfterReload ?: return false
         pickAfterReload = null
         if (liveIntent() != null) return false
-        bridge.logger?.invoke("playing the song picked before the ad, on the new page: ${pick.track ?: pick.context}")
-        runCatching { playNow(pick.context, trackUri = pick.track, index = pick.index, positionMs = pick.positionMs, order = pick.order, refusable = true) }
+        bridge.logger?.invoke("playing the song picked before the ad or the reload, on the new page: ${pick.track ?: pick.context}")
+        playOnNewPage { runCatching { playNow(pick.context, trackUri = pick.track, index = pick.index, positionMs = pick.positionMs, order = pick.order, refusable = true) } }
         return true
     }
 
@@ -1435,6 +1485,17 @@ class SpotifyPlayer(private val bridge: Bridge, private val scope: CoroutineScop
             return
         }
         pickBeforeAd = null
+        // Reported (Myspoti 2.2.0, log seen): a song picked while our reload was under way went to
+        // the page going away, and the old list went on instead. Held for the new page (ours, or any
+        // page that went away and is not back yet), as during an ad, and played by [playPickAfterReload].
+        if (reloadUnderWay || (!bridge.ready.value && pageReadyAt > 0)) {
+            if (trackUri == null || trackUri != liveIntent()?.item?.uri) intent = null
+            lastOrder = order?.let { contextUri to it }
+            pausedByUser = false
+            pickAfterReload = Pick(contextUri, trackUri, System.currentTimeMillis(), order, positionMs, index)
+            bridge.logger?.invoke("pick during a reload: ${trackUri ?: contextUri} held until the page is back")
+            return
+        }
         pickAfterReload = null
         playNow(contextUri, trackUri, index, positionMs, order, refusable = true)
     }
@@ -1925,6 +1986,10 @@ class SpotifyPlayer(private val bridge: Bridge, private val scope: CoroutineScop
         const val HAVE_FUTURE_DATA = 3
         /** The next song is preloaded once the current one has played that long. */
         const val PRELOAD_AFTER_MS = 2_000L
+        /** How long a play on a new page waits for its device to join Spotify Connect (see [awaitDeviceJoined]). */
+        const val JOIN_WAIT_MS = 5_000L
+        /** How long after a play on a new page its DEVICE_NOT_FOUND is waited for (seen 0.5 s after). */
+        const val DEVICE_LOST_WAIT_MS = 3_000L
         /** Licence answers of each page logged with what they were for (see [onLicence]). */
         const val PAGE_LICENCES_LOGGED = 3
         /** Licences refused within [LICENCE_REFUSALS_MS] that stop playback (see [LicenceRefusals]). */

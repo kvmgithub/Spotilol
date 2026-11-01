@@ -186,6 +186,10 @@ internal class ControlRelay(private val view: WebView, private val fingerprint: 
                     if (it.code in 200..299 && registration) onDeviceRegistered?.invoke()
                     if (it.code in 200..299 && registration) runCatching { JSONObject(text).optLong("initial_seq_num", 0) }.getOrNull()?.let(devices::answered)
                     if (it.code in 200..299 && request.method == "DELETE" && path.contains("/track-playback/v1/devices/")) devices.deregistered(request.url.toString())
+                    // The page's device joined Spotify Connect (its connect-state PUT was answered): it
+                    // takes commands from now on; a command answered DEVICE_NOT_FOUND came before that.
+                    if (it.code in 200..299 && request.method == "PUT" && path.contains("/connect-state/v1/devices/")) app.myspoti.spotify.bridge.PageDevice.joined()
+                    if (it.code == 404 && path.contains("/player/command") && "DEVICE_NOT_FOUND" in text) app.myspoti.spotify.bridge.PageDevice.commandLost()
                     // 402 (refused playback on some free accounts), from Myspoti 2.0.0: the refusal's
                     // own headers and the refused command's shape. No ids, no cookies.
                     if (it.code == 402) {

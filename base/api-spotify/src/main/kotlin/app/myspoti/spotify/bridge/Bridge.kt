@@ -137,6 +137,7 @@ class Bridge(private val host: BridgeHost, scope: CoroutineScope) {
     fun pageGone() {
         pagesGone++
         gone = true
+        PageDevice.pageGone()
         _ready.value = false
         pending.values.forEach { it.completeExceptionally(BridgeException("page reloaded")) }
     }
@@ -159,7 +160,8 @@ class Bridge(private val host: BridgeHost, scope: CoroutineScope) {
     suspend fun ping(timeoutMs: Long = 3_000): Boolean = runCatching { call("bridge.version", timeoutMs = timeoutMs) }.isSuccess
 
     /** [quiet]: a poll made every few seconds; only its failures are logged. */
-    suspend fun call(method: String, args: JsonObject = JsonObject(emptyMap()), timeoutMs: Long = 20_000, quiet: Boolean = false): JsonElement {
+    /** [label]: who sends it, written in its log line (a play's origin). */
+    suspend fun call(method: String, args: JsonObject = JsonObject(emptyMap()), timeoutMs: Long = 20_000, quiet: Boolean = false, label: String? = null): JsonElement {
         // The page is reloading: nothing would answer, the call would only wait for its timeout.
         if (gone) throw BridgeException("not ready")
         val id = ids.incrementAndGet()
@@ -167,7 +169,7 @@ class Bridge(private val host: BridgeHost, scope: CoroutineScope) {
         pending[id] = waiter
         try {
             val started = System.currentTimeMillis()
-            if (!quiet) logger?.invoke("call #$id $method ${args.toString().take(200)}")
+            if (!quiet) logger?.invoke("call #$id $method${label?.let { " ($it)" }.orEmpty()} ${args.toString().take(200)}")
             host.evaluate("window.Myspoti && window.Myspoti.call($id, ${json.encodeToString(JsonElement.serializer(), kotlinx.serialization.json.JsonPrimitive(method))}, $args).catch(() => {})")
             return try {
                 // withTimeoutOrNull, not withTimeout: a timeout must surface as a

@@ -458,6 +458,10 @@ private fun ContextContent(navController: NavController, vm: ContextViewModel, p
     var menuSong by remember { mutableStateOf<SongsModel?>(null) }
     // "Find in Liked Songs / in playlist".
     var find by remember { mutableStateOf("") }
+    // A song tapped in the found rows puts the keyboard away; the search and the list stay as they are.
+    val keyboard = androidx.compose.ui.platform.LocalSoftwareKeyboardController.current
+    val focusManager = androidx.compose.ui.platform.LocalFocusManager.current
+    val dismissKeyboard = { keyboard?.hide(); focusManager.clearFocus() }
     // "Sort by" for the list, kept per list (also after leaving it or restarting the app).
     val ctx = LocalContext.current
     var sort by remember(p.uri) { mutableStateOf(TrackOrder.load(ctx, p.uri)) }
@@ -784,7 +788,7 @@ private fun ContextContent(navController: NavController, vm: ContextViewModel, p
                 isCurrent = song.id == currentSongId,
                 saved = SongPlayer.library["spotify:track:${song.spotifyTrackId}"] ?: ("spotify:track:${song.spotifyTrackId}" in saved),
                 offline = com.music.spotui.data.offline.OfflineStore.statusOf(song.spotifyTrackId),
-                onClick = { if (SmartShuffle.on.value == p.uri) vm.playSmart(p, song) else vm.play(p, song, sort) },
+                onClick = { dismissKeyboard(); if (SmartShuffle.on.value == p.uri) vm.playSmart(p, song) else vm.play(p, song, sort) },
                 onMore = { menuSong = song },
             ) }
         }

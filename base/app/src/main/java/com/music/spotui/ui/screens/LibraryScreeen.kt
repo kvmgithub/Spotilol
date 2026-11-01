@@ -133,6 +133,7 @@ fun LibraryScreen(navController: NavController) {
     val account by libraryViewModel.account.collectAsState()
     var showAccount by remember { mutableStateOf(false) }
     val context = LocalContext.current
+    androidx.compose.runtime.LaunchedEffect(Unit) { com.music.spotui.data.api.ProfileCache.ensure(context) }
     // Spotify-style layout toggle: rows or a 3-column grid, persisted across runs.
     var gridView by remember { mutableStateOf(isLibraryGridView(context)) }
     var searchActive by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(false) }
@@ -325,9 +326,12 @@ fun LibraryScreen(navController: NavController) {
                     LibraryOrder.version
                     LibraryOrder.arrange(list, LibraryOrder.sort, LibraryOrder.custom(LibraryOrder.ROOT), rootPinned)
                 }
+                // Read through the name, which redraws the screen once the account is known.
+                val myId = com.music.spotui.data.api.ProfileCache.name?.let { com.music.spotui.data.api.ProfileCache.id }
                 val (chipEntries, chipArtists) = com.music.spotui.data.local.LibraryChips.apply(
                     chip, allEntries, followedArtists,
                     setOf(Api.HomeCache.LIKED_SONGS_ID, Api.HomeCache.LOCAL_FILES_ID, Api.HomeCache.DOWNLOADS_ID),
+                    myId,
                 )
                 val filteredEntries = if (searchQuery.isBlank()) chipEntries
                     else chipEntries.filter {
@@ -349,11 +353,12 @@ fun LibraryScreen(navController: NavController) {
     }
 }
 
-/** Playlists / Artists / Albums / Songs: one chip chosen at a time; the chosen one again clears it. */
+/** Playlists / By me / Artists / Albums / Songs: one chip chosen at a time; the chosen one again clears it. */
 @Composable
 private fun LibraryChipRow(chosen: com.music.spotui.data.local.LibraryChip, onTap: (com.music.spotui.data.local.LibraryChip) -> Unit) {
     val chips = listOf(
         com.music.spotui.data.local.LibraryChip.PLAYLISTS to R.string.library_chip_playlists,
+        com.music.spotui.data.local.LibraryChip.BY_ME to R.string.library_chip_by_me,
         com.music.spotui.data.local.LibraryChip.ARTISTS to R.string.library_chip_artists,
         com.music.spotui.data.local.LibraryChip.ALBUMS to R.string.library_chip_albums,
         com.music.spotui.data.local.LibraryChip.SONGS to R.string.library_chip_songs,

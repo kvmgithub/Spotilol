@@ -410,7 +410,12 @@ class ContextViewModel(
         if (p.type == "liked" || p.type == "liked-artist") SongPlayer.registerLikedSongs(p.tracks.map { it.url })
         // Sorted by the user: Spotify plays the list in that order, not the playlist's. An
         // artist's liked songs are a part of Liked Songs: always given, so only they play.
-        val order = if (sort.isCustom && p.type != "liked-artist") null else sort.apply(p.tracks).map { "spotify:track:${it.spotifyTrackId}" }
+        val order = if (sort.isCustom && p.type != "liked-artist") null else sort.apply(p.tracks).filter { it.spotifyTrackId.isNotBlank() }.map { "spotify:track:${it.spotifyTrackId}" }
+        // Myspoti's shuffle (an option): with shuffle on, every song of the list once, in an order of its own.
+        if (com.music.spotui.di.AppShuffle.play(p, song, order)) {
+            state.updateSongState(song.coverUri, song.title, song.singer, true, song.id, 0, song.album)
+            return
+        }
         if (order != null) state.updateQueue(sort.apply(p.tracks))
         SongPlayer.playSong(song.url, contextUri = p.uri, order = order)
         state.updateSongState(song.coverUri, song.title, song.singer, true, song.id, 0, song.album)

@@ -574,4 +574,7 @@
     <string name="hidden_songs_title">Hidden songs</string>
     <string name="hidden_songs_detail">Songs marked Not interested are skipped in lists and radios</string>
     <string name="hidden_songs_empty">No hidden songs yet. Choose Not interested in a song\'s menu.</string>
+    <string name="myspoti_shuffle_title">MySpotilol shuffle</string>
+    <string name="myspoti_shuffle_detail">With shuffle on, a playlist, album or Liked Songs plays every song once, in a random order, before starting over. Off: Spotify\'s shuffle. A free account may keep Spotify\'s shuffle on some lists.</string>
+    <string name="myspoti_shuffle_imposed">Spotify keeps its own shuffle on this list for your account: MySpotilol shuffle is off for it.</string>
 </resources>

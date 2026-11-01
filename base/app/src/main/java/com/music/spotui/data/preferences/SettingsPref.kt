@@ -42,6 +42,23 @@ object AutoplayPref {
     }
 }
 
+/**
+ * "MySpotilol shuffle" (off by default): with shuffle on, a list plays every one of its songs once, in
+ * an order Myspoti draws, before it starts over, instead of Spotify's shuffle (see
+ * [com.music.spotui.di.AppShuffle]). Off: Spotify shuffles, as before.
+ */
+object AppShufflePref {
+    private const val KEY = "myspoti_shuffle"
+    var on by androidx.compose.runtime.mutableStateOf(prefs(com.music.spotui.di.Graph.app).getBoolean(KEY, false))
+        private set
+
+    fun set(c: Context, value: Boolean) {
+        on = value
+        prefs(c).edit().putBoolean(KEY, value).apply()
+        if (!value) com.music.spotui.di.AppShuffle.forget()
+    }
+}
+
 /** Screen rotation: portrait (the default), automatic (follows the system), or landscape. */
 object OrientationPref {
     private const val KEY = "screen_orientation"

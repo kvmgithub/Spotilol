@@ -614,7 +614,10 @@ object SongPlayer {
         val state = boundState ?: return
         val holding = SystemClock.elapsedRealtime() < shuffleWantedUntil
         if (holding && s.shuffle == shuffleWanted) shuffleWantedUntil = 0L
-        if (!holding || s.shuffle == shuffleWanted) state.shuffle.value = s.shuffle
+        // Myspoti's shuffle plays the list in its own order with Spotify's off: shown on.
+        val trusted = !holding || s.shuffle == shuffleWanted
+        val dealt = AppShuffle.onPage(s.contextUri.orEmpty(), uri, s.shuffle, trusted)
+        if (trusted) state.shuffle.value = s.shuffle || dealt
         // The page reports a speed other than 1 only for episodes: music stays at 1.
         _speed.value = s.speed.takeIf { it > 0.0 } ?: 1.0
         // A local file keeps its own repeat, and a tap on a Spotify song is held until the page
@@ -969,7 +972,7 @@ object SongPlayer {
         if (ctx != null) {
             val sent = order?.takeIf { ctx == contextUri }
             playedOrder = ctx to sent
-            if (com.music.spotui.ui.screens.SmartShuffle.on.value != ctx) { plainOrder = ctx to sent; smartPlayed = null }
+            if (com.music.spotui.ui.screens.SmartShuffle.on.value != ctx) { plainOrder = ctx to AppShuffle.unshuffled(ctx, sent); smartPlayed = null }
             else if (sent != null) smartPlayed = ctx
         }
         playedByHand = itemUri
@@ -990,6 +993,8 @@ object SongPlayer {
         if (LocalPlayer.active.value) { Haptics.click(); LocalPlayer.resume(); return }
         // Smart shuffle was turned off while paused: the list's order comes back as it plays on.
         plainOrderDue?.let { if (restorePlainOrder(it)) return }
+        // Myspoti's shuffle turned on or off while paused: the song goes on in the list's new order.
+        if (AppShuffle.resume()) { Haptics.click(); return }
         Haptics.click(); intendPlaying(); playing = true; positionAt = SystemClock.elapsedRealtime()
         // Loading until the page plays: the clock ran from the tap before, over silence when the
         // resume came late or never (reported on a slow network).
@@ -1344,6 +1349,12 @@ object SongPlayer {
     fun setShuffle(on: Boolean) {
         Haptics.toggle(on)
         if (LocalPlayer.active.value) { LocalPlayer.setShuffle(on); return }
+        if (AppShuffle.toggle(on)) return
+        setPageShuffle(on)
+    }
+
+    /** Spotify's own shuffle, set on the page (Myspoti's, [AppShuffle], keeps it off). */
+    internal fun setPageShuffle(on: Boolean) {
         shuffleWanted = on
         shuffleWantedUntil = SystemClock.elapsedRealtime() + SHUFFLE_HOLD_MS
         command { api.player.setShuffle(on) }

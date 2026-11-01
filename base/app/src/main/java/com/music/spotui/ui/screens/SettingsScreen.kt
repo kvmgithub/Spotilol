@@ -81,6 +81,12 @@ fun SettingsScreen(navController: NavController) {
                 checked = com.music.spotui.data.preferences.AutoplayPref.on,
                 onChecked = { com.music.spotui.data.preferences.AutoplayPref.set(ctx, it) },
             )
+            OptionRow(
+                label = stringResource(R.string.myspoti_shuffle_title),
+                detail = stringResource(R.string.myspoti_shuffle_detail),
+                checked = com.music.spotui.data.preferences.AppShufflePref.on,
+                onChecked = { com.music.spotui.data.preferences.AppShufflePref.set(ctx, it) },
+            )
             CrossfadeRow()
             BoostRow()
             var keepPlaying by remember { mutableStateOf(app.myspoti.host.android.PlaybackService.keepsPlayingOnClose(ctx)) }

@@ -158,6 +158,64 @@ class SpotifyPlayer(private val bridge: Bridge, private val scope: CoroutineScop
      * and tries once when the network is back.
      */
     @Volatile var online: () -> Boolean = { true }
+    /** Audio licences Spotify refused (403) in a row, see [onLicence]. */
+    private val licenceRefusals = LicenceRefusals(LICENCE_REFUSALS, LICENCE_REFUSALS_MS)
+    /**
+     * Spotify refuses this account its audio licences (see [LicenceRefusals]): playback was paused
+     * once and the user told, and nothing is repaired (no reload, no replay, no seek: each asks for
+     * a licence again) until the user plays something.
+     */
+    @Volatile private var licenceRefusedHold = false
+    /** The song whose own licence was refused (a 403 before it played [PRELOAD_AFTER_MS]), and when. */
+    @Volatile private var licenceRefusedUri: Uri? = null
+    @Volatile private var licenceRefusedAt = 0L
+    /** When the current page said "ready", and how many licence answers it has had, for the log. */
+    @Volatile private var pageReadyAt = 0L
+    @Volatile private var pageLicences = 0
+    private val _licencesRefused = kotlinx.coroutines.flow.MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+    /** Spotify refuses this account its audio licences: playback was paused, the UI says so. */
+    val licencesRefused: kotlinx.coroutines.flow.SharedFlow<Unit> = _licencesRefused
+
+    /** Repairs wait: held by the host ([recoveryHeld]), or licences refused ([licenceRefusedHold]). */
+    private fun repairsHeld(): Boolean = recoveryHeld() || licenceRefusedHold
+
+    /**
+     * An audio licence answer the page saw. The first ones of each page are logged with what they
+     * were for (one licence answered 200 per page, all others 403: a song's or the certificate?).
+     * Refusals in a row ([LicenceRefusals]) pause playback once ([licencesRefused]). Observation
+     * only: nothing of the request or its answer is touched.
+     */
+    private fun onLicence(msg: JsonObject) {
+        val url = (msg["url"] as? kotlinx.serialization.json.JsonPrimitive)?.contentOrNull ?: return
+        val status = (msg["status"] as? kotlinx.serialization.json.JsonPrimitive)?.intOrNull ?: 0
+        val now = System.currentTimeMillis()
+        val s = _state.value
+        if (pageLicences++ < PAGE_LICENCES_LOGGED)
+            bridge.logger?.invoke("page licence #$pageLicences: $status ${url.substringAfter("widevine-license", url).take(60)} on ${s?.item?.uri ?: "nothing"}, ${if (pageReadyAt > 0) "${now - pageReadyAt} ms after ready" else "page not ready"}")
+        if (status != 403 || !LicenceRefusals.isAudio(url)) return
+        // Another device's licences are not what the user hears.
+        if (remoteActive) return
+        licenceRefusedAt = now
+        // Before the song played the moment after which the next one is preloaded: its own licence.
+        licenceRefusedUri = s?.takeIf { it.positionAt(now) < PRELOAD_AFTER_MS }?.item?.uri
+        if (licenceRefusals.record(now)) refusedLicences("403 x$LICENCE_REFUSALS in ${LICENCE_REFUSALS_MS / 1000} s")
+    }
+
+    /** Pauses once, tells the user and holds every repair until they play ([licenceRefusedHold]). */
+    private fun refusedLicences(why: String) {
+        if (licenceRefusedHold) return
+        licenceRefusedHold = true
+        bridge.logger?.invoke("Spotify refuses this account's audio licences ($why): paused, no reload nor replay until the next play")
+        _licencesRefused.tryEmit(Unit)
+        scope.launch { runCatching { pause() } }
+    }
+
+    /** The user plays (a pick, a skip, play): repairs may run again. */
+    private fun userPlays() {
+        if (!licenceRefusedHold) return
+        licenceRefusedHold = false
+        bridge.logger?.invoke("played after the licences were refused: repairs back on")
+    }
 
     /** Streaming quality ("auto", "low", "normal", "high", "very_high"), kept for every page load. */
     @Volatile var audioQuality: String = "auto"
@@ -178,6 +236,7 @@ class SpotifyPlayer(private val bridge: Bridge, private val scope: CoroutineScop
                     "refused" -> onRefused(late = ((payload as? JsonObject)?.get("late") as? kotlinx.serialization.json.JsonPrimitive)?.booleanOrNull == true)
                     "drm" -> (payload as? JsonObject)?.let { _drmMissing.value = (it["ok"] as? kotlinx.serialization.json.JsonPrimitive)?.booleanOrNull == false }
                     "boost" -> (payload as? JsonObject)?.let(::onBoost)
+                    "licence" -> (payload as? JsonObject)?.let { onLicence(it) }
                 }
             }
         }
@@ -204,6 +263,9 @@ class SpotifyPlayer(private val bridge: Bridge, private val scope: CoroutineScop
                         ?.let { s -> s.copy(positionMs = s.positionAt(now), timestampMs = now) }
                     return@collect
                 }
+                pageReadyAt = System.currentTimeMillis()
+                pageLicences = 0
+                licenceRefusedUri = null
                 val lost = playingAtLoss
                 playingAtLoss = null
                 // A pick held over a reload that was not ours, or whose own play did not run: played now.
@@ -240,7 +302,7 @@ class SpotifyPlayer(private val bridge: Bridge, private val scope: CoroutineScop
      */
     private suspend fun reloadAndPlayOn(s: PlayerState?, next: Boolean = true) {
         val reload = reloadHost ?: return
-        if (recoveryHeld()) { bridge.logger?.invoke("reload held: a sign-in page is open or Spotify is limiting playback"); return }
+        if (repairsHeld()) { bridge.logger?.invoke("reload held: a sign-in page is open or Spotify is limiting or refusing playback"); return }
         ownReload = true
         try {
             runCatching {
@@ -261,7 +323,7 @@ class SpotifyPlayer(private val bridge: Bridge, private val scope: CoroutineScop
      */
     suspend fun reloadPage(): Boolean {
         val reload = reloadHost ?: return false
-        if (recoveryHeld()) { bridge.logger?.invoke("reload held: a sign-in page is open or Spotify is limiting playback"); return false }
+        if (repairsHeld()) { bridge.logger?.invoke("reload held: a sign-in page is open or Spotify is limiting or refusing playback"); return false }
         ownReload = true
         try {
             return reloadAndWait(reload)
@@ -298,6 +360,7 @@ class SpotifyPlayer(private val bridge: Bridge, private val scope: CoroutineScop
      * where it was, checked and tried again, unless the user paused or played something since.
      */
     private suspend fun resumeAfterReload(lost: PlayerState) {
+        if (licenceRefusedHold) { bridge.logger?.invoke("page back after a reload: nothing resumed, Spotify refuses this account's licences"); return }
         // Skipped during the reload: that song, not the one that played before it.
         if (liveIntent() != null) {
             val seq = stateSeq
@@ -320,7 +383,7 @@ class SpotifyPlayer(private val bridge: Bridge, private val scope: CoroutineScop
             if (s != null && s.item?.uri == uri && !s.isPaused) return
             runCatching {
                 if (s?.item?.uri == uri) {
-                    resume()
+                    resumePage()
                     if (kotlin.math.abs(s.positionMs - at) > 5_000) seek(at)
                 } else {
                     // A state without a list would play the song alone, and Spotify then goes on
@@ -557,7 +620,12 @@ class SpotifyPlayer(private val bridge: Bridge, private val scope: CoroutineScop
                 // it plays within a second. So the first try is the reload, at once; going through
                 // the other levers first cost ~20 s of silence. If an ad is still there after
                 // that, playing on is tried, then the reload again.
-                if (stuck) {
+                // Licences refused: getting past the ad asks for one more (a reload, a play), held
+                // until the user plays (see [licenceRefusedHold]).
+                if (stuck && licenceRefusedHold) {
+                    bridge.logger?.invoke("ad stuck on ${ad?.item?.name}: left as it is, Spotify refuses this account's licences")
+                    adSince = System.currentTimeMillis()
+                } else if (stuck) {
                     adAttempts++
                     val last = lastTrackState
                     if (adRecovery(adAttempts, playing = playing && !refused) == "next") {
@@ -605,7 +673,7 @@ class SpotifyPlayer(private val bridge: Bridge, private val scope: CoroutineScop
             _stalled.value = stillSince != 0L && (waiting || now - stillSince >= WATCH_TICK_MS)
             val silent = silentSince != 0L && now - silentSince >= SILENT_MS
             val reason = s?.let { stallOf(it, now, pausedByUser) } ?: (if (silent) SILENT else null)
-            if (recoveryHeld()) { key = null; attempts = 0; continue }
+            if (repairsHeld()) { key = null; attempts = 0; continue }
             if (s == null || reason == null) { key = null; attempts = 0; continue }
             // The element waits for audio data from the network (0.11.1, log seen: a 30 s network
             // drop, the seek answered nothing, the reload then found no network and broke the page).
@@ -627,7 +695,16 @@ class SpotifyPlayer(private val bridge: Bridge, private val scope: CoroutineScop
             since = now
             attempts++
             silentSince = 0L
-            bridge.logger?.invoke("player stalled ($reason) on ${s.item?.name}, attempt $attempts; media element: ${media?.describe() ?: "none"}")
+            val refusedAgo = licenceRefusedAt.takeIf { it > 0 }?.let { "; last licence 403 ${(now - it) / 1000} s ago" }.orEmpty()
+            bridge.logger?.invoke("player stalled ($reason) on ${s.item?.name}, attempt $attempts; media element: ${media?.describe() ?: "none"}$refusedAgo")
+            // B4 (log seen, 2.0.2-beta.5): the song's licence refused, its first seconds play and
+            // then the sound stops while the clock goes on. A seek or a reload only asks for a
+            // licence again (a reload gets one, then the page skips on): paused and said instead.
+            if (licenceRefusedUri != null && s.item?.uri == licenceRefusedUri) {
+                key = null; attempts = 0
+                refusedLicences("refused for ${s.item?.name}, which then stalled")
+                continue
+            }
             // A song stuck at its end moves on; one stuck in its middle goes on where it was.
             val onward = reason == "past the end" || reason == "paused at the end"
             // A frozen page answers nothing: straight to the reload.
@@ -1088,9 +1165,9 @@ class SpotifyPlayer(private val bridge: Bridge, private val scope: CoroutineScop
                 delay(AD_END_SETTLE_MS)
                 val now = _state.value
                 if (now != null && now.item?.uri == uri && now.isPaused && !pausedByUser && !_adPlaying.value && liveIntent() == null &&
-                    lastPlay?.third == playedAt && !remoteActive) {
+                    lastPlay?.third == playedAt && !remoteActive && !licenceRefusedHold) {
                     bridge.logger?.invoke("paused after the ad break, nobody paused: ${now.item?.name} resumed")
-                    runCatching { resume() }
+                    runCatching { resumePage() }
                 }
             }
         }
@@ -1343,6 +1420,7 @@ class SpotifyPlayer(private val bridge: Bridge, private val scope: CoroutineScop
      */
     override suspend fun play(contextUri: Uri, trackUri: Uri?, index: Int?, positionMs: Long?, order: List<Uri>?) {
         userMoveAt = System.currentTimeMillis()
+        userPlays()
         // The ad due after the song that played before: a new play brings its own queue, and the
         // put-back of an earlier ad skip would queue that old song after the pick.
         adRestore?.cancel()
@@ -1480,6 +1558,12 @@ class SpotifyPlayer(private val bridge: Bridge, private val scope: CoroutineScop
     @Volatile private var pageSuspect = false
 
     override suspend fun resume() {
+        userPlays()
+        resumePage()
+    }
+
+    /** [resume] without counting as the user's play (a restore after a reload, the end of an ad). */
+    private suspend fun resumePage() {
         pausedByUser = false
         // A page that went silent while paused (frozen in the background): a quick ping, and if it
         // still says nothing, the page is loaded again and plays on where it was, instead of the
@@ -1524,6 +1608,7 @@ class SpotifyPlayer(private val bridge: Bridge, private val scope: CoroutineScop
         pickBeforeAd = null
         pickAfterReload = null
         userMoveAt = System.currentTimeMillis()
+        userPlays()
         adRestore?.cancel()
         if (skipsHeld) { stepIntent(1); return }
         // An ad is due right after this song: Spotify sends its skip to the ad too, and a page that
@@ -1578,6 +1663,7 @@ class SpotifyPlayer(private val bridge: Bridge, private val scope: CoroutineScop
         pickBeforeAd = null
         pickAfterReload = null
         userMoveAt = System.currentTimeMillis()
+        userPlays()
         adRestore?.cancel()
         if (skipsHeld) { stepIntent(-1); return }
         intent = null
@@ -1661,6 +1747,7 @@ class SpotifyPlayer(private val bridge: Bridge, private val scope: CoroutineScop
     override suspend fun skipTo(item: NowPlaying) {
         pausedByUser = false
         userMoveAt = System.currentTimeMillis()
+        userPlays()
         adRestore?.cancel()
         pickBeforeAd = null
         pickAfterReload = null
@@ -1838,6 +1925,11 @@ class SpotifyPlayer(private val bridge: Bridge, private val scope: CoroutineScop
         const val HAVE_FUTURE_DATA = 3
         /** The next song is preloaded once the current one has played that long. */
         const val PRELOAD_AFTER_MS = 2_000L
+        /** Licence answers of each page logged with what they were for (see [onLicence]). */
+        const val PAGE_LICENCES_LOGGED = 3
+        /** Licences refused within [LICENCE_REFUSALS_MS] that stop playback (see [LicenceRefusals]). */
+        const val LICENCE_REFUSALS = 3
+        const val LICENCE_REFUSALS_MS = 10_000L
         /** Longer than any ad break: the page is stuck in it. */
         const val AD_BREAK_MAX_MS = 4 * 60_000L
         /**

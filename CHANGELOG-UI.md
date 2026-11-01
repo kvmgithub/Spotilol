@@ -6,6 +6,41 @@ Each version section is the text of the GitHub pre-release tagged `ui-v<version>
 
 ## [Unreleased]
 
+## [0.13.0] - 2026-11-01
+
+Taken from Myspoti 2.3.0. Not taken: Chromecast and Cast speakers, downloads, extensions, the Immersive look, the equalizer and Stats for nerds (they cover only songs the app plays itself), the source switch, third-party lyrics sources, repeat once, one APK per architecture, the support reminders and Brazilian Portuguese.
+
+### Added
+- Not interested in the song menu: the song is kept in a list on this phone only (nothing goes to Spotify), leaves the queue, is skipped when a list, a radio or the queue comes to it, and is dimmed in song lists; a tap still plays it. Undo right after, and Settings → Hidden songs to show it again.
+- Share lyrics: a long press on a line, or Share lyrics in the lyrics menu, picks up to 6 lines in a row to send as text with the song's link.
+- MySpotilol shuffle (Settings → Playback, off by default): with shuffle on, a playlist, an album or Liked Songs plays every song once, in an order of its own with the picked song first, before it starts over. A skip goes on in that order, songs added to the list join what is to come. A list Spotify keeps on its own shuffle for the account stays with Spotify's, with a message.
+- Library: a By me chip with the playlists you own, and a Podcasts chip with Your Episodes, every show you follow and a New episodes row.
+- Liked Songs leads Home's shortcuts when Spotify's grid does not carry it.
+- Hide the DJ (Settings): removes Spotify's DJ from Home.
+- Lyrics preview in the player (Settings): off, the lyrics card under the player is gone; a flick up on the cover still opens the lyrics.
+- The sleep timer fades the song out before it pauses.
+- Sign-in: a loading screen until Spotify's page has content; a page that stays blank, fails or does not answer within 25 s shows Try again.
+- Samsung: a hint under Background playback to add the app to Never sleeping apps, with a button to the app's settings.
+
+### Changed
+- A tap on a search result puts the keyboard away.
+- Likes and follows kept for later stay with the account that made them, and go out as soon as Spotify answers. A session lost without a sign-out forgets whose account it was and reads the profile again.
+- The repeat mode chosen while a local file plays is kept for the next start.
+
+### Fixed
+- Repeat one keeps looping when Spotify puts an ad after the song.
+- A pause during an ad stays a pause: the recovery past a stuck ad no longer starts the music, and a song picked around the ad waits for your resume.
+- Spotify refusing the account's audio licences (three refusals within 10 s) pauses playback once with a message instead of a run of skips and reloads.
+- A page that moves on by itself through songs right after a play is stopped.
+- A play sent after a reload of the page waits up to 5 s for the new page's device to join Spotify Connect and is sent again once when Spotify answers that the device is gone; a song picked during a reload plays on the new page.
+- While Spotify limits the audio licences, the page reads a proper rate-limit answer with Retry-After, and songs played after the hold's pause are not paused again.
+- A call to the page that cannot reach it fails at once, and runs only in the page it was made for.
+- Signing out drops a play, pause or skip still waiting for the page.
+
+### Diagnostics
+- A power section in the report (battery exemption, power saver, standby bucket, process importance, maker), and the screen going off and on is logged while a song plays.
+- The media element line says whether it has its keys and how often it waited for one.
+
 ## [0.12.1] - 2026-10-31
 
 ### Fixed

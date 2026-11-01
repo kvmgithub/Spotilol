@@ -63,6 +63,8 @@ class Api constructor(
         const val DOWNLOADS_ID = "downloads"
         /** "Your Episodes" (saved podcast episodes). */
         const val EPISODES_ID = "your-episodes"
+        /** Prefix of the library id of a followed show in the Podcasts chip (a plain show id otherwise). */
+        const val SHOW_PREFIX = "show:"
         /** "Recently played": Spotify's own list for the account, pinned in the library. */
         const val RECENT_ID = "recently-played"
         /** Pages of 50 asked for a show's episodes / chapters, at most (500 rows). */
@@ -283,6 +285,25 @@ class Api constructor(
         while (true) {
             val page = runCatching { api.library.items(filter = LibraryFilter.ARTISTS, offset = offset, limit = 50) }.getOrNull() ?: break
             page.items.filter { it.kind == MediaKind.ARTIST }.forEach { out += ArtistsModel(it.name, cover(it.images), it.uri.substringAfterLast(':')) }
+            offset = page.nextOffset ?: break
+        }
+        return out
+    }
+
+    /**
+     * Every show the user follows (library "Podcasts" filter), as library rows. The list is read
+     * page after page to its end: the Home podcasts shelf holds only the first 20.
+     */
+    suspend fun getFollowedShows(): List<LibraryEntry> {
+        if (!ready()) return emptyList()
+        val out = ArrayList<LibraryEntry>()
+        var offset = 0
+        while (true) {
+            val page = runCatching { api.library.items(filter = LibraryFilter.PODCASTS, offset = offset, limit = 50) }.getOrNull() ?: break
+            page.items.filter { it.kind == MediaKind.SHOW }.forEach {
+                out += LibraryEntry(SHOW_PREFIX + it.uri.substringAfterLast(':'), it.name,
+                    context.getString(R.string.album_type_podcast) + (it.subtitle?.let { s -> " • $s" } ?: ""), cover(it.images), isPlaylist = false)
+            }
             offset = page.nextOffset ?: break
         }
         return out

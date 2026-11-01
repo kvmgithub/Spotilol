@@ -560,4 +560,5 @@
     <string name="login_failed_title">Sign-in did not finish</string>
     <string name="login_failed_detail">Spotify\'s page did not load or did not start. Check your connection and try again. If it keeps failing, try another network.</string>
     <string name="library_chip_by_me">By me</string>
+    <string name="library_chip_podcasts">Podcasts</string>
 </resources>

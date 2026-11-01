@@ -107,6 +107,7 @@ import com.music.spotui.ui.navigation.artistRoute
 import com.music.spotui.ui.navigation.playlistRoute
 import com.music.spotui.ui.navigation.folderRoute
 import com.music.spotui.ui.navigation.localPlaylistRoute
+import com.music.spotui.ui.navigation.showRoute
 import com.music.spotui.ui.theme.AppBackground
 import com.music.spotui.ui.theme.AppPalette
 import com.music.spotui.ui.viewmodel.LibraryViewModel
@@ -281,6 +282,11 @@ fun LibraryScreen(navController: NavController) {
         }
 
         val followedArtists by libraryViewModel.followedArtists.collectAsState()
+        val followedShows by libraryViewModel.followedShows.collectAsState()
+        // The shows are only read once the Podcasts chip is chosen.
+        androidx.compose.runtime.LaunchedEffect(chip) {
+            if (chip == com.music.spotui.data.local.LibraryChip.PODCASTS) libraryViewModel.loadFollowedShows()
+        }
         val refreshing by libraryViewModel.refreshing.collectAsState()
         when (entries) {
             is Response.Loading -> LibrarySkeleton(PaddingValues(0.dp))
@@ -331,7 +337,7 @@ fun LibraryScreen(navController: NavController) {
                 val (chipEntries, chipArtists) = com.music.spotui.data.local.LibraryChips.apply(
                     chip, allEntries, followedArtists,
                     setOf(Api.HomeCache.LIKED_SONGS_ID, Api.HomeCache.LOCAL_FILES_ID, Api.HomeCache.DOWNLOADS_ID),
-                    myId,
+                    myId, followedShows, setOf(Api.HomeCache.EPISODES_ID),
                 )
                 val filteredEntries = if (searchQuery.isBlank()) chipEntries
                     else chipEntries.filter {
@@ -353,7 +359,7 @@ fun LibraryScreen(navController: NavController) {
     }
 }
 
-/** Playlists / By me / Artists / Albums / Songs: one chip chosen at a time; the chosen one again clears it. */
+/** Playlists / By me / Artists / Albums / Podcasts / Songs: one chip chosen at a time; the chosen one again clears it. */
 @Composable
 private fun LibraryChipRow(chosen: com.music.spotui.data.local.LibraryChip, onTap: (com.music.spotui.data.local.LibraryChip) -> Unit) {
     val chips = listOf(
@@ -361,6 +367,7 @@ private fun LibraryChipRow(chosen: com.music.spotui.data.local.LibraryChip, onTa
         com.music.spotui.data.local.LibraryChip.BY_ME to R.string.library_chip_by_me,
         com.music.spotui.data.local.LibraryChip.ARTISTS to R.string.library_chip_artists,
         com.music.spotui.data.local.LibraryChip.ALBUMS to R.string.library_chip_albums,
+        com.music.spotui.data.local.LibraryChip.PODCASTS to R.string.library_chip_podcasts,
         com.music.spotui.data.local.LibraryChip.SONGS to R.string.library_chip_songs,
     )
     Row(
@@ -612,7 +619,7 @@ const val LOCAL_PLAYLIST_PREFIX = "local-playlist:"
 
 private fun prefetchLibraryEntry(entry: LibraryEntry) = when {
     LibraryEdits.isPending(entry.spotifyId) -> Unit
-    entry.isFolder || entry.spotifyId.startsWith(LOCAL_PLAYLIST_PREFIX) -> Unit
+    entry.isFolder || entry.spotifyId.startsWith(LOCAL_PLAYLIST_PREFIX) || entry.spotifyId.startsWith(Api.HomeCache.SHOW_PREFIX) -> Unit
     entry.spotifyId == Api.HomeCache.LOCAL_FILES_ID || entry.spotifyId == Api.HomeCache.DOWNLOADS_ID || entry.spotifyId == Api.HomeCache.EPISODES_ID -> Unit
     entry.spotifyId == Api.HomeCache.LIKED_SONGS_ID -> ContextViewModel.prefetch("liked", "")
     entry.isPlaylist -> ContextViewModel.prefetch("playlist", entry.spotifyId)
@@ -624,6 +631,7 @@ private fun openLibraryEntry(entry: LibraryEntry, navController: NavController) 
     if (LibraryEdits.isPending(entry.spotifyId)) return
     if (entry.isFolder) navController.navigate(folderRoute(entry.folderUri, entry.name))
     else if (entry.spotifyId.startsWith(LOCAL_PLAYLIST_PREFIX)) navController.navigate(localPlaylistRoute(entry.spotifyId.removePrefix(LOCAL_PLAYLIST_PREFIX)))
+    else if (entry.spotifyId.startsWith(Api.HomeCache.SHOW_PREFIX)) navController.navigate(showRoute(entry.spotifyId.removePrefix(Api.HomeCache.SHOW_PREFIX), entry.name))
     else if (entry.spotifyId == Api.HomeCache.LOCAL_FILES_ID) navController.navigate(Routes.LocalFiles.route)
     else if (entry.spotifyId == Api.HomeCache.LIKED_SONGS_ID) navController.navigate(Routes.Liked.route)
     else if (entry.spotifyId == Api.HomeCache.EPISODES_ID) navController.navigate(Routes.Episodes.route)

@@ -467,4 +467,29 @@
         <item quantity="other">接下来将播放 %d 首歌曲</item>
     </plurals>
     <string name="queue_list_none">这些歌曲都无法加入队列</string>
+    <string name="background_playback_open">打开应用设置</string>
+    <string name="background_playback_samsung">息屏后，三星系统仍可能让 MySpotilol 进入休眠。请将其加入“永不休眠的应用”：设置 &gt; 电池 &gt; 后台使用限制。</string>
+    <string name="hidden_song_toast">已隐藏“%1$s”。它不会再自动播放。</string>
+    <string name="hidden_songs_detail">标记为“不感兴趣”的歌曲会在列表和电台中被跳过</string>
+    <string name="hidden_songs_empty">还没有已隐藏的歌曲。请在歌曲菜单中选择“不感兴趣”。</string>
+    <string name="hidden_songs_title">已隐藏的歌曲</string>
+    <string name="hide_song">不感兴趣</string>
+    <string name="library_chip_by_me">我创建的</string>
+    <string name="library_chip_podcasts">播客</string>
+    <string name="licences_refused_by_spotify">Spotify 暂时拒绝在此账号上播放歌曲（许可被拒绝），因此播放已暂停。请稍后点按播放重试。</string>
+    <string name="login_failed_detail">Spotify 页面未能加载或启动。请检查网络连接后重试；如果仍然失败，请换一个网络试试。</string>
+    <string name="login_failed_title">登录未完成</string>
+    <string name="lyrics_select_hint">点按歌词行以选择要分享的内容</string>
+    <string name="lyrics_select_max">最多可分享 %d 行</string>
+    <string name="myspoti_shuffle_detail">开启随机播放后，播放列表、专辑或“已点赞的歌曲”会以随机顺序将每首歌播放一次，然后重新开始。关闭：使用 Spotify 的随机播放。免费账号在某些列表中可能仍使用 Spotify 的随机播放。</string>
+    <string name="myspoti_shuffle_imposed">Spotify 在此列表中为你的账号保留了它自己的随机播放：此列表已关闭 MySpotilol 随机播放。</string>
+    <string name="myspoti_shuffle_title">MySpotilol 随机播放</string>
+    <string name="new_episodes_empty">你关注的播客的所有最新节目都已播放。</string>
+    <string name="new_episodes_subtitle">来自你关注的播客</string>
+    <string name="new_episodes_title">新节目</string>
+    <string name="settings_hide_dj_detail">从首页移除 Spotify 的 DJ</string>
+    <string name="settings_hide_dj_title">隐藏 DJ</string>
+    <string name="settings_player_lyrics_card_detail">播放器下方的歌词卡片。关闭后，在封面上向上滑动仍可打开歌词。</string>
+    <string name="settings_player_lyrics_card_title">播放器中的歌词预览</string>
+    <string name="show_song_again">重新显示</string>
 </resources>

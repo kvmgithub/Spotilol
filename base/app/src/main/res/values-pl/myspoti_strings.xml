@@ -482,4 +482,29 @@
         <item quantity="other">%d utworu zagra jako następne</item>
     </plurals>
     <string name="queue_list_none">Żadnego z tych utworów nie można dodać do kolejki</string>
+    <string name="background_playback_open">Otwórz ustawienia aplikacji</string>
+    <string name="background_playback_samsung">Samsung nadal może uśpić MySpotilol przy wyłączonym ekranie. Dodaj aplikację do „Aplikacje nigdy nieuśpione”: Ustawienia &gt; Bateria &gt; Limity użycia w tle.</string>
+    <string name="hidden_song_toast">Ukryto: %1$s. Nie zagra już samo.</string>
+    <string name="hidden_songs_detail">Utwory oznaczone jako Nie interesuje mnie są pomijane na listach i w radiach</string>
+    <string name="hidden_songs_empty">Brak ukrytych utworów. Wybierz Nie interesuje mnie w menu utworu.</string>
+    <string name="hidden_songs_title">Ukryte utwory</string>
+    <string name="hide_song">Nie interesuje mnie</string>
+    <string name="library_chip_by_me">Moje</string>
+    <string name="library_chip_podcasts">Podcasty</string>
+    <string name="licences_refused_by_spotify">Spotify na razie odmawia odtwarzania utworów na tym koncie (licencja odrzucona), więc odtwarzanie wstrzymano. Dotknij odtwarzania, aby spróbować ponownie później.</string>
+    <string name="login_failed_detail">Strona Spotify nie załadowała się lub nie wystartowała. Sprawdź połączenie i spróbuj ponownie. Jeśli nadal się nie udaje, spróbuj innej sieci.</string>
+    <string name="login_failed_title">Logowanie nie zostało dokończone</string>
+    <string name="lyrics_select_hint">Stuknij wersy, aby wybrać, co udostępnić</string>
+    <string name="lyrics_select_max">Możesz udostępnić maksymalnie %d wersów</string>
+    <string name="myspoti_shuffle_detail">Gdy odtwarzanie losowe jest włączone, playlista, album lub polubione utwory odtwarzają każdy utwór raz, w losowej kolejności, zanim zaczną od nowa. Wyłączone: odtwarzanie losowe Spotify. Darmowe konto może zachować odtwarzanie losowe Spotify na niektórych listach.</string>
+    <string name="myspoti_shuffle_imposed">Spotify zachowuje na tej liście własne odtwarzanie losowe dla Twojego konta: losowanie MySpotilol jest dla niej wyłączone.</string>
+    <string name="myspoti_shuffle_title">Losowanie MySpotilol</string>
+    <string name="new_episodes_empty">Wszystkie ostatnie odcinki obserwowanych podcastów zostały odtworzone.</string>
+    <string name="new_episodes_subtitle">Z podcastów, które obserwujesz</string>
+    <string name="new_episodes_title">Nowe odcinki</string>
+    <string name="settings_hide_dj_detail">Usuwa DJ-a Spotify ze strony głównej</string>
+    <string name="settings_hide_dj_title">Ukryj DJ-a</string>
+    <string name="settings_player_lyrics_card_detail">Karta z tekstem pod odtwarzaczem. Wyłączona: przesunięcie w górę na okładce nadal otwiera tekst.</string>
+    <string name="settings_player_lyrics_card_title">Podgląd tekstu w odtwarzaczu</string>
+    <string name="show_song_again">Pokaż ponownie</string>
 </resources>

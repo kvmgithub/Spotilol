@@ -482,4 +482,29 @@
         <item quantity="other">%d трека заиграют следующими</item>
     </plurals>
     <string name="queue_list_none">Ни один из этих треков нельзя добавить в очередь</string>
+    <string name="background_playback_open">Открыть настройки приложения</string>
+    <string name="background_playback_samsung">Samsung всё ещё может усыплять MySpotilol при выключенном экране. Добавьте приложение в «Приложения, которые никогда не переходят в спящий режим»: Настройки &gt; Батарея &gt; Ограничения работы в фоновом режиме.</string>
+    <string name="hidden_song_toast">«%1$s» скрыт. Он больше не будет играть сам.</string>
+    <string name="hidden_songs_detail">Треки с отметкой «Не интересует» пропускаются в списках и радио</string>
+    <string name="hidden_songs_empty">Скрытых треков пока нет. Выберите «Не интересует» в меню трека.</string>
+    <string name="hidden_songs_title">Скрытые треки</string>
+    <string name="hide_song">Не интересует</string>
+    <string name="library_chip_by_me">Мои</string>
+    <string name="library_chip_podcasts">Подкасты</string>
+    <string name="licences_refused_by_spotify">Spotify пока отказывается воспроизводить треки на этом аккаунте (лицензия отклонена), поэтому воспроизведение приостановлено. Нажмите «Воспроизвести», чтобы повторить позже.</string>
+    <string name="login_failed_detail">Страница Spotify не загрузилась или не запустилась. Проверьте подключение и повторите попытку. Если не получается, попробуйте другую сеть.</string>
+    <string name="login_failed_title">Не удалось войти</string>
+    <string name="lyrics_select_hint">Нажимайте на строки, чтобы выбрать, чем поделиться</string>
+    <string name="lyrics_select_max">Можно поделиться не более чем %d строками</string>
+    <string name="myspoti_shuffle_detail">Если перемешивание включено, плейлист, альбом или «Любимые треки» воспроизводят каждый трек один раз в случайном порядке, а затем начинают заново. Выключено: перемешивание Spotify. Бесплатный аккаунт может сохранять перемешивание Spotify в некоторых списках.</string>
+    <string name="myspoti_shuffle_imposed">Spotify сохраняет для вашего аккаунта собственное перемешивание в этом списке: перемешивание MySpotilol для него выключено.</string>
+    <string name="myspoti_shuffle_title">Перемешивание MySpotilol</string>
+    <string name="new_episodes_empty">Все недавние выпуски подкастов, на которые вы подписаны, уже воспроизведены.</string>
+    <string name="new_episodes_subtitle">Из подкастов, на которые вы подписаны</string>
+    <string name="new_episodes_title">Новые выпуски</string>
+    <string name="settings_hide_dj_detail">Убирает DJ Spotify с главной</string>
+    <string name="settings_hide_dj_title">Скрыть DJ</string>
+    <string name="settings_player_lyrics_card_detail">Карточка с текстом под плеером. Если выключено, свайп вверх по обложке всё равно открывает текст.</string>
+    <string name="settings_player_lyrics_card_title">Превью текста в плеере</string>
+    <string name="show_song_again">Показать снова</string>
 </resources>

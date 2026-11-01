@@ -545,4 +545,29 @@
         <item quantity="other">%d Songs werden als Nächstes gespielt</item>
     </plurals>
     <string name="queue_list_none">Keiner dieser Songs kann eingereiht werden</string>
+    <string name="background_playback_open">App-Einstellungen öffnen</string>
+    <string name="background_playback_samsung">Samsung kann MySpotilol bei ausgeschaltetem Bildschirm trotzdem in den Ruhezustand versetzen. Füge die App zu „Nie automatisch in den Ruhezustand versetzte Apps“ hinzu: Einstellungen &gt; Akku &gt; Limits für Hintergrundnutzung.</string>
+    <string name="hidden_song_toast">%1$s ausgeblendet. Der Song wird nicht mehr von selbst gespielt.</string>
+    <string name="hidden_songs_detail">Songs mit „Kein Interesse“ werden in Listen und Radios übersprungen</string>
+    <string name="hidden_songs_empty">Noch keine ausgeblendeten Songs. Wähle „Kein Interesse“ im Menü eines Songs.</string>
+    <string name="hidden_songs_title">Ausgeblendete Songs</string>
+    <string name="hide_song">Kein Interesse</string>
+    <string name="library_chip_by_me">Von mir</string>
+    <string name="library_chip_podcasts">Podcasts</string>
+    <string name="licences_refused_by_spotify">Spotify verweigert auf diesem Konto gerade die Wiedergabe (Lizenz abgelehnt), daher wurde die Wiedergabe pausiert. Tippe später auf Wiedergabe, um es erneut zu versuchen.</string>
+    <string name="login_failed_detail">Die Seite von Spotify wurde nicht geladen oder nicht gestartet. Prüfe deine Verbindung und versuche es erneut. Wenn es weiter scheitert, probiere ein anderes Netzwerk.</string>
+    <string name="login_failed_title">Anmeldung nicht abgeschlossen</string>
+    <string name="lyrics_select_hint">Tippe auf Zeilen, um auszuwählen, was du teilen möchtest</string>
+    <string name="lyrics_select_max">Du kannst bis zu %d Zeilen teilen</string>
+    <string name="myspoti_shuffle_detail">Bei aktivierter Zufallswiedergabe spielt eine Playlist, ein Album oder Lieblingssongs jeden Song einmal in zufälliger Reihenfolge, bevor es von vorn beginnt. Aus: Zufallswiedergabe von Spotify. Ein kostenloses Konto behält bei manchen Listen die Zufallswiedergabe von Spotify.</string>
+    <string name="myspoti_shuffle_imposed">Spotify behält für dein Konto bei dieser Liste die eigene Zufallswiedergabe: Die MySpotilol-Zufallswiedergabe ist dafür aus.</string>
+    <string name="myspoti_shuffle_title">MySpotilol-Zufallswiedergabe</string>
+    <string name="new_episodes_empty">Alle neuen Episoden der Podcasts, denen du folgst, wurden abgespielt.</string>
+    <string name="new_episodes_subtitle">Von den Podcasts, denen du folgst</string>
+    <string name="new_episodes_title">Neue Episoden</string>
+    <string name="settings_hide_dj_detail">Entfernt den Spotify-DJ von der Startseite</string>
+    <string name="settings_hide_dj_title">DJ ausblenden</string>
+    <string name="settings_player_lyrics_card_detail">Die Songtext-Karte unter dem Player. Aus: Ein Wischen nach oben auf dem Cover öffnet den Songtext weiterhin.</string>
+    <string name="settings_player_lyrics_card_title">Songtext-Vorschau im Player</string>
+    <string name="show_song_again">Wieder anzeigen</string>
 </resources>

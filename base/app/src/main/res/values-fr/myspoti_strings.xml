@@ -551,4 +551,29 @@
         <item quantity="other">%d titres seront lus ensuite</item>
     </plurals>
     <string name="queue_list_none">Aucun de ces titres ne peut être mis en file</string>
+    <string name="background_playback_open">Ouvrir les réglages de l\'app</string>
+    <string name="background_playback_samsung">Samsung peut encore mettre MySpotilol en veille écran éteint. Ajoutez-le aux « Applications jamais en veille » : Réglages &gt; Batterie &gt; Limites d\'utilisation en arrière-plan.</string>
+    <string name="hidden_song_toast">%1$s masqué. Il ne se lancera plus tout seul.</string>
+    <string name="hidden_songs_detail">Les titres marqués « Pas intéressé » sont passés dans les listes et les radios</string>
+    <string name="hidden_songs_empty">Aucun titre masqué. Choisissez « Pas intéressé » dans le menu d\'un titre.</string>
+    <string name="hidden_songs_title">Titres masqués</string>
+    <string name="hide_song">Pas intéressé</string>
+    <string name="library_chip_by_me">Par moi</string>
+    <string name="library_chip_podcasts">Podcasts</string>
+    <string name="licences_refused_by_spotify">Spotify refuse pour l’instant de lire des morceaux sur ce compte (licence refusée) : la lecture a été mise en pause. Appuyez sur lecture pour réessayer plus tard.</string>
+    <string name="login_failed_detail">La page de Spotify ne s\'est pas chargée ou n\'a pas démarré. Vérifiez votre connexion et réessayez. Si cela échoue encore, essayez un autre réseau.</string>
+    <string name="login_failed_title">La connexion n\'a pas abouti</string>
+    <string name="lyrics_select_hint">Touchez des lignes pour choisir ce que vous partagez</string>
+    <string name="lyrics_select_max">Vous pouvez partager jusqu\'à %d lignes</string>
+    <string name="myspoti_shuffle_detail">Avec la lecture aléatoire activée, une playlist, un album ou les titres likés jouent chaque titre une fois, dans un ordre aléatoire, avant de recommencer. Désactivée : la lecture aléatoire de Spotify. Un compte gratuit peut garder celle de Spotify sur certaines listes.</string>
+    <string name="myspoti_shuffle_imposed">Spotify garde sa propre lecture aléatoire sur cette liste pour votre compte : la lecture aléatoire MySpotilol y est désactivée.</string>
+    <string name="myspoti_shuffle_title">Lecture aléatoire MySpotilol</string>
+    <string name="new_episodes_empty">Tous les épisodes récents des émissions que vous suivez ont été écoutés.</string>
+    <string name="new_episodes_subtitle">Des émissions que vous suivez</string>
+    <string name="new_episodes_title">Nouveaux épisodes</string>
+    <string name="settings_hide_dj_detail">Retire le DJ de Spotify de l\'accueil</string>
+    <string name="settings_hide_dj_title">Masquer le DJ</string>
+    <string name="settings_player_lyrics_card_detail">La carte de paroles sous le lecteur. Désactivé, un glissement vers le haut sur la pochette ouvre toujours les paroles.</string>
+    <string name="settings_player_lyrics_card_title">Aperçu des paroles dans le lecteur</string>
+    <string name="show_song_again">Afficher à nouveau</string>
 </resources>

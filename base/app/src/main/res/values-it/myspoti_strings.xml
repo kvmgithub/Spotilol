@@ -546,4 +546,29 @@
         <item quantity="other">%d brani verranno riprodotti dopo</item>
     </plurals>
     <string name="queue_list_none">Nessuno di questi brani può essere messo in coda</string>
+    <string name="background_playback_open">Apri impostazioni dell\'app</string>
+    <string name="background_playback_samsung">Samsung può ancora mettere MySpotilol in stop a schermo spento. Aggiungila a «App mai in stop»: Impostazioni &gt; Batteria &gt; Limiti di utilizzo in background.</string>
+    <string name="hidden_song_toast">%1$s nascosto. Non partirà più da solo.</string>
+    <string name="hidden_songs_detail">I brani segnati come Non mi interessa vengono saltati nelle liste e nelle radio</string>
+    <string name="hidden_songs_empty">Nessun brano nascosto. Scegli Non mi interessa nel menu di un brano.</string>
+    <string name="hidden_songs_title">Brani nascosti</string>
+    <string name="hide_song">Non mi interessa</string>
+    <string name="library_chip_by_me">Creati da me</string>
+    <string name="library_chip_podcasts">Podcast</string>
+    <string name="licences_refused_by_spotify">Spotify per ora rifiuta di riprodurre brani su questo account (licenza rifiutata), quindi la riproduzione è stata messa in pausa. Tocca riproduci per riprovare più tardi.</string>
+    <string name="login_failed_detail">La pagina di Spotify non si è caricata o non è partita. Controlla la connessione e riprova. Se continua a fallire, prova un\'altra rete.</string>
+    <string name="login_failed_title">Accesso non completato</string>
+    <string name="lyrics_select_hint">Tocca le righe per scegliere cosa condividere</string>
+    <string name="lyrics_select_max">Puoi condividere fino a %d righe</string>
+    <string name="myspoti_shuffle_detail">Con la riproduzione casuale attiva, una playlist, un album o i Brani che ti piacciono riproduce ogni brano una volta, in ordine casuale, prima di ricominciare. Disattivata: la riproduzione casuale di Spotify. Un account gratuito può mantenere quella di Spotify su alcune liste.</string>
+    <string name="myspoti_shuffle_imposed">Spotify mantiene la propria riproduzione casuale su questa lista per il tuo account: quella di MySpotilol è disattivata.</string>
+    <string name="myspoti_shuffle_title">Casuale di MySpotilol</string>
+    <string name="new_episodes_empty">Tutti gli episodi recenti dei programmi che segui sono stati riprodotti.</string>
+    <string name="new_episodes_subtitle">Dai programmi che segui</string>
+    <string name="new_episodes_title">Nuovi episodi</string>
+    <string name="settings_hide_dj_detail">Toglie il DJ di Spotify dalla Home</string>
+    <string name="settings_hide_dj_title">Nascondi il DJ</string>
+    <string name="settings_player_lyrics_card_detail">La scheda del testo sotto il lettore. Disattivata, uno scorrimento verso l\'alto sulla copertina apre comunque il testo.</string>
+    <string name="settings_player_lyrics_card_title">Anteprima del testo nel lettore</string>
+    <string name="show_song_again">Mostra di nuovo</string>
 </resources>

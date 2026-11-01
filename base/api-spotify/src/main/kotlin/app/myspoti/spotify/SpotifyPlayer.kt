@@ -151,6 +151,8 @@ class SpotifyPlayer(private val bridge: Bridge, private val scope: CoroutineScop
     @Volatile var playbackHeld: () -> Boolean = { false }
     /** The song last paused by the hold: paused once, so a play the user asks for on it stands. */
     @Volatile private var heldPausedUri: Uri? = null
+    /** The page was seen paused during the hold: its pause took, no other song is paused by it. */
+    @Volatile private var heldPauseTook = false
 
     /**
      * Whether Spotify is reachable (set by the host). Offline, a song stuck at its end cannot
@@ -1233,12 +1235,15 @@ class SpotifyPlayer(private val bridge: Bridge, private val scope: CoroutineScop
         noteTrackChange(lastTrackState, s, adJustEnded)
         lastTrackState = s
         _state.value = s
-        // Myspoti 2.0.2 (log seen): Spotify refusing the audio licences (429), the page skips on by
-        // itself through every song it gets no licence for. The hold's one pause can be sent while
-        // the page loads the next song and never take: each song it settles on while held is
-        // paused, once.
-        if (!playbackHeld()) heldPausedUri = null
-        else if (s?.item != null && !s.isPaused && !s.isBuffering && s.item?.uri != heldPausedUri) {
+        // Reported (2.0.2-beta.3, log seen): Spotify refusing the audio licences (429), the page
+        // skips on by itself through every song it gets no licence for, to the end of the list and
+        // round again. The hold's one pause was sent while the page was loading the next song and
+        // never took (the page kept playing for minutes): a song it settles on while held is
+        // paused, once. Only until the hold's pause took (reported: "a pause before each song"
+        // through the hold, every song the user played on paused again).
+        if (!playbackHeld()) { heldPausedUri = null; heldPauseTook = false }
+        else if (s?.item != null && s.isPaused) heldPauseTook = true
+        else if (!heldPauseTook && s?.item != null && !s.isPaused && !s.isBuffering && s.item?.uri != heldPausedUri) {
             heldPausedUri = s.item?.uri
             bridge.logger?.invoke("playback held (Spotify limiting): ${s.item?.name} paused")
             scope.launch { runCatching { pause() } }

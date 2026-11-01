@@ -203,10 +203,19 @@ class WebPlayerHost(private val context: Context) : BridgeHost {
                 // Spotify is limiting audio licences (429) and the app holds playback: the page still
                 // skipped on by itself through every song it got no licence for (~4 requests a second,
                 // each answered 429). It gets the same 429 from here, and Spotify sees none of them
-                // while the hold lasts (Myspoti 2.0.2-beta.5).
+                // while the hold lasts (Myspoti 2.0.2-beta.5). With the headers Spotify's own answer
+                // has for the page (without them the page read a CORS failure, status 0, not a 429)
+                // and the hold's time left (Myspoti 2.3.0).
                 if (request.method == "POST" && licenseLimited() && WebPolicy.isSpotifyApi(url) && LICENSE_PATH in url) {
                     if (heldLicenses++ == 0) log("audio licence requests answered here while Spotify is limiting")
-                    return WebResourceResponse("application/octet-stream", "utf-8", 429, "Too Many Requests", emptyMap(), ByteArrayInputStream(ByteArray(0)))
+                    val left = ((_licenseLimitedUntil.value - android.os.SystemClock.elapsedRealtime()) / 1000).coerceAtLeast(1)
+                    val headers = mapOf(
+                        "Access-Control-Allow-Origin" to WebPolicy.PLAYER_ORIGIN,
+                        "Access-Control-Allow-Credentials" to "true",
+                        "Access-Control-Expose-Headers" to "Retry-After",
+                        "Retry-After" to "$left",
+                    )
+                    return WebResourceResponse("application/octet-stream", "utf-8", 429, "Too Many Requests", headers, ByteArrayInputStream(ByteArray(0)))
                 }
                 if (AdBlock.isTelemetry(url)) {
                     // Once per host and route a session, so the diagnostics show what is blocked.

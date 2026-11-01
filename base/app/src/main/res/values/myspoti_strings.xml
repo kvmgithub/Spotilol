@@ -55,6 +55,8 @@
     <string name="background_playback_on">Battery optimization is off: music and Spotify Connect keep going with the screen off.</string>
     <string name="background_playback_off">Turn off battery optimization so Android does not pause the app in the background.</string>
     <string name="crossfade_summary">Fades the end of a track out and the next one in (no overlap). On this phone only.</string>
+    <string name="background_playback_samsung">Samsung can still put MySpotilol to sleep with the screen off. Add it to Never sleeping apps: Settings &gt; Battery &gt; Background usage limits.</string>
+    <string name="background_playback_open">Open app settings</string>
     <plurals name="local_files_count">
         <item quantity="one">%d track</item>
         <item quantity="other">%d tracks</item>

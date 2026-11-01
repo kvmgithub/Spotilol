@@ -40,6 +40,8 @@ object SongPlayer {
     private const val REMOTE_REFRESH_MS = 3_000L
     /** How often the state is read again while this phone plays (the page pushes its changes). */
     private const val LOCAL_REFRESH_MS = 15_000L
+    /** Nothing to read (this phone is idle): the refresh loop sleeps this long, or until a state or a Connect device wakes it. */
+    private const val IDLE_WAKE_MS = 60_000L
     /** A song this far past its end with no new state from the page: the state is read at once. */
     private const val SONG_END_GRACE_MS = 1_500L
     /** A transport command that has not answered by then is given up (the next one runs). */
@@ -244,9 +246,17 @@ object SongPlayer {
         // AwakeWebView), so reading the whole state and queue every 3 s only kept both processes
         // awake, screen off. It is read every LOCAL_REFRESH_MS as a safety net, and at once when
         // the song should have ended without the page saying what came next.
+        // With nothing playing and no Connect device, the loop below only found it had nothing to do,
+        // every 3 s, waking the main thread: it sleeps then, and a pushed state or a Connect device
+        // wakes it (the long timeout is only a net against a missed wake).
+        scope.launch { androidx.compose.runtime.snapshotFlow { _activeDevice.value }.collect { refreshWake.trySend(Unit) } }
         scope.launch {
             var lastRead = 0L
             while (true) {
+                if (_activeDevice.value == null && !PlaybackService.isRunning && !playing && !isBuffering) {
+                    kotlinx.coroutines.withTimeoutOrNull(IDLE_WAKE_MS) { refreshWake.receive() }
+                    continue
+                }
                 kotlinx.coroutines.delay(REMOTE_REFRESH_MS)
                 val remote = _activeDevice.value != null
                 if (!remote && !PlaybackService.isRunning) continue
@@ -464,8 +474,12 @@ object SongPlayer {
         pushNotification(null, boundState?.likeState?.value ?: false)
     }
 
+    /** Wakes the refresh loop of [attachEngine] when it sleeps: a state was pushed, or a Connect device took over. */
+    private val refreshWake = kotlinx.coroutines.channels.Channel<Unit>(kotlinx.coroutines.channels.Channel.CONFLATED)
+
     /** Notification, lock screen, Bluetooth and Android Auto. */
     private fun pushNotification(song: SongsModel?, liked: Boolean) {
+        refreshWake.trySend(Unit)
         val st = boundState
         // T4: during an ad break the page reports no track (the song before it would sit there,
         // buffering), so the notification and the widget say an ad is on instead of that song.

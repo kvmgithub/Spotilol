@@ -1946,7 +1946,7 @@ object SongPlayer {
             pauseSilently()
             kotlinx.coroutines.delay(300)   // the tail of the buffer is not heard at the old level
         } finally {
-            withContext(kotlinx.coroutines.NonCancellable) { set(1f) }
+            kotlinx.coroutines.withContext(kotlinx.coroutines.NonCancellable) { set(1f) }
         }
     }
 

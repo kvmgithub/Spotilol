@@ -552,4 +552,6 @@
     <string name="show_filter_all_played">Every episode is played.</string>
     <string name="show_filter_hide_played">Hide played</string>
     <string name="show_filter_unplayed_first">Unplayed first</string>
+    <string name="settings_hide_dj_title">Hide the DJ</string>
+    <string name="settings_hide_dj_detail">Removes Spotify\'s DJ from Home</string>
 </resources>

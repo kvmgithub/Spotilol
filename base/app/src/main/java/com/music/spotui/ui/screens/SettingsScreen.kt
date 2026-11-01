@@ -152,6 +152,12 @@ fun SettingsScreen(navController: NavController) {
                 checked = com.music.spotui.data.preferences.SolidNavBar.on,
                 onChecked = { com.music.spotui.data.preferences.SolidNavBar.set(ctx, it) },
             )
+            OptionRow(
+                label = stringResource(R.string.settings_hide_dj_title),
+                detail = stringResource(R.string.settings_hide_dj_detail),
+                checked = com.music.spotui.data.preferences.HideDjPref.on,
+                onChecked = { com.music.spotui.data.preferences.HideDjPref.set(ctx, it) },
+            )
             AccentRow()
             OrientationRow()
             LanguageRow()

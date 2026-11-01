@@ -65,6 +65,8 @@ object SongPlayer {
     private const val PLAY_CHECK_MS = 4_000L
     /** A resume of an episode that the page did not take is asked for again after that. */
     private const val EPISODE_RESUME_CHECK_MS = 2_500L
+    /** A timed sleep timer lowers the volume over its last seconds. */
+    private const val SLEEP_FADE_MS = 15_000L
     /** "Next" taps closer than this are sent as one jump. */
     private const val PAUSE_CHECK_MS = 1_200L
     private const val SKIP_BURST_MS = 350L
@@ -401,7 +403,7 @@ object SongPlayer {
         synchronized(wantedSaved) { wantedSaved.clear() }
         _queue.value = EngineQueue(); apiQueue = null; _nowPlaying.value = NowPlaying()
         lastTrackPrefs().edit().clear().apply(); savedLast = ""; resumeWhenReady = false
-        _activeDevice.value = null; _sleepEndsAt.value = null; sleepTrackId = null
+        _activeDevice.value = null; _sleepEndsAt.value = null; sleepFade?.cancel(); main.removeCallbacks(sleepFadeRunnable); sleepTrackId = null
         _video.value = VideoState(); videoFullscreen.value = false
         boundState?.let { state ->
             state.updateQueue(emptyList())
@@ -943,11 +945,12 @@ object SongPlayer {
 
     fun pause() { Haptics.click(); cancelBurst(); pauseSilently() }
 
-    private fun pauseSilently() {
+    /** [send] false: the engine has paused already (the sleep timer's fade). */
+    private fun pauseSilently(send: Boolean = true) {
         if (LocalPlayer.active.value) { LocalPlayer.pause(); return }
         intendPaused()
         positionMs = getCurrentPosition(); positionAt = SystemClock.elapsedRealtime(); playing = false
-        transport(pullBack = false) { api.player.pause() }
+        if (send) transport(pullBack = false) { api.player.pause() }
         ensurePaused(++pauseGen, attempt = 1)
     }
 
@@ -1779,13 +1782,21 @@ object SongPlayer {
     // ── Sleep timer ──
     private val _sleepEndsAt = mutableStateOf<Long?>(null)   // elapsedRealtime, or -1 = end of track
     val sleepEndsAt: State<Long?> get() = _sleepEndsAt
-    private val sleepRunnable = Runnable { _sleepEndsAt.value = null; pauseSilently() }
+    private val sleepRunnable = Runnable {
+        _sleepEndsAt.value = null
+        // The fade ends in the pause itself.
+        if (sleepFade?.isActive != true) pauseSilently()
+    }
+    private val sleepFadeRunnable = Runnable { startSleepFade() }
+    private var sleepFade: kotlinx.coroutines.Job? = null
     private var sleepTrackId: String? = null
 
     /** [minutes] null = off, 0 = at the end of the current track. */
     fun setSleepTimer(minutes: Int?) {
         main.removeCallbacks(sleepRunnable)
+        main.removeCallbacks(sleepFadeRunnable)
         main.removeCallbacks(endOfTrackWatch)
+        sleepFade?.cancel(); sleepFade = null   // a fade under way ends with the volume back, the song going on
         sleepTrackId = null
         when {
             minutes == null -> _sleepEndsAt.value = null
@@ -1798,7 +1809,45 @@ object SongPlayer {
             else -> {
                 _sleepEndsAt.value = SystemClock.elapsedRealtime() + minutes * 60_000L
                 main.postDelayed(sleepRunnable, minutes * 60_000L)
+                main.postDelayed(sleepFadeRunnable, (minutes * 60_000L - SLEEP_FADE_MS).coerceAtLeast(0L))
             }
+        }
+    }
+
+    /**
+     * The last [SLEEP_FADE_MS] of a timed sleep timer: the volume goes down along the ear's curve
+     * and the song is paused at the end of the timer, the volume back for the next play. Spotify
+     * songs use the pause's own ramp ([app.myspoti.api.Player.pauseSlowly]), the others the player's volume.
+     */
+    private fun startSleepFade() {
+        if (!isPlaying()) return
+        sleepFade?.cancel()
+        sleepFade = scope.launch {
+            if (LocalPlayer.active.value) {
+                fadeLocalOut(SLEEP_FADE_MS)
+                return@launch
+            }
+            runCatching { api.player.pauseSlowly(SLEEP_FADE_MS) }.onFailure { if (it is kotlinx.coroutines.CancellationException) throw it }
+            if (playing) { _sleepEndsAt.value = null; pauseSilently(send = false) }
+        }
+    }
+
+    private suspend fun fadeLocalOut(ms: Long) {
+        fun set(gain: Float) = LocalPlayer.setGain(gain)
+        val startedAt = SystemClock.elapsedRealtime()
+        try {
+            while (true) {
+                if (!isPlaying()) return   // paused meanwhile: only the volume to put back
+                val t = ((SystemClock.elapsedRealtime() - startedAt).toFloat() / ms).coerceIn(0f, 1f)
+                if (t >= 1f) break
+                set(Math.pow(10.0, -2.0 * t).toFloat())   // 1 down to -40 dB
+                kotlinx.coroutines.delay(250L)
+            }
+            _sleepEndsAt.value = null
+            pauseSilently()
+            kotlinx.coroutines.delay(300)   // the tail of the buffer is not heard at the old level
+        } finally {
+            withContext(kotlinx.coroutines.NonCancellable) { set(1f) }
         }
     }
 

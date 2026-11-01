@@ -67,6 +67,8 @@ object LocalPlayer {
 
     fun resume() { exo?.play() }
     fun pause() { exo?.pause() }
+    /** The sleep timer's fade: the player's volume. */
+    fun setGain(gain: Float) { exo?.volume = gain }
     fun next() { exo?.let { if (it.hasNextMediaItem()) it.seekToNextMediaItem() } }
     fun previous() { exo?.let { if (it.currentPosition > 3000 || !it.hasPreviousMediaItem()) it.seekTo(0) else it.seekToPreviousMediaItem() } }
     fun seekTo(ms: Long) { exo?.seekTo(ms) }

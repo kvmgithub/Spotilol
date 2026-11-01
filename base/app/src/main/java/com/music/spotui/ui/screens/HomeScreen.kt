@@ -76,6 +76,7 @@ import com.music.spotui.data.entity.AlbumsModel
 import com.music.spotui.data.entity.ArtistsModel
 import com.music.spotui.data.entity.HomeFeedModel
 import com.music.spotui.data.entity.HomeItem
+import com.music.spotui.data.entity.withoutDj
 import com.music.spotui.data.entity.HomeSection
 import com.music.spotui.ui.components.Loader
 import com.music.spotui.ui.navigation.Routes
@@ -167,10 +168,15 @@ fun HomeFeedContent(navController: NavController, feed: HomeFeedModel, facet: St
     // ("Jump back in", "Made For …"), it renders as a titled carousel first,
     // not force-squeezed into the grid.
     // Podcasts are off for now: their shows and episodes leave the feed.
-    val sections = if (com.music.spotui.data.api.Features.PODCASTS) feed.sections
+    // Kept between recompositions: a new list for every one of them would restart the rows below.
+    val hideDj = com.music.spotui.data.preferences.HideDjPref.on
+    val sections = remember(feed, hideDj) {
+        val all = if (com.music.spotui.data.api.Features.PODCASTS) feed.sections
         else feed.sections.map { s -> s.copy(items = s.items.filterNot { it is HomeItem.Show }) }.filter { it.items.isNotEmpty() }
-    val gridSection = sections.firstOrNull()?.takeIf { it.title.isBlank() }
-    val carousels = if (gridSection != null) sections.drop(1) else sections
+        if (hideDj) all.withoutDj() else all
+    }
+    val gridSection = remember(sections) { sections.firstOrNull()?.takeIf { it.title.isBlank() } }
+    val carousels = remember(sections, gridSection) { if (gridSection != null) sections.drop(1) else sections }
     // The shortcuts at the top load in the background, ready before a tap.
     androidx.compose.runtime.LaunchedEffect(gridSection?.items?.map { it.name }) {
         val top = gridSection?.items.orEmpty().take(8).mapNotNull { item ->

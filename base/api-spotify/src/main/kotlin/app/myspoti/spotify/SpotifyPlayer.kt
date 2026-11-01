@@ -1411,8 +1411,14 @@ class SpotifyPlayer(private val bridge: Bridge, private val scope: CoroutineScop
         }
     }
 
-    override suspend fun pause() {
-        pausedByUser = true
+    override suspend fun pause() = pauseOver(PAUSE_MS)
+
+    /** The sleep timer's end: the same pause over [fadeMs], and the level back for the next play. A cancel keeps the song playing. */
+    override suspend fun pauseSlowly(fadeMs: Long) = pauseOver(fadeMs)
+
+    private suspend fun pauseOver(fadeMs: Long) {
+        // A long fade is still playing: the song is only marked paused once it is.
+        if (fadeMs <= PAUSE_MS) pausedByUser = true
         endCrossfade(restore = true)
         // Nothing playing (no state yet, or already paused): nothing to send. A pause on the
         // orphan session a fresh page finds makes the page claim it with a transfer first —
@@ -1436,9 +1442,14 @@ class SpotifyPlayer(private val bridge: Bridge, private val scope: CoroutineScop
         try {
             if (fadeOut) {
                 runCatching {
-                    bridge.call("media.ramp", buildJsonObject { put("to", 0); put("ms", PAUSE_MS) }, timeoutMs = LEVEL_TIMEOUT_MS, quiet = true)
+                    bridge.call("media.ramp", buildJsonObject { put("to", 0); put("ms", fadeMs) }, timeoutMs = LEVEL_TIMEOUT_MS, quiet = true)
                 }
-                delay(PAUSE_MS)
+                delay(fadeMs)
+            } else if (fadeMs > PAUSE_MS) delay(fadeMs)   // nothing to fade (another device plays): the pause still comes at the end
+            if (fadeMs > PAUSE_MS) {
+                // Paused by the user meanwhile: nothing left to send.
+                if (_state.value?.isPaused != false) return
+                pausedByUser = true
             }
             command("player.pause")
         } finally {

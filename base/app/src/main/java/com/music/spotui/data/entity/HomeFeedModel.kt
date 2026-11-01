@@ -17,6 +17,13 @@ data class HomeSection(
     val items: List<HomeItem>,
 )
 
+/** The shelves without Spotify's DJ (a playlist card named "DJ"); a shelf left empty goes. */
+fun List<HomeSection>.withoutDj(): List<HomeSection> =
+    map { s -> s.copy(items = s.items.filterNot { it is HomeItem.Playlist && (it.id == DJ_PLAYLIST_ID || it.name.trim().equals("DJ", ignoreCase = true)) }) }
+        .filter { it.items.isNotEmpty() }
+
+private const val DJ_PLAYLIST_ID = "37i9dQZF1EYkqdzj48dyYq"
+
 @kotlinx.serialization.Serializable
 sealed class HomeItem {
     abstract val name: String

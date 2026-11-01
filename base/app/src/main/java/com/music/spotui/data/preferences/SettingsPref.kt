@@ -102,6 +102,21 @@ object CrossfadePref {
     }
 }
 
+/**
+ * "Hide the DJ" on Home (off by default): Spotify's DJ, which comes in the home feed as a
+ * playlist card, leaves the shelves. Read by both Home screens as state.
+ */
+object HideDjPref {
+    private const val KEY = "hide_dj"
+    var on by androidx.compose.runtime.mutableStateOf(prefs(com.music.spotui.di.Graph.app).getBoolean(KEY, false))
+        private set
+
+    fun set(c: Context, value: Boolean) {
+        on = value
+        prefs(c).edit().putBoolean(KEY, value).apply()
+    }
+}
+
 fun getCrossfadeSeconds(c: Context): Int =
     prefs(c).getInt(KEY_CROSSFADE, 0).coerceIn(0, CrossfadePref.MAX)
 

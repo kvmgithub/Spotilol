@@ -6,6 +6,14 @@ Each version section is the text of the GitHub pre-release tagged `ui-v<version>
 
 ## [Unreleased]
 
+## [0.13.1] - 2026-11-02
+
+### Removed
+- With crossfade on, Spotify's player again sees its buffered audio as it is. Since 0.11.2 it saw it moved back by the crossfade reserve, to make it fetch earlier. The dropouts that change answered turned out to come from a failing radio cell, and the moved ranges made the player fetch the same audio again and again until a guard switched them off (seen in two logs). The crossfade, its time shown to the player and the bridging of stalls stay as they were.
+
+### Diagnostics
+- `page xfade` `hold` lines keep the stall's length, the reserve it met and what of it was heard; the fields about moved ranges (`moved`, `reads`, `fetches`) are gone.
+
 ## [0.13.0] - 2026-11-01
 
 Taken from Myspoti 2.3.0. Not taken: Chromecast and Cast speakers, downloads, extensions, the Immersive look, the equalizer and Stats for nerds (they cover only songs the app plays itself), the source switch, third-party lyrics sources, repeat once, one APK per architecture, the support reminders and Brazilian Portuguese.

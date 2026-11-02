@@ -413,17 +413,14 @@
   const xf = { seconds: 0, el: null, k: 1, ours: false, pageRate: 1, pitch: null, segs: [{ at: 0, k: 1 }], cur: 0,
     switchAt: -1e9, lastRem: Infinity, kind: null, durationMs: 0, speed: 1, planned: null, noted: '',
     resets: 0, sets: 0, endingUntil: 0, overlapUntil: 0, probes: [], masked: new WeakSet(),
-    rangesOff: false, sbMasked: false, reads: { el: 0, sb: 0 }, holdWait: false, holdRate: false, hold: null };
+    holdWait: false, holdRate: false, hold: null };
 
-  // The element's own speed, time and buffered ranges, past the masks below.
+  // The element's own speed and time, past the masks below.
   const RATE = Object.getOwnPropertyDescriptor(HTMLMediaElement.prototype, 'playbackRate');
   const TIME = Object.getOwnPropertyDescriptor(HTMLMediaElement.prototype, 'currentTime');
-  const BUFFERED = Object.getOwnPropertyDescriptor(HTMLMediaElement.prototype, 'buffered');
-  const SB_BUFFERED = window.SourceBuffer ? Object.getOwnPropertyDescriptor(SourceBuffer.prototype, 'buffered') : null;
   const realRate = el => RATE.get.call(el);
   const setRealRate = (el, v) => RATE.set.call(el, v);
   const realTime = el => TIME.get.call(el);
-  const realBuffered = el => BUFFERED.get.call(el);
 
   // Seconds the page's view of the element lags its real time (the heard time, see xfMask): 0 for
   // any other element, and in the song's last moments, where the page must see its song end.
@@ -434,61 +431,13 @@
     return Math.min(t, heardLag());
   };
 
-  // Buffered ranges moved back by that same lag, so the audio the page sees ahead of its time is
-  // what the element really has ahead. Next to the heard time alone the page counted the reserve
-  // as audio still to play and fetched the next part that much later: past ~5 s of reserve the
-  // element ran dry for seconds, more often the larger the reserve (0.11.2, log seen: gaps of
-  // 1–5 s from the middle of a song on, the first one with the network answering in 0.3 s).
-  const pageRanges = (el, r) => {
-    const d = xf.rangesOff ? 0 : pageLag(el);
-    if (d <= 0.05 || !r.length) return r;
-    return { length: r.length, start: i => Math.max(0, r.start(i) - d), end: i => Math.max(0, r.end(i) - d) };
-  };
-
-  // The same for the SourceBuffer this song is appended to: the one whose ranges end where the
-  // element's do (a song loaded ahead on its own buffer is left as it is).
-  const xfMaskSourceBuffers = () => {
-    if (xf.sbMasked || !SB_BUFFERED || !SB_BUFFERED.get) return;
-    xf.sbMasked = true;
-    Object.defineProperty(SourceBuffer.prototype, 'buffered', {
-      configurable: true,
-      enumerable: SB_BUFFERED.enumerable,
-      get() {
-        const r = SB_BUFFERED.get.call(this), el = xf.el;
-        xf.reads.sb++;
-        if (!el || !r.length) return r;
-        const e = realBuffered(el);
-        return e.length && Math.abs(e.end(e.length - 1) - r.end(r.length - 1)) < 0.01 ? pageRanges(el, r) : r;
-      },
-    });
-  };
-
-  // Should the page pick the part it fetches next by where its buffered ranges end, moved ranges
-  // would make it fetch the same audio again and again: more than XF_FETCH_MAX audio requests in
-  // 30 s while they are moved shows the ranges as they are again, for this page.
-  const XF_FETCH_MAX = 20;
-  const AUDIO_FILE = /\/audio\/[0-9a-f]{40}/;
-  const xfFetches = [];
-  try {
-    new PerformanceObserver(list => {
-      for (const e of list.getEntries()) {
-        if (!AUDIO_FILE.test(e.name)) continue;
-        const now = performance.now();
-        xfFetches.push(now);
-        while (now - xfFetches[0] > 30000) xfFetches.shift();
-        if (!xf.rangesOff && xfFetches.length > XF_FETCH_MAX && xf.el && pageLag(xf.el) > 0.05) {
-          xf.rangesOff = true;
-          xfNote('unsupported', { why: 'the page fetched audio ' + xfFetches.length + ' times in 30 s: buffered ranges shown as they are' });
-        }
-      }
-    }).observe({ type: 'resource' });
-  } catch (e) { /* no resource timing: the ranges stay moved */ }
-
   // The page's player must not see the reserve being built: a speed it did not set, or a time
   // running ahead of the clock, made it report its state about four times a second (to the
   // page and to Spotify). Its element therefore shows the speed the page set and the time that
-  // is heard (the element's time less the reserve), with its buffered ranges to match (see
-  // pageRanges); what the page sets goes to the element.
+  // is heard (the element's time less the reserve); what the page sets goes to the element.
+  // Its buffered ranges stay real (0.13.1): moving them back by the reserve (0.11.2) answered
+  // stalls that came from a failing radio cell, and made the page fetch the same audio again
+  // until a guard switched it off (seen twice).
   const xfMask = el => {
     if (xf.masked.has(el)) return;
     xf.masked.add(el);
@@ -510,11 +459,6 @@
         get() { return realTime(el) - pageLag(el); },
         set(v) { TIME.set.call(el, v); },
       });
-      Object.defineProperty(el, 'buffered', {
-        configurable: true,
-        get() { xf.reads.el++; return pageRanges(el, realBuffered(el)); },
-      });
-      xfMaskSourceBuffers();
     } catch (e) { xfNote('unsupported', { why: 'element cannot be masked: ' + String(e && e.message || e).slice(0, 100) }); }
   };
 
@@ -609,13 +553,10 @@
     const el = xf.el;
     if (held) xf.hold = { at: performance.now(), reserve: r1(el ? pageLag(el) : 0), by: which === 'holdWait' ? 'wait' : 'speed 0' };
     else if (xf.hold) {
-      // Diagnosis: the stall, the reserve it met, what of it was heard, and (see pageRanges) whether
-      // the ranges were moved, the page's reads of them since the last note and its audio requests in 30 s.
+      // Diagnosis: the stall, the reserve it met and what of it was heard.
       const h = xf.hold, gap = (performance.now() - h.at) / 1000;
       xf.hold = null;
-      if (gap >= 0.2) xfNote('hold', { gap: r1(gap), reserve: h.reserve, heard: r1(Math.max(0, gap - h.reserve)), by: h.by,
-        moved: !xf.rangesOff, reads: xf.reads, fetches: xfFetches.length, el: el && el.__mspId });
-      xf.reads = { el: 0, sb: 0 };
+      if (gap >= 0.2) xfNote('hold', { gap: r1(gap), reserve: h.reserve, heard: r1(Math.max(0, gap - h.reserve)), by: h.by, el: el && el.__mspId });
     }
     xfMark(held ? 0 : (xf.ours ? xf.k : 1));
     xfLay();

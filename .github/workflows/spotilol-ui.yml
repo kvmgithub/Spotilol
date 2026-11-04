@@ -1,8 +1,9 @@
 # MySpotilol: Myspoti's native interface with the security scope of Spotilol and Spotilol Lite.
 # Builds on every push to myspoti-ui and signs with the fork key (APK_SIGNING_BUNDLE).
 # CHANGELOG-UI.md holds the version: when its newest "## [X.Y.Z] - date" section has no ui-vX.Y.Z
-# release yet, the build is published as that pre-release, with the section as its text.
-# Pre-releases never become "latest", so Spotilol Lite's update check (releases/latest) ignores them.
+# release yet, the build is published as that release, marked "Latest", with the section as its text.
+# Up to 0.13.1 these were pre-releases next to Spotilol Lite; from 1.0.0 on MySpotilol is the main app.
+# Spotilol Lite's update check (releases/latest) reads the tag "ui-v..." as no newer version.
 # The notes job keeps the text of every published release in step with its section.
 name: MySpotilol
 on:
@@ -114,13 +115,13 @@ jobs:
               assert not found, found
           PY
           (cd release-assets && sha256sum *.apk > SHA256SUMS.txt && cat SHA256SUMS.txt)
-      - name: Publish pre-release
+      - name: Publish release
         if: steps.mode.outputs.publish == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release create "ui-v${APK_VERSION_NAME}" release-assets/* --target "$GITHUB_SHA" --title "MySpotilol ${APK_VERSION_NAME}" \
-            --notes-file "$RUNNER_TEMP/notes.md" --prerelease --latest=false
+            --notes-file "$RUNNER_TEMP/notes.md" --latest
       - name: Publish failure log
         if: failure()
         env:

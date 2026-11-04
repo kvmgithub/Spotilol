@@ -2,7 +2,7 @@
 
 An Android app for Spotify without ads: [Myspoti](https://github.com/kota-zo/myspoti)'s native interface on top of Spotify's own Web Player, with the security rules of Spotilol and Spotilol Lite. Home, search, library, artist, album, playlist and podcast screens are native; playback runs in the Web Player in a hidden WebView (Widevine).
 
-**Download:** [MySpotilol releases](https://github.com/kvmgithub/Spotilol/releases?q=MySpotilol&expanded=true), newest first (`MySpotilol-arm64-<version>.apk`, Android 10 or later, arm64). What changed: [CHANGELOG-UI.md](CHANGELOG-UI.md).
+**Download:** [latest release](https://github.com/kvmgithub/Spotilol/releases/latest) (`MySpotilol-arm64-<version>.apk`, Android 10 or later, arm64). What changed: [CHANGELOG-UI.md](CHANGELOG-UI.md).
 
 - No audio ads; Spotify's ad and telemetry requests are blocked
 - Spotify Connect, Spotify's own lyrics (word by word where Spotify times them), Canvas, podcasts, local files, sleep timer, a Recap kept on the phone
@@ -10,26 +10,28 @@ An Android app for Spotify without ads: [Myspoti](https://github.com/kota-zo/mys
 - Encrypted account profiles: switch accounts without signing in again
 - No Google Play services, no Firebase, no in-app updater, no social features
 
-## Two apps in this repository
+## MySpotilol and Spotilol Lite
+
+MySpotilol is the main app of this repository since 1.0.0. Spotilol Lite, the app this repository started with, is no longer developed: Spotilol itself is abandoned, and Lite's last release is v1.2.1009.
 
 | | MySpotilol | Spotilol Lite |
 |---|---|---|
 | Branch | `myspoti-ui` (default) | [`main`](https://github.com/kvmgithub/Spotilol/tree/main) |
-| State | developed further | kept working: security and sign-in fixes |
+| State | developed | no longer developed |
 | Interface | Myspoti's native screens | Spotify's Web Player, adjusted |
 | Package | `com.project.lol.fork.ui` | `com.project.lol.fork` |
-| Releases | pre-releases `ui-v<version>` | `v1.2.<n>`, marked "Latest" |
+| Releases | `ui-v<version>` (pre-releases up to 0.13.1) | `v1.2.<n>` |
 
-Both install side by side and are signed with the same fork key. Spotilol Lite's update check reads the release marked "Latest", so MySpotilol is published as pre-releases and Lite keeps that mark.
+Both are signed with the same fork key but have different packages: MySpotilol installs next to Lite, not over it, and needs its own sign-in. Lite's update check does not offer MySpotilol releases.
 
 Base: [kota-zo/myspoti](https://github.com/kota-zo/myspoti) 2.0.2-beta.2 (`37dd1ee`, GPL-3.0), merged from the vendor branch `myspoti-upstream`, with selected fixes and features of 2.1.0 (`320ba2a`), 2.2.0 (`d990372`) and 2.3.0 (`a1be680`) ported by hand (its extensions and Immersive look are left out).
 
 ## Install
 
 - Package `com.project.lol.fork.ui`, label **MySpotilol**, signed with the Spotilol fork key. Versions up to 0.2.1010 were called Spotilol UI; they upgrade in place.
-- Spotilol Lite (`com.project.lol.fork`) stays installed and unchanged. MySpotilol needs its own sign-in; Lite's saved profiles are not shared.
-- APKs are published as pre-releases tagged `ui-v<version>`. This variant has no update checker of its own.
-- Versions follow [Semantic Versioning](https://semver.org) from 0.3.0 on: patch for fixes, minor for features or larger upstream merges, 1.0.0 once it replaces Spotilol Lite in daily use. Earlier releases used the CI run number as patch version.
+- Spotilol Lite (`com.project.lol.fork`) can stay installed; its saved profiles are not shared, so MySpotilol needs its own sign-in.
+- APKs are published as releases tagged `ui-v<version>`, the newest marked "Latest" (up to 0.13.1 as pre-releases). The app has no update checker of its own.
+- Versions follow [Semantic Versioning](https://semver.org) from 0.3.0 on: patch for fixes, minor for features or larger upstream merges; 1.0.0 marks MySpotilol replacing Spotilol Lite as the main app. Earlier releases used the CI run number as patch version.
 - What changed in each release: [CHANGELOG-UI.md](CHANGELOG-UI.md), also shown on each GitHub release. `CHANGELOG.md` is Myspoti's own history, kept as upstream ships it.
 
 ## Scope compared to Myspoti

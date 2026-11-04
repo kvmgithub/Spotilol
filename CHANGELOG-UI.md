@@ -2,9 +2,16 @@
 
 All notable changes to MySpotilol (formerly Spotilol UI), newest first. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html) from 0.3.0 on. Releases before 0.3.0 used the CI run number as their patch version.
 
-Each version section is the text of the GitHub pre-release tagged `ui-v<version>`; CI adds the commit, package and check note below it. To release, rename `## [Unreleased]` to `## [X.Y.Z] - YYYY-MM-DD` with a higher version: the next push to `myspoti-ui` builds, signs and publishes it.
+Each version section is the text of the GitHub release tagged `ui-v<version>` (pre-releases up to 0.13.1); CI adds the commit, package and check note below it. To release, rename `## [Unreleased]` to `## [X.Y.Z] - YYYY-MM-DD` with a higher version: the next push to `myspoti-ui` builds, signs and publishes it.
 
 ## [Unreleased]
+
+## [1.0.0] - 2026-11-04
+
+MySpotilol is now the main app of this repository and replaces Spotilol Lite, which is no longer developed. The app itself is the same as 0.13.1.
+
+### Changed
+- Releases are regular GitHub releases, the newest marked "Latest", instead of pre-releases. Spotilol Lite's update check reads that release, but does not offer MySpotilol as an update: the two apps have different packages and install side by side.
 
 ## [0.13.1] - 2026-11-02
 

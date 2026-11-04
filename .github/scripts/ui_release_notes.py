@@ -68,10 +68,12 @@ def body(text, version, sha):
     section = next((b for v, b in versions(text) if name(v) == version), None)
     if section is None:
         raise ValueError(f"no section for {version}")
+    # Up to 0.13.1 MySpotilol came out as pre-releases next to Spotilol Lite; from 1.0.0 on it is the main app.
+    pre = "Pre-release: Spotilol Lite does not offer it as an update. " if version.startswith("0.") else ""
     return (
         f"{section}\n\n---\n"
         f"Commit `{sha[:7]}` · package `com.project.lol.fork.ui`, installs next to Spotilol Lite.\n"
-        "Pre-release: Spotilol Lite does not offer it as an update. Checked automatically (tests, signed build); "
+        f"{pre}Checked automatically (tests, signed build); "
         "device testing is separate. Checksums in `SHA256SUMS.txt`.\n"
     )
 

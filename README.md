@@ -1,14 +1,34 @@
 # MySpotilol
 
-Myspoti's native Android interface with the feature and security scope of Spotilol and Spotilol Lite (formerly "Spotilol UI"). This branch (`myspoti-ui`) is separate from Spotilol Lite on `main`; both apps install side by side.
+An Android app for Spotify without ads: [Myspoti](https://github.com/kota-zo/myspoti)'s native interface on top of Spotify's own Web Player, with the security rules of Spotilol and Spotilol Lite. Home, search, library, artist, album, playlist and podcast screens are native; playback runs in the Web Player in a hidden WebView (Widevine).
 
-Base: [kota-zo/myspoti](https://github.com/kota-zo/myspoti) 2.0.2-beta.2 (`37dd1ee`, GPL-3.0), merged from the vendor branch `myspoti-upstream`, with selected fixes and features of 2.1.0 (`320ba2a`), 2.2.0 (`d990372`) and 2.3.0 (`a1be680`) ported by hand (its extensions and Immersive look are left out). Playback still runs in Spotify's Web Player in a hidden WebView (Widevine); search, library, artist, album and playlist screens are native.
+**Download:** [MySpotilol releases](https://github.com/kvmgithub/Spotilol/releases?q=MySpotilol&expanded=true), newest first (`MySpotilol-arm64-<version>.apk`, Android 10 or later, arm64). What changed: [CHANGELOG-UI.md](CHANGELOG-UI.md).
+
+- No audio ads; Spotify's ad and telemetry requests are blocked
+- Spotify Connect, Spotify's own lyrics (word by word where Spotify times them), Canvas, podcasts, local files, sleep timer, a Recap kept on the phone
+- A real crossfade and a volume boost up to 200 %
+- Encrypted account profiles: switch accounts without signing in again
+- No Google Play services, no Firebase, no in-app updater, no social features
+
+## Two apps in this repository
+
+| | MySpotilol | Spotilol Lite |
+|---|---|---|
+| Branch | `myspoti-ui` (default) | [`main`](https://github.com/kvmgithub/Spotilol/tree/main) |
+| State | developed further | kept working: security and sign-in fixes |
+| Interface | Myspoti's native screens | Spotify's Web Player, adjusted |
+| Package | `com.project.lol.fork.ui` | `com.project.lol.fork` |
+| Releases | pre-releases `ui-v<version>` | `v1.2.<n>`, marked "Latest" |
+
+Both install side by side and are signed with the same fork key. Spotilol Lite's update check reads the release marked "Latest", so MySpotilol is published as pre-releases and Lite keeps that mark.
+
+Base: [kota-zo/myspoti](https://github.com/kota-zo/myspoti) 2.0.2-beta.2 (`37dd1ee`, GPL-3.0), merged from the vendor branch `myspoti-upstream`, with selected fixes and features of 2.1.0 (`320ba2a`), 2.2.0 (`d990372`) and 2.3.0 (`a1be680`) ported by hand (its extensions and Immersive look are left out).
 
 ## Install
 
 - Package `com.project.lol.fork.ui`, label **MySpotilol**, signed with the Spotilol fork key. Versions up to 0.2.1010 were called Spotilol UI; they upgrade in place.
 - Spotilol Lite (`com.project.lol.fork`) stays installed and unchanged. MySpotilol needs its own sign-in; Lite's saved profiles are not shared.
-- APKs are published as pre-releases tagged `ui-v<version>`. Pre-releases never become "latest", so Spotilol Lite's update check ignores them. This variant has no update checker of its own.
+- APKs are published as pre-releases tagged `ui-v<version>`. This variant has no update checker of its own.
 - Versions follow [Semantic Versioning](https://semver.org) from 0.3.0 on: patch for fixes, minor for features or larger upstream merges, 1.0.0 once it replaces Spotilol Lite in daily use. Earlier releases used the CI run number as patch version.
 - What changed in each release: [CHANGELOG-UI.md](CHANGELOG-UI.md), also shown on each GitHub release. `CHANGELOG.md` is Myspoti's own history, kept as upstream ships it.
 
@@ -61,7 +81,7 @@ Policy, redaction, blocking and profile regressions run as JVM tests in CI.
 ## Credits and lineage
 
 - [Myspoti](https://github.com/kota-zo/myspoti) by kota-zo: the native interface, with UI derived from [Spotui](https://github.com/Spotui/Spotui) and [Metrolist](https://github.com/MetrolistGroup/Metrolist).
-- Spotilol by lyssadev, after deviato's Spotifuck; security rules, blocking and encrypted profiles from [kvmgithub/Spotilol](https://github.com/kvmgithub/Spotilol).
+- Spotilol by lyssadev, after deviato's Spotifuck; security rules, blocking and encrypted profiles from this repository's Spotilol fork (branch [`main`](https://github.com/kvmgithub/Spotilol/tree/main)).
 - [Spotilol Lite](https://github.com/AdNenio/Spotilol-Lite) by AdNenio: the lean feature scope.
 
 ## Build

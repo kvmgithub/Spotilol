@@ -8,9 +8,7 @@
   Based on <a href="https://github.com/AdNenio/Spotilol-Lite">AdNenio/Spotilol-Lite</a> and the preserved Spotilol 1.2.4 sources. Native bridge, networking and encrypted-profile hardening are retained from kvmgithub/Spotilol.
 </p>
 
-> **The main project of this repository is now [MySpotilol](https://github.com/kvmgithub/Spotilol/tree/myspoti-ui) (default branch `myspoti-ui`):** Myspoti's native interface with the same ad blocking and security rules. It installs next to Spotilol Lite. Downloads: [MySpotilol releases](https://github.com/kvmgithub/Spotilol/releases?q=MySpotilol&expanded=true).
->
-> This branch (`main`) holds Spotilol Lite. It is kept working with security and sign-in fixes; its releases (`v1.2.<n>`) stay marked "Latest", which its update check reads.
+> **Spotilol Lite is no longer developed.** Its last release is v1.2.1009. The main app of this repository is now [MySpotilol](https://github.com/kvmgithub/Spotilol/tree/myspoti-ui): Myspoti's native interface with the same ad blocking and security rules. It installs next to Spotilol Lite and needs its own sign-in. Download: [latest release](https://github.com/kvmgithub/Spotilol/releases/latest).
 
 ---
 

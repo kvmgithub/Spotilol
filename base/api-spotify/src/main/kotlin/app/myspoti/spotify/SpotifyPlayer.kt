@@ -286,11 +286,12 @@ class SpotifyPlayer(private val bridge: Bridge, private val scope: CoroutineScop
                 val lost = playingAtLoss
                 playingAtLoss = null
                 // A pick held over a reload that was not ours, or whose own play did not run: played now.
-                // Each waits for the new page's device to join Spotify Connect: a play sent right after
-                // "ready" was answered DEVICE_NOT_FOUND (Myspoti 2.3.0).
-                if (!ownReload && pickAfterReload != null) scope.launch { delay(RESTORE_GAP_MS); playPickAfterReload() }
-                else if (!ownReload && (lost != null || liveIntent() != null)) scope.launch {
-                    runCatching { if (lost != null) { awaitDeviceJoined(); resumeAfterReload(lost) } else { delay(RESTORE_GAP_MS); awaitDeviceJoined(); playIntent() } }
+                // Each waits for the new page to settle (its device joined Spotify Connect, its first
+                // state told): a play sent right after "ready" was answered DEVICE_NOT_FOUND (Myspoti 2.3.0, 2.4.0).
+                if (!ownReload && pickAfterReload != null) { val seq = stateSeq; scope.launch { awaitPageSettled(seq); playPickAfterReload() } }
+                else if (!ownReload && (lost != null || liveIntent() != null)) { val seq = stateSeq; scope.launch {
+                    runCatching { if (lost != null) { awaitDeviceJoined(); resumeAfterReload(lost) } else { awaitPageSettled(seq); playIntent() } }
+                }
                 }
                 repeatRestoreUntil = System.currentTimeMillis() + REPEAT_RESTORE_MS
                 if (audioQuality != "auto") applyAudioQuality()
@@ -333,9 +334,10 @@ class SpotifyPlayer(private val bridge: Bridge, private val scope: CoroutineScop
         try {
             runCatching {
                 if (!reloadAndWait(reload)) return@runCatching
+                val seq = stateSeq
                 if (playPickAfterReload()) return@runCatching
                 if (s == null) return@runCatching
-                if (next) delay(1_500)
+                if (next) awaitPageSettled(seq)
                 // Reported (2.2.0, log seen): a song picked during the reload, then the song after
                 // the one before it, in the old list. What the user played or skipped since the
                 // reload began is theirs; a skip ([intent]) is played by what follows.
@@ -404,6 +406,24 @@ class SpotifyPlayer(private val bridge: Bridge, private val scope: CoroutineScop
         val started = System.currentTimeMillis()
         val joined = withTimeoutOrNull(JOIN_WAIT_MS) { device.joined.first { it } } != null
         bridge.logger?.invoke(if (joined) "page device joined after ${System.currentTimeMillis() - started} ms: playing" else "page device not joined after ${JOIN_WAIT_MS / 1000} s: playing anyway")
+    }
+
+    /**
+     * A page just back settles before we play on it: its device has joined Spotify Connect and it
+     * has told its first state ([seq]: [stateSeq] when it said ready). That was a fixed
+     * [RESTORE_GAP_MS] after every reload (a stuck ad, a stall, a pick made during it), which the
+     * join and the page's first state now end sooner; [RESTORE_GAP_MS] stays the longest wait,
+     * and the whole wait when the host does not report joins.
+     */
+    private suspend fun awaitPageSettled(seq: Int) {
+        val device = app.myspoti.spotify.bridge.PageDevice
+        if (!device.reported) { delay(RESTORE_GAP_MS); return }
+        val started = System.currentTimeMillis()
+        withTimeoutOrNull(RESTORE_GAP_MS) {
+            device.joined.first { it }
+            while (stateSeq == seq) delay(50)
+        }
+        bridge.logger?.invoke("page back settled after ${System.currentTimeMillis() - started} ms")
     }
 
     /**

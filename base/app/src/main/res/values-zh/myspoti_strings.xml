@@ -476,7 +476,7 @@
     <string name="hide_song">不感兴趣</string>
     <string name="library_chip_by_me">我创建的</string>
     <string name="library_chip_podcasts">播客</string>
-    <string name="licences_refused_by_spotify">Spotify 暂时拒绝在此账号上播放歌曲（许可被拒绝），因此播放已暂停。请稍后点按播放重试。</string>
+    <string name="licences_refused_by_spotify">Spotify 暂时拒绝在此账号上播放歌曲（音频许可被拒绝），因此播放已暂停。请稍等片刻后点按播放重试，并检查该账号能否在官方 Spotify 应用中正常播放。</string>
     <string name="login_failed_detail">Spotify 页面未能加载或启动。请检查网络连接后重试；如果仍然失败，请换一个网络试试。</string>
     <string name="login_failed_title">登录未完成</string>
     <string name="lyrics_select_hint">点按歌词行以选择要分享的内容</string>
@@ -492,4 +492,21 @@
     <string name="settings_player_lyrics_card_detail">播放器下方的歌词卡片。关闭后，在封面上向上滑动仍可打开歌词。</string>
     <string name="settings_player_lyrics_card_title">播放器中的歌词预览</string>
     <string name="show_song_again">重新显示</string>
+    <string name="library_podcasts_empty">你还没有关注任何播客</string>
+    <string name="library_podcasts_error">无法加载你的播客</string>
+    <string name="notify_release_title">%1$s 的新作品</string>
+    <string name="notify_releases_channel">新发行</string>
+    <string name="playlist_reorder_hint">拖动歌曲右侧的手柄即可移动</string>
+    <string name="settings_lyrics_keep_awake_detail">歌词打开时，屏幕不会自动关闭。</string>
+    <string name="settings_lyrics_keep_awake_title">显示歌词时保持屏幕常亮</string>
+    <string name="settings_release_notify">新发行通知</string>
+    <string name="settings_release_notify_detail">你关注的艺人发布新作品时发送通知，MySpotilol 运行时每隔几小时检查一次</string>
+    <string name="whats_new_add_library">添加到音乐库</string>
+    <string name="whats_new_empty">暂时没有新内容。关注艺人和播客，即可在这里看到他们的新发行和新单集。</string>
+    <string name="whats_new_failed">无法加载最新动态（%1$s）</string>
+    <string name="whats_new_remove_library">从音乐库中移除</string>
+    <string name="whats_new_section_earlier">较早</string>
+    <string name="whats_new_section_new">新内容</string>
+    <string name="whats_new_subtitle">你关注的艺人和节目的最新发行和单集。</string>
+    <string name="whats_new_title">最新动态</string>
 </resources>

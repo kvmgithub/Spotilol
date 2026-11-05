@@ -555,7 +555,7 @@
     <string name="hide_song">No me interesa</string>
     <string name="library_chip_by_me">Por mí</string>
     <string name="library_chip_podcasts">Podcasts</string>
-    <string name="licences_refused_by_spotify">Spotify se niega por ahora a reproducir canciones en esta cuenta (licencia rechazada), así que la reproducción se pausó. Toca reproducir para intentarlo de nuevo más tarde.</string>
+    <string name="licences_refused_by_spotify">Spotify se niega ahora mismo a reproducir canciones en esta cuenta (licencia de audio rechazada), así que la reproducción se pausó. Espera un poco y toca reproducir para intentarlo de nuevo, y comprueba que la cuenta funciona en la aplicación oficial de Spotify.</string>
     <string name="login_failed_detail">La página de Spotify no se cargó o no arrancó. Comprueba tu conexión e inténtalo de nuevo. Si sigue fallando, prueba con otra red.</string>
     <string name="login_failed_title">No se pudo completar el inicio de sesión</string>
     <string name="lyrics_select_hint">Toca las líneas para elegir lo que quieres compartir</string>
@@ -571,4 +571,21 @@
     <string name="settings_player_lyrics_card_detail">La tarjeta de letra bajo el reproductor. Desactivada, deslizar hacia arriba en la portada sigue abriendo la letra.</string>
     <string name="settings_player_lyrics_card_title">Vista previa de la letra en el reproductor</string>
     <string name="show_song_again">Mostrar de nuevo</string>
+    <string name="library_podcasts_empty">Aún no sigues ningún podcast</string>
+    <string name="library_podcasts_error">No se pudieron cargar tus podcasts</string>
+    <string name="notify_release_title">Nuevo de %1$s</string>
+    <string name="notify_releases_channel">Novedades</string>
+    <string name="playlist_reorder_hint">Arrastra una canción por su asa para moverla</string>
+    <string name="settings_lyrics_keep_awake_detail">Mientras la letra está abierta, la pantalla no se apaga sola.</string>
+    <string name="settings_lyrics_keep_awake_title">Mantener la pantalla encendida con la letra</string>
+    <string name="settings_release_notify">Notificaciones de novedades</string>
+    <string name="settings_release_notify_detail">Una notificación cuando un artista que sigues publica algo, comprobado cada pocas horas mientras MySpotilol está abierto</string>
+    <string name="whats_new_add_library">Añadir a Tu biblioteca</string>
+    <string name="whats_new_empty">Aún no hay novedades. Sigue a artistas y pódcasts para ver aquí sus nuevos lanzamientos y episodios.</string>
+    <string name="whats_new_failed">No se pudieron cargar las novedades (%1$s)</string>
+    <string name="whats_new_remove_library">Quitar de Tu biblioteca</string>
+    <string name="whats_new_section_earlier">Anterior</string>
+    <string name="whats_new_section_new">Nuevo</string>
+    <string name="whats_new_subtitle">Los últimos lanzamientos y episodios de los artistas y programas que sigues.</string>
+    <string name="whats_new_title">Novedades</string>
 </resources>

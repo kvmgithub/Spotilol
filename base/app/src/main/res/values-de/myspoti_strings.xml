@@ -554,7 +554,7 @@
     <string name="hide_song">Kein Interesse</string>
     <string name="library_chip_by_me">Von mir</string>
     <string name="library_chip_podcasts">Podcasts</string>
-    <string name="licences_refused_by_spotify">Spotify verweigert auf diesem Konto gerade die Wiedergabe (Lizenz abgelehnt), daher wurde die Wiedergabe pausiert. Tippe später auf Wiedergabe, um es erneut zu versuchen.</string>
+    <string name="licences_refused_by_spotify">Spotify verweigert auf diesem Konto gerade die Wiedergabe (Audiolizenz abgelehnt), daher wurde die Wiedergabe pausiert. Warte etwas und tippe auf Wiedergabe, um es erneut zu versuchen, und prüfe, ob das Konto in der offiziellen Spotify-App abspielt.</string>
     <string name="login_failed_detail">Die Seite von Spotify wurde nicht geladen oder nicht gestartet. Prüfe deine Verbindung und versuche es erneut. Wenn es weiter scheitert, probiere ein anderes Netzwerk.</string>
     <string name="login_failed_title">Anmeldung nicht abgeschlossen</string>
     <string name="lyrics_select_hint">Tippe auf Zeilen, um auszuwählen, was du teilen möchtest</string>
@@ -571,4 +571,21 @@
     <string name="settings_player_lyrics_card_title">Songtext-Vorschau im Player</string>
     <string name="show_song_again">Wieder anzeigen</string>
     <string name="licences_refused_old_widevine">Spotify verweigert diesem Telefon die Audiolizenzen: Sein DRM (Widevine %1$s) ist älter als das, was Spotifys Webplayer annimmt, unabhängig vom Konto. Die Wiedergabe wurde deshalb pausiert. Spotify-Songs lassen sich auf diesem Telefon mit MySpotilol nicht abspielen.</string>
+    <string name="library_podcasts_empty">Du folgst noch keinen Podcasts</string>
+    <string name="library_podcasts_error">Deine Podcasts konnten nicht geladen werden</string>
+    <string name="notify_release_title">Neu von %1$s</string>
+    <string name="notify_releases_channel">Neuerscheinungen</string>
+    <string name="playlist_reorder_hint">Zieh einen Song an seinem Griff, um ihn zu verschieben</string>
+    <string name="settings_lyrics_keep_awake_detail">Solange der Songtext offen ist, schaltet sich der Bildschirm nicht von selbst aus.</string>
+    <string name="settings_lyrics_keep_awake_title">Bildschirm bei Songtexten anlassen</string>
+    <string name="settings_release_notify">Benachrichtigungen für Neuerscheinungen</string>
+    <string name="settings_release_notify_detail">Eine Benachrichtigung, wenn ein Künstler, dem du folgst, etwas veröffentlicht; alle paar Stunden geprüft, solange MySpotilol läuft</string>
+    <string name="whats_new_add_library">Zur Bibliothek hinzufügen</string>
+    <string name="whats_new_empty">Noch nichts Neues. Folge Künstlern und Podcasts, um ihre neuen Veröffentlichungen und Folgen hier zu sehen.</string>
+    <string name="whats_new_failed">Neuheiten konnten nicht geladen werden (%1$s)</string>
+    <string name="whats_new_remove_library">Aus der Bibliothek entfernen</string>
+    <string name="whats_new_section_earlier">Früher</string>
+    <string name="whats_new_section_new">Neu</string>
+    <string name="whats_new_subtitle">Die neuesten Veröffentlichungen und Folgen der Künstler und Shows, denen du folgst.</string>
+    <string name="whats_new_title">Neuheiten</string>
 </resources>

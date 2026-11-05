@@ -560,7 +560,7 @@
     <string name="hide_song">Pas intéressé</string>
     <string name="library_chip_by_me">Par moi</string>
     <string name="library_chip_podcasts">Podcasts</string>
-    <string name="licences_refused_by_spotify">Spotify refuse pour l’instant de lire des morceaux sur ce compte (licence refusée) : la lecture a été mise en pause. Appuyez sur lecture pour réessayer plus tard.</string>
+    <string name="licences_refused_by_spotify">Spotify refuse pour l’instant de lire des morceaux sur ce compte (licence audio refusée) : la lecture a été mise en pause. Patientez un moment puis appuyez sur lecture pour réessayer, et vérifiez que le compte fonctionne dans l’application Spotify officielle.</string>
     <string name="login_failed_detail">La page de Spotify ne s\'est pas chargée ou n\'a pas démarré. Vérifiez votre connexion et réessayez. Si cela échoue encore, essayez un autre réseau.</string>
     <string name="login_failed_title">La connexion n\'a pas abouti</string>
     <string name="lyrics_select_hint">Touchez des lignes pour choisir ce que vous partagez</string>
@@ -576,4 +576,21 @@
     <string name="settings_player_lyrics_card_detail">La carte de paroles sous le lecteur. Désactivé, un glissement vers le haut sur la pochette ouvre toujours les paroles.</string>
     <string name="settings_player_lyrics_card_title">Aperçu des paroles dans le lecteur</string>
     <string name="show_song_again">Afficher à nouveau</string>
+    <string name="library_podcasts_empty">Aucun podcast suivi pour l\'instant</string>
+    <string name="library_podcasts_error">Impossible de charger vos podcasts</string>
+    <string name="notify_release_title">Nouveau de %1$s</string>
+    <string name="notify_releases_channel">Nouveautés</string>
+    <string name="playlist_reorder_hint">Faites glisser un titre par sa poignée pour le déplacer</string>
+    <string name="settings_lyrics_keep_awake_detail">Tant que les paroles sont ouvertes, l\'écran ne s\'éteint pas tout seul.</string>
+    <string name="settings_lyrics_keep_awake_title">Garder l\'écran allumé avec les paroles</string>
+    <string name="settings_release_notify">Notifications des nouveautés</string>
+    <string name="settings_release_notify_detail">Une notification quand un artiste que tu suis sort quelque chose, vérifié toutes les quelques heures pendant que MySpotilol tourne</string>
+    <string name="whats_new_add_library">Ajouter à la Bibliothèque</string>
+    <string name="whats_new_empty">Rien de nouveau pour l\'instant. Suivez des artistes et des podcasts pour voir ici leurs nouvelles sorties et leurs épisodes.</string>
+    <string name="whats_new_failed">Impossible de charger les nouveautés (%1$s)</string>
+    <string name="whats_new_remove_library">Retirer de la Bibliothèque</string>
+    <string name="whats_new_section_earlier">Plus tôt</string>
+    <string name="whats_new_section_new">Nouveau</string>
+    <string name="whats_new_subtitle">Les dernières sorties et les derniers épisodes des artistes et émissions que vous suivez.</string>
+    <string name="whats_new_title">Nouveautés</string>
 </resources>

@@ -98,6 +98,8 @@ import java.time.LocalTime
 fun HomeScreen(navController: NavController){
 
     val homeViewModel : HomeViewModel = viewModel()
+    // An old feed is read again when Home shows again (see HomeViewModel.refreshIfStale).
+    androidx.lifecycle.compose.LifecycleEventEffect(androidx.lifecycle.Lifecycle.Event.ON_RESUME) { homeViewModel.refreshIfStale() }
     val home by homeViewModel.home.collectAsState()
 
     Surface(

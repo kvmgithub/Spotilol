@@ -189,6 +189,9 @@ class SpotifyPlayer(private val bridge: Bridge, private val scope: CoroutineScop
     /** Spotify refuses this account its audio licences: playback was paused, the UI says so. */
     val licencesRefused: kotlinx.coroutines.flow.SharedFlow<Unit> = _licencesRefused
 
+    /** True from the pause the refusal made until the user plays: an ad the page is stuck on meanwhile is the refusal's, not an ad. */
+    val licencesHeld: Boolean get() = licenceRefusedHold
+
     /** Repairs wait: held by the host ([recoveryHeld]), or licences refused ([licenceRefusedHold]). */
     private fun repairsHeld(): Boolean = recoveryHeld() || licenceRefusedHold
 
@@ -1186,7 +1189,7 @@ class SpotifyPlayer(private val bridge: Bridge, private val scope: CoroutineScop
         val station = nextUp?.let { target?.let { t -> RepeatRules.stationOrder(t, it) } }
         when {
             // Not in the queue the page has (a page our reload took away): the song plays alone, Spotify goes on with its autoplay.
-            target != null && fromAutoplay -> playNow(target, origin = "play on")
+            target != null && fromAutoplay -> playNow(target)
             ctx != null && target != null -> playNow(ctx, trackUri = target, order = station ?: lastOrder?.takeIf { it.first == ctx }?.second,
                 keepsOrder = station == null)
             target != null -> next()

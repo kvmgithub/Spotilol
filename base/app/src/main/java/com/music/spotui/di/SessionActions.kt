@@ -61,6 +61,8 @@ object SessionActions {
         com.music.spotui.data.LibraryOutbox.signedOut()
         com.music.spotui.data.api.ProfileCache.clearSession()
         SongPlayer.clearSession()
+        // The playlists kept for the pickers are this account's (Myspoti 2.4.0).
+        com.music.spotui.data.api.EditablePlaylists.clear()
         listOf("PlaybackState", "LibraryCache", "RecentItems", "LikedSongs",
             "LikedSongsFromSpotify", "LikedAlbums", "FollowedArtists").forEach { name ->
             app.getSharedPreferences(name, android.content.Context.MODE_PRIVATE).edit().clear().apply()

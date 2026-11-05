@@ -52,6 +52,13 @@ class WebPlayerHost(private val context: Context) : BridgeHost {
     /** The page's current URL. */
     val url: StateFlow<String> = _url
 
+    private val _online = MutableStateFlow(true)
+    /**
+     * The phone's default network can reach the internet (airplane mode, no signal: false). Set by
+     * MyspotiRuntime's network watch ([setOnline]); true until it knows, so nothing is held for nothing.
+     */
+    val online: StateFlow<Boolean> = _online
+
     /*
      * Spotify limiting this client: measured on the test phone after an evening of test runs,
      * the page asked for an audio licence ~4 times a second, each answered 429, and every repair
@@ -114,6 +121,24 @@ class WebPlayerHost(private val context: Context) : BridgeHost {
         }
         // Debug builds only: lets desktop tools (chrome://inspect, CDP) look at the page.
         if (debuggable) WebView.setWebContentsDebuggingEnabled(true)
+    }
+
+    /**
+     * Offline, the player's repairs wait (see MyspotiRuntime): a seek, a reload or a skip can do
+     * nothing without a network but throw the page away. The network back, a player page that
+     * failed to load meanwhile is loaded again at once rather than at its next retry (Myspoti 2.4.0).
+     * Called by MyspotiRuntime's network watch.
+     */
+    fun setOnline(now: Boolean) {
+        if (_online.value == now) return
+        _online.value = now
+        Logbook.log(if (now) "network back: repairs resume" else "network lost: repairs held until it is back")
+        if (now) main.post {
+            if (!mainFrameFailed || !loadAsked || _loginRequired.value) return@post
+            pageFailures = 0
+            main.removeCallbacks(retryPlayerPage)
+            retryPlayerPage.run()
+        }
     }
 
     @SuppressLint("SetJavaScriptEnabled")
@@ -478,6 +503,8 @@ class WebPlayerHost(private val context: Context) : BridgeHost {
     private var pageFailures = 0
     private val retryPlayerPage = Runnable {
         if (!loadAsked || _loginRequired.value) return@Runnable
+        // Offline, the load could only fail again: [setOnline] loads it when the network is back.
+        if (!_online.value) { Logbook.log("player page: offline, loaded again when the network is back"); return@Runnable }
         Logbook.log("player page: load again (attempt ${pageFailures + 1})")
         view.stopLoading()
         view.loadUrl(playerRoot())

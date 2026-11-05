@@ -577,4 +577,6 @@
     <string name="myspoti_shuffle_title">MySpotilol shuffle</string>
     <string name="myspoti_shuffle_detail">With shuffle on, a playlist, album or Liked Songs plays every song once, in a random order, before starting over. Off: Spotify\'s shuffle. A free account may keep Spotify\'s shuffle on some lists.</string>
     <string name="myspoti_shuffle_imposed">Spotify keeps its own shuffle on this list for your account: MySpotilol shuffle is off for it.</string>
+    <string name="library_podcasts_empty">No podcasts followed yet</string>
+    <string name="library_podcasts_error">Couldn\'t load your podcasts</string>
 </resources>

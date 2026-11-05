@@ -24,7 +24,7 @@ MySpotilol is the main app of this repository since 1.0.0. Spotilol Lite, the ap
 
 Both are signed with the same fork key but have different packages: MySpotilol installs next to Lite, not over it, and needs its own sign-in. Lite's update check does not offer MySpotilol releases.
 
-Base: [kota-zo/myspoti](https://github.com/kota-zo/myspoti) 2.0.2-beta.2 (`37dd1ee`, GPL-3.0), merged from the vendor branch `myspoti-upstream`, with selected fixes and features of 2.1.0 (`320ba2a`), 2.2.0 (`d990372`) and 2.3.0 (`a1be680`) ported by hand (its extensions and Immersive look are left out).
+Base: [kota-zo/myspoti](https://github.com/kota-zo/myspoti) 2.0.2-beta.2 (`37dd1ee`, GPL-3.0), merged from the vendor branch `myspoti-upstream`, with selected fixes and features of 2.1.0 (`320ba2a`), 2.2.0 (`d990372`), 2.3.0 (`a1be680`) and 2.4.0 (`95a24e7`) ported by hand (its extensions and Immersive look are left out).
 
 ## Install
 
@@ -47,7 +47,7 @@ Removed:
 - Social features (0.11.0): Spotify Jam, Blends, collaborative-playlist invitations and their management, friend activity
 - Podcast episode downloads (beta.9), the in-app update settings and the diagnostic-report export row (the redacted log view covers it)
 - The phone's own device name in Spotify's device lists (beta.9 sends it; this variant keeps the Web Player's name)
-- From 2.0.2 to 2.3.0: Chromecast, tablet layouts, extensions (third-party JavaScript, audio and download sources), the Immersive look, the Connect mirror for extension songs, play reports sent by the app (`melody` stays blocked), Cronet and the Chromium network routes for refused commands, the update popup, the equalizer and Stats for nerds (they cover only songs the app plays itself), the source switch, one APK per architecture
+- From 2.0.2 to 2.4.0: Chromecast, tablet layouts, extensions (third-party JavaScript, audio and download sources), the Immersive look, the Connect mirror for extension songs, play reports sent by the app (`melody` stays blocked), Cronet and the Chromium network routes for refused commands, the update popup, the equalizer and Stats for nerds (they cover only songs the app plays itself), the source switch, one APK per architecture, AutoMix, Live Radio, Android TV, picture-in-picture, several accounts in separate web player profiles, Sonos and other speaker logins
 
 Added from Spotilol:
 
@@ -66,6 +66,8 @@ From 2.1.0: ads marked only by their metadata left out, a reload past a stuck ad
 From 2.2.0: recovery after ads and skips on slow networks (stalled clock, stuck commands given up, skips shown at once and put back when they fail, held seeks), the chosen song in big playlists, skips and pauses without a click, the liked heart checked after a restart, held repeat taps, lyric word taps, links in descriptions, HTML entities decoded, whole lists queued, podcast filters and New marks, the song count in playlist headers, releases by full date.
 
 From 2.3.0: repeat one through an ad, a pause during an ad that stays a pause, licence refusals that pause once instead of a run of skips and reloads, plays after a page reload that wait for the new device, a sign-in page that never stays blank (Try again), likes kept for later bound to their account, power facts in the diagnostic, a sleep timer that fades out, Hide the DJ, the By me and Podcasts library chips with New episodes, Liked Songs among Home's shortcuts, Not interested with a Hidden songs page, lyrics shared from picked lines, an optional shuffle that plays every song of a list once, a switch for the lyrics preview under the player.
+
+From 2.4.0: repeat one through ads, stalls and reloads, autoplay that goes on, a failed session check that keeps the session, repairs that wait while offline, a stale page token after a network change repaired by a reload, plays sent again once a reloaded page has joined Spotify Connect, the queue kept over an ad's reload, ads held silent, the playback service kept in front during ads and loading, a phone call that pauses and resumes, What's New with release notifications, playlists reordered by hand, albums shared, Browse categories with shows and episodes, long titles that scroll, lyrics that keep the screen on.
 
 From 2.0.0: ads left out of Spotify's track-playback queue in the relay before the page sees them, and the next song played just before an ad that cannot be left out; a player page Chromium never throttles; failed page loads retried; licence rate limits held; add songs, Spotify Codes; per-network streaming quality; the new welcome screen, player and page animations.
 

@@ -6,6 +6,55 @@ Each version section is the text of the GitHub release tagged `ui-v<version>` (p
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-11-05
+
+Taken from Myspoti 2.4.0. Not taken: AutoMix and spatial audio (they work on songs the app plays itself), Live Radio, Android TV, Android Auto, picture-in-picture, several accounts in separate web player profiles (the encrypted profiles stay), voice search, the Friends tab and Jam, Sonos and other speaker logins, downloads and extensions, the Immersive look, the settings search and the regrouped settings, the Following chip on Home, other lyrics sources and romanized lyrics, the dark search field, and one APK per architecture.
+
+### Added
+- What's New: a bell on Home opens the new releases and episodes of the artists and shows you follow, newest first, with play, add to library, and add to the queue or a playlist.
+- New release notifications (Settings, on by default): while the app runs, the What's New feed is read every 6 hours at most, and what came out since the last read is said in a notification (five at most); a tap opens the release.
+- Your own playlists in their own order can be reordered by hand: Move puts a handle on each song, a drag moves it, and a refusal by Spotify puts the order back.
+- Albums can be shared from their menu (Spotify Code and link).
+- The green check on a saved song in a list opens Saved in, to take the song out.
+- A Browse category lists its shows, episodes and books too (Podcasts and Documentaries showed empty).
+- Keep the screen on with lyrics (Settings, on by default).
+- A phone call pauses the music, and it plays again after the call unless you touched the player meanwhile (Android 12 and later).
+
+### Changed
+- Long titles scroll instead of ending in "…": the player, the mini player, the podcast player, and the top bars of albums, playlists and artists.
+- Home is read again when it shows after 30 minutes away.
+- The library's sort orders the followed artists too.
+- The playlist pickers (Add to playlist, Saved in) show the last list at once, also after a restart, and read it again behind it.
+- The podcast player closes when pulled down.
+- Liked Songs and long library lists load four pages at a time.
+- The client token is kept across launches, and Spotify's web player build is looked at every 6 hours at most (its bundles only off mobile data).
+- Covers wait up to 10 s on a slow network instead of giving up after 2.5 s.
+
+### Fixed
+- Repeat one keeps looping through ads, stalls and reloads, and is set again after a play taken back from another device and at a cold start; a song brought by autoplay or a station is not replayed from the start of its list.
+- Autoplay goes on when it loads more songs instead of starting the list over.
+- A failed session check (offline, a slow page) no longer signs you out: only an anonymous token or Spotify's sign-in page does.
+- Without a network, stall repairs (seek, reload, skip) wait instead of throwing the page away, and a player page that failed offline loads again as soon as the network is back.
+- When the page's token goes stale after a network change (a VPN, another cell), the page is reloaded and the song goes on; a stall whose repair changes nothing reaches a reload within about 14 s.
+- A play sent to a reloaded page whose device has not joined Spotify Connect is sent again once it joins, and the page is loaded again if it never does.
+- After a reload the song plays as soon as the new page has settled, and the songs you queued survive an ad got past by a reload.
+- A song stuck past its end moves on after about 1 s instead of up to 5.5 s of silence.
+- An ad stays unheard after a song is picked: the page raised its own volume after the mute.
+- An ad or a song still loading keeps the playback service in front with its locks, so Android does not freeze or silence the app during a long ad break.
+- The media session tells play and pause at once (Bluetooth headsets and stereos), and has the last song before anything plays.
+- A song playing on another device no longer starts on the phone when the player page reloads, and a skip there no longer brings the sound back to the phone.
+- A Connect speaker's volume is never set by a repair you did not ask for.
+- Licence refusals: the message says what to do, and on a phone whose Widevine is older than Spotify's web player accepts, it says so.
+- MySpotilol shuffle turned on or off no longer cuts the song: the new order starts with the next song.
+- A cold start no longer throws the player page away while it is still loading.
+- Sign-up: the birth month list opens.
+- An artist unfollowed (an album or a show removed) leaves the Library at once.
+- The Podcasts chip lists the followed shows again (those in folders too), and says when there are none or they could not be loaded.
+- Duplicates in the queue are kept after a reload, and a closed activity is no longer held by the player page.
+
+### Diagnostics
+- Network lost and back, and phone calls (the audio mode), are logged; page state lines carry the repeat mode; a native crash's readable tombstone strings come with the next report.
+
 ## [1.0.0] - 2026-11-04
 
 MySpotilol is now the main app of this repository and replaces Spotilol Lite, which is no longer developed. The app itself is the same as 0.13.1.

@@ -1,5 +1,6 @@
 package com.music.spotui.ui.screens
 
+import com.music.spotui.ui.components.titleMarquee
 import com.music.spotui.ui.theme.AppAccent
 import com.music.spotui.ui.components.SkeletonKind
 import com.music.spotui.ui.components.pressable
@@ -564,7 +565,7 @@ private fun ArtistOverviewContent(
                 displayName, color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold,
                 maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
                 textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-                modifier = Modifier.weight(1f).padding(end = 26.dp),
+                modifier = Modifier.weight(1f).padding(end = 26.dp).titleMarquee(iterations = 3),
             )
         }
     }

@@ -188,11 +188,7 @@ fun rememberPlaylistDrag(listState: LazyListState): PlaylistDrag {
 @Composable
 fun LazyItemScope.movableRow(drag: PlaylistDrag, song: SongsModel, lifted: Color): Modifier {
     val held = drag.dragged == song.rowUid
-    // The phone's "Remove animations" setting: the rows jump instead of sliding.
-    val context = androidx.compose.ui.platform.LocalContext.current
-    val still = remember(context) {
-        android.provider.Settings.Global.getFloat(context.contentResolver, android.provider.Settings.Global.ANIMATOR_DURATION_SCALE, 1f) == 0f
-    }
+    val still = com.music.spotui.ui.look.rememberReduceMotion()
     return Modifier
         .animateItem(fadeInSpec = null, fadeOutSpec = null,
             placementSpec = if (held || still) null else spring(stiffness = Spring.StiffnessMediumLow, visibilityThreshold = IntOffset.VisibilityThreshold))

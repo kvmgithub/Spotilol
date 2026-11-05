@@ -19,6 +19,7 @@ import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.async
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.sync.withLock
 import java.util.concurrent.ConcurrentHashMap
@@ -288,7 +289,13 @@ object SongPlayer {
         // ad that is still on after AD_SHOW_AFTER_MS is shown: a blocked ad is gone within a second
         // (its audio is refused, the page moves on), and showing it only made the screens blink.
         scope.launch {
-            MyspotiRuntime.spotify.player.adPlaying.collectLatest { on ->
+            // The local player plays (an extension's or a downloaded song): the ad is on the unheard page
+            // that mirrors it, not what is heard. Shown, the song on screen became the ad and left the
+            // notification until a restart (reported), also when that song began after the ad was shown.
+            kotlinx.coroutines.flow.combine(
+                MyspotiRuntime.spotify.player.adPlaying,
+                androidx.compose.runtime.snapshotFlow { LocalPlayer.active.value },
+            ) { ad, local -> ad && !local }.distinctUntilChanged().collectLatest { on ->
                 if (on) {
                     kotlinx.coroutines.delay(AD_SHOW_AFTER_MS)
                     // Spotify limiting playback holds every repair, the ad's too: the limit is what

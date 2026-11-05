@@ -353,7 +353,7 @@ class WebPlayerHost(private val context: Context) : BridgeHost {
                 // Killed (memory pressure) or crashed: both end here. A late callback from a view
                 // that was already replaced must not tear down the healthy new one.
                 if (gone !== this@WebPlayerHost.view) return true
-                Logbook.log("renderer gone (crashed=${detail.didCrash()}): rebuilding the page")
+                Logbook.log("renderer gone (crashed=${detail.didCrash()}, priority=${detail.rendererPriorityAtExit()}): rebuilding the page")
                 // The page is gone with it: the calls it had fail now, not each after its timeout.
                 onPageStarting?.invoke()
                 rebuild()
@@ -743,7 +743,13 @@ class WebPlayerHost(private val context: Context) : BridgeHost {
         else (v.layoutParams as? ViewGroup.MarginLayoutParams)?.let { it.setMargins(0, 0, 0, 0); v.layoutParams = it }
     }
 
-    fun detach() = main.post { (view.parent as? ViewGroup)?.removeView(view) }
+    /** Only the Activity that owns the current attachment may release it. */
+    fun detach(from: ViewGroup) = main.post {
+        if (container !== from) return@post
+        container = null
+        lastVisible = false
+        (view.parent as? ViewGroup)?.removeView(view)
+    }
 
     /** Frees the page (data saver, low memory). [load] brings it back. */
     fun unload() = main.post { loadAsked = false; view.loadUrl("about:blank") }

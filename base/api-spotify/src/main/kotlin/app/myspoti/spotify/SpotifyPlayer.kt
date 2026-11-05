@@ -614,6 +614,9 @@ class SpotifyPlayer(private val bridge: Bridge, private val scope: CoroutineScop
         var attempts = 0
         var adAttempts = 0
         var adReloaded = false
+        /** This break was said once in the log: on another device, left as it is (held). */
+        var remoteAdLogged = false
+        var adHeldLogged = false
         var frozenReloadAt = 0L
         /** Consecutive ticks where the page answered nothing (see FROZEN_MISSES). */
         var frozenMisses = 0
@@ -694,6 +697,18 @@ class SpotifyPlayer(private val bridge: Bridge, private val scope: CoroutineScop
             preloadNextSong(s, media)
             // The crossfade runs in the page's audio graph ("media.crossfade"), not on these ticks.
             if (tick % VOLUME_CHECK_TICKS == 0) guardVolume(s, media)
+            if (!_adPlaying.value) { remoteAdLogged = false; adHeldLogged = false }
+            if (_adPlaying.value && remoteActive) {
+                // The ad plays on another device of the account (Connect, Cast): muted there by the
+                // app (RemoteAdMute), never got past from here. A reload or a play of the next song
+                // was refused by it, or pulled playback back to the phone.
+                if (!remoteAdLogged) bridge.logger?.invoke("ad on another device: nothing done from here")
+                remoteAdLogged = true
+                adSince = now
+                notStalled()
+                key = null; silentSince = 0L
+                continue
+            }
             if (_adPlaying.value) {
                 // The screens show the break (or the song before it, waiting), not a stall.
                 notStalled()
@@ -761,7 +776,9 @@ class SpotifyPlayer(private val bridge: Bridge, private val scope: CoroutineScop
                 // Licences refused: getting past the ad asks for one more (a reload, a play), held
                 // until the user plays (see [licenceRefusedHold]).
                 if (stuck && licenceRefusedHold) {
-                    bridge.logger?.invoke("ad stuck on ${ad?.item?.name}: left as it is, Spotify refuses this account's licences")
+                    // Said once per ad: it came every 4 s for minutes (#134).
+                    if (!adHeldLogged) bridge.logger?.invoke("ad stuck on ${ad?.item?.name}: left as it is, Spotify refuses this account's licences")
+                    adHeldLogged = true
                     adSince = System.currentTimeMillis()
                 } else if (stuck && pausedByUser) {
                     // The user paused during the ad: getting past it never plays (a play of the next

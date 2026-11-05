@@ -570,4 +570,5 @@
     <string name="settings_player_lyrics_card_detail">Die Songtext-Karte unter dem Player. Aus: Ein Wischen nach oben auf dem Cover öffnet den Songtext weiterhin.</string>
     <string name="settings_player_lyrics_card_title">Songtext-Vorschau im Player</string>
     <string name="show_song_again">Wieder anzeigen</string>
+    <string name="licences_refused_old_widevine">Spotify verweigert diesem Telefon die Audiolizenzen: Sein DRM (Widevine %1$s) ist älter als das, was Spotifys Webplayer annimmt, unabhängig vom Konto. Die Wiedergabe wurde deshalb pausiert. Spotify-Songs lassen sich auf diesem Telefon mit MySpotilol nicht abspielen.</string>
 </resources>

@@ -579,4 +579,5 @@
     <string name="myspoti_shuffle_imposed">Spotify keeps its own shuffle on this list for your account: MySpotilol shuffle is off for it.</string>
     <string name="library_podcasts_empty">No podcasts followed yet</string>
     <string name="library_podcasts_error">Couldn\'t load your podcasts</string>
+    <string name="licences_refused_old_widevine">Spotify refuses this phone’s audio licences: its DRM (Widevine %1$s) is older than what Spotify’s web player accepts, whatever the account, so playback was paused. Spotify songs cannot play from MySpotilol on this phone.</string>
 </resources>

@@ -238,6 +238,17 @@
   // Not heard, yet not "muted audio" to Chromium (see 'media.mute').
   const SILENT = 0.001;
 
+  // Holds an element unheard while an ad is muted: the page sets its own volume again after a mute
+  // (a new song, its fade-in, a Spotify Connect volume), and a one-off set left the ad heard until
+  // the next mute two seconds later (Myspoti 2.4.0). The host's document-start hook puts the same
+  // guard on every element from its first play (window.__mspSilence); this one is the fallback.
+  const silence = window.__mspSilence || (el => {
+    if (el.__mspGuard) return;
+    el.__mspGuard = () => { if (window.__mspMuted && !el.muted && el.volume > SILENT) el.volume = SILENT; };
+    el.addEventListener('volumechange', el.__mspGuard);
+    el.addEventListener('playing', el.__mspGuard);
+  });
+
   // A fade is a list of setTimeout steps: a second fade, a plain volume set or a mute must
   // cancel the pending ones, or they would override it seconds later (the up-ramp of a
   // crossfade undone by the tail of its own down-ramp, a restored volume pulled down again).
@@ -966,6 +977,7 @@
       const player = await localPlayer().catch(() => null);
       const els = new Set([...(window.__mspMedia || []), ...document.querySelectorAll('audio, video'), ...await playerMedia()]);
       for (const el of els) {
+        silence(el);
         el.muted = false;
         if (a.on) el.volume = SILENT; else restoreOwn(el, player);
       }

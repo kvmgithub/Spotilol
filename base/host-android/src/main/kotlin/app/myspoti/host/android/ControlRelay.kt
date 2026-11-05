@@ -317,9 +317,19 @@ internal class ControlRelay(private val view: WebView, private val fingerprint: 
               // Silent is a tiny volume, never muted: Chromium pauses muted media of a hidden page.
               const media = new Set();
               window.__mspMedia = media;
+              // Held silent from its first play while the flags stand: the page raises its own
+              // volume after a mute (a new song, its fade-in, a Connect volume), which left an ad heard.
+              const silence = el => {
+                if (el.__mspGuard) return;
+                el.__mspGuard = () => { if (window.__mspMuted && !el.muted && el.volume > 0.001) el.volume = 0.001; };
+                el.addEventListener('volumechange', el.__mspGuard);
+                el.addEventListener('playing', el.__mspGuard);
+              };
+              window.__mspSilence = silence;
               const play = HTMLMediaElement.prototype.play;
               HTMLMediaElement.prototype.play = function () {
                 media.add(this);
+                silence(this);
                 if (window.__mspMuted) { this.muted = false; this.volume = 0.001; }
                 // The bridge's audio graph (boost, crossfade), when there is one: the element joins
                 // it before its first sound.

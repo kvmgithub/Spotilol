@@ -38,6 +38,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
@@ -62,6 +63,7 @@ import com.music.spotui.ui.components.QueueSheet
 import com.music.spotui.ui.components.SleepTimerSheet
 import com.music.spotui.ui.components.episodeClock
 import com.music.spotui.ui.components.pressable
+import com.music.spotui.ui.components.pullToDismiss
 import com.music.spotui.ui.components.speedLabel
 import com.music.spotui.ui.components.titleMarquee
 import com.music.spotui.ui.theme.AppAccent
@@ -149,9 +151,13 @@ fun PodcastPlayerScreen(navController: NavController) {
     }
     val tint by androidx.compose.animation.animateColorAsState(coverColor, androidx.compose.animation.core.tween(450), label = "cover")
 
+    // Pulled down anywhere, the player closes, as the music player does from the top of its list.
+    val pullToClose = com.music.spotui.ui.components.rememberPullToDismiss { com.music.spotui.ui.navigation.PlayerSheet.close() }
     Box(
         Modifier
             .fillMaxSize()
+            .pullToDismiss(pullToClose)
+            .graphicsLayer { translationY = pullToClose.offset }
             .background(Brush.verticalGradient(listOf(tint, AppBackground))),
     ) {
         Column(Modifier.fillMaxSize().statusBarsPadding()) {

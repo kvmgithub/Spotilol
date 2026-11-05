@@ -589,4 +589,6 @@
     <string name="whats_new_failed">Could not load What\'s New (%1$s)</string>
     <string name="whats_new_add_library">Add to Your Library</string>
     <string name="whats_new_remove_library">Remove from Your Library</string>
+    <string name="settings_lyrics_keep_awake_title">Keep the screen on with lyrics</string>
+    <string name="settings_lyrics_keep_awake_detail">While the lyrics are open, the screen does not turn off by itself.</string>
 </resources>

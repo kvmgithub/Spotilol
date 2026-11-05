@@ -103,6 +103,12 @@ fun SettingsScreen(navController: NavController) {
                 checked = headsetSkip,
                 onChecked = { headsetSkip = it; app.myspoti.host.android.PlaybackService.setSkipsOnEpisodes(ctx, it) },
             )
+            OptionRow(
+                label = stringResource(R.string.settings_lyrics_keep_awake_title),
+                detail = stringResource(R.string.settings_lyrics_keep_awake_detail),
+                checked = com.music.spotui.data.preferences.LyricsKeepAwakePref.on,
+                onChecked = { com.music.spotui.data.preferences.LyricsKeepAwakePref.set(ctx, it) },
+            )
             // Songs marked "Not interested": skipped by lists, listed here to be shown again.
             Column(
                 Modifier.fillMaxWidth().clickable { navController.navigate(com.music.spotui.ui.navigation.Routes.HiddenSongs.route) }

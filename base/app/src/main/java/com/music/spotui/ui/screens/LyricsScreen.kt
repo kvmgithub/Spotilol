@@ -252,6 +252,20 @@ internal fun rememberLyricsState(vm: LyricsViewModel, title: String, artist: Str
 }
 
 /**
+ * The screen stays on while [active] (the lyrics shown and the song playing), unless turned off in
+ * the settings ([com.music.spotui.data.preferences.LyricsKeepAwakePref]; Myspoti 2.4.0).
+ */
+@Composable
+internal fun KeepScreenOnForLyrics(active: Boolean) {
+    val view = androidx.compose.ui.platform.LocalView.current
+    val on = active && com.music.spotui.data.preferences.LyricsKeepAwakePref.on
+    DisposableEffect(view, on) {
+        if (on) view.keepScreenOn = true
+        onDispose { if (on) view.keepScreenOn = false }
+    }
+}
+
+/**
  * Keeps the active line about a third down the view, like Spotify. A manual scroll
  * pauses the follow for 3 s.
  */
@@ -440,6 +454,7 @@ fun LyricsScreen(
     val bg by animateColorAsState(palette.background, tween(300), label = "lyricsBg")
     val playing = com.music.spotui.di.Graph.currentSongState.playingState.value
     val position = rememberPosition(playing)
+    KeepScreenOnForLyrics(playing && lyrics != null)
     val targetLanguage = getLyricTranslateLang(context).ifBlank { Locale.getDefault().language.ifBlank { "en" } }
     var menu by remember { mutableStateOf(false) }
     // Lines picked to share: a long press on a line, or "Share lyrics" in the menu, starts it (Myspoti 2.3.0).

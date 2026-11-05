@@ -202,3 +202,18 @@ object PlayerLyricsCardPref {
         prefs(c).edit().putBoolean(KEY, value).apply()
     }
 }
+
+/**
+ * "Keep the screen on with lyrics" (Settings > Playback): while the lyrics are open and a song
+ * plays, the screen does not go dark, so the lines can be followed. On by default (Myspoti 2.4.0).
+ */
+object LyricsKeepAwakePref {
+    private const val KEY = "lyrics_keep_screen_on"
+    var on by androidx.compose.runtime.mutableStateOf(prefs(com.music.spotui.di.Graph.app).getBoolean(KEY, true))
+        private set
+
+    fun set(c: Context, value: Boolean) {
+        on = value
+        prefs(c).edit().putBoolean(KEY, value).apply()
+    }
+}

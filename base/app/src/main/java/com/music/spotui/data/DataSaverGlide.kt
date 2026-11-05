@@ -18,6 +18,8 @@ import java.io.InputStream
  * the network for nothing (see [DataSaver]).
  */
 object DataSaverGlide {
+    private const val TIMEOUT_MS = 10_000
+
     fun install(context: Context) {
         Glide.get(context).registry.replace(GlideUrl::class.java, InputStream::class.java, Factory())
     }
@@ -30,7 +32,10 @@ object DataSaverGlide {
 
     private class Loader(private val inner: ModelLoader<GlideUrl, InputStream>) : ModelLoader<GlideUrl, InputStream> {
         override fun buildLoadData(model: GlideUrl, width: Int, height: Int, options: Options): ModelLoader.LoadData<InputStream>? {
-            val data = inner.buildLoadData(model, width, height, options) ?: return null
+            // Glide waits 2.5 s to connect and 2.5 s per read, then gives up for good: on a slow
+            // mobile network the covers stayed grey. 10 s, as the app's other clients.
+            val timed = Options().apply { putAll(options); set(HttpGlideUrlLoader.TIMEOUT, TIMEOUT_MS) }
+            val data = inner.buildLoadData(model, width, height, timed) ?: return null
             return ModelLoader.LoadData(data.sourceKey, data.alternateKeys, Fetcher(data.fetcher))
         }
         override fun handles(model: GlideUrl) = inner.handles(model)

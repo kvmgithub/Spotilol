@@ -8,6 +8,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.first
 import java.util.Locale
 
 /**
@@ -111,9 +112,15 @@ object MyspotiRuntime {
         }
         if (!loadPage) return
         host.load()
-        // New Spotify build: pick up its operation hashes (public bundles, no account).
-        scope.launch {
-            runCatching { updater.refresh(spotify.opsInUse) }.getOrNull()?.let(spotify::updateOps)
+        // New Spotify build: pick up its operation hashes (public bundles, no account). Once the
+        // page is up rather than beside its load, at most every 6 h, and a new build's bundles
+        // (~6 MB) only off mobile data (Myspoti 2.4.0).
+        if (updater.due()) scope.launch {
+            kotlinx.coroutines.withTimeoutOrNull(30_000) { spotify.ready.first { it } }
+            val metered = runCatching {
+                (context.getSystemService(Context.CONNECTIVITY_SERVICE) as android.net.ConnectivityManager).isActiveNetworkMetered
+            }.getOrDefault(true)
+            runCatching { updater.refresh(spotify.opsInUse, bundlesAllowed = !metered) }.getOrNull()?.let(spotify::updateOps)
         }
     }
 

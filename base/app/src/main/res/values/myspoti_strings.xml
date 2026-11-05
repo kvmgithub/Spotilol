@@ -581,4 +581,12 @@
     <string name="library_podcasts_error">Couldn\'t load your podcasts</string>
     <string name="licences_refused_old_widevine">Spotify refuses this phone’s audio licences: its DRM (Widevine %1$s) is older than what Spotify’s web player accepts, whatever the account, so playback was paused. Spotify songs cannot play from MySpotilol on this phone.</string>
     <string name="playlist_reorder_hint">Drag a song by its handle to move it</string>
+    <string name="whats_new_title">What\'s New</string>
+    <string name="whats_new_subtitle">The latest releases and episodes from the artists and shows you follow.</string>
+    <string name="whats_new_section_new">New</string>
+    <string name="whats_new_section_earlier">Earlier</string>
+    <string name="whats_new_empty">Nothing new yet. Follow artists and podcasts to see their new releases and episodes here.</string>
+    <string name="whats_new_failed">Could not load What\'s New (%1$s)</string>
+    <string name="whats_new_add_library">Add to Your Library</string>
+    <string name="whats_new_remove_library">Remove from Your Library</string>
 </resources>

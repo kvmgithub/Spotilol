@@ -35,7 +35,8 @@ object MyspotiRuntime {
         val http = app.myspoti.spotify.security.BoundedHttp.client()
         val updater = app.myspoti.spotify.gql.GqlOpsUpdater(http, java.io.File(context.filesDir, "spotify/gql-ops.json"))
         host = WebPlayerHost(context)
-        spotify = SpotifyApi(host, scope, http = http, language = Locale.getDefault().language, ops = updater.load(), deviceId = clientDeviceId(context), userAgent = host.userAgent)
+        spotify = SpotifyApi(host, scope, http = http, language = Locale.getDefault().language, ops = updater.load(), deviceId = clientDeviceId(context), userAgent = host.userAgent,
+            tokenStore = clientTokens(context))
         spotify.bridge.logger = { line -> Logbook.log(line) }
         host.onPageLoaded = { scope.launch { spotify.onPageLoaded() } }
         host.onPageStarting = { spotify.onPageStarting() }
@@ -176,6 +177,16 @@ object MyspotiRuntime {
     /** Data saver: frees the page; [resume] loads it again. */
     fun suspendPlayer() = host.unload()
     fun resume() = host.load()
+
+    /** The client token of each client device id, in the app's own files (spotify/client-token-<id>; Myspoti 2.4.0). */
+    private fun clientTokens(context: Context) = object : app.myspoti.spotify.gql.ClientTokenStore {
+        private fun file(id: String) = java.io.File(context.filesDir, "spotify/client-token-" + id.filter { it.isLetterOrDigit() || it == '-' })
+        override fun load(deviceId: String): String? = runCatching { file(deviceId).readText() }.getOrNull()
+        override fun save(deviceId: String, text: String) {
+            val f = file(deviceId)
+            runCatching { f.parentFile?.mkdirs(); val tmp = java.io.File(f.path + ".tmp"); tmp.writeText(text); tmp.renameTo(f) }
+        }
+    }
 
     /**
      * The client's device id, kept across launches: a client token is issued per (client, device)

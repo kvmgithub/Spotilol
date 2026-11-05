@@ -46,8 +46,14 @@ class ClientTokenStoreTest {
         Response.Builder().request(r).protocol(Protocol.HTTP_1_1).code(200).message("OK").body(body.toResponseBody()).build()
     }).build()
 
-    private fun launch(store: ClientTokenStore, scope: CoroutineScope, device: String = "dev1", clientId: String = "c1") =
-        SpotifyHttp(http, Bridge(TokenHost(clientId), scope), deviceId = device, tokenStore = store)
+    private fun launch(store: ClientTokenStore, scope: CoroutineScope, device: String = "dev1", clientId: String = "c1"): SpotifyHttp {
+        val host = TokenHost(clientId)
+        val bridge = Bridge(host, scope)
+        // An answer posted before the bridge listens is lost (a slow CI machine): wait for it.
+        val end = System.currentTimeMillis() + 4_000
+        while (host.messages.subscriptionCount.value == 0) { check(System.currentTimeMillis() < end) { "bridge not listening" }; Thread.sleep(10) }
+        return SpotifyHttp(http, bridge, deviceId = device, tokenStore = store)
+    }
 
     @Test fun aTokenKeptOnDiskIsNotMintedAgain() = runBlocking {
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)

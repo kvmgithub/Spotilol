@@ -190,6 +190,8 @@ internal class ControlRelay(private val view: WebView, private val fingerprint: 
                     // takes commands from now on; a command answered DEVICE_NOT_FOUND came before that.
                     if (it.code in 200..299 && request.method == "PUT" && path.contains("/connect-state/v1/devices/")) app.myspoti.spotify.bridge.PageDevice.joined()
                     if (it.code == 404 && path.contains("/player/command") && "DEVICE_NOT_FOUND" in text) app.myspoti.spotify.bridge.PageDevice.commandLost()
+                // The page's token went stale (a network change seen to do it): the player reloads the page (Myspoti 2.4.0).
+                if (it.code == 401) app.myspoti.spotify.bridge.PageAuth.unauthorized("relay ${request.method} $path")
                     // 402 (refused playback on some free accounts), from Myspoti 2.0.0: the refusal's
                     // own headers and the refused command's shape. No ids, no cookies.
                     if (it.code == 402) {

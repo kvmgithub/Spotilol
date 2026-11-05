@@ -292,6 +292,11 @@ class WebPlayerHost(private val context: Context) : BridgeHost {
             override fun onReceivedHttpError(view: WebView, request: WebResourceRequest, response: WebResourceResponse) {
                 if (WebPolicy.isSpotifyApi(request.url.toString()))
                     log("http ${response.statusCode} ${request.method} ${request.url.toString().substringBefore('?').take(120)}")
+                // The page's own requests answered 401: its token went stale (see PageAuth). A licence or
+                // its address (melody license_url) so answered leaves the next song silent: at once (Myspoti 2.4.0).
+                if (response.statusCode == 401 && request.url.host?.endsWith("spotify.com") == true && !isLoginPage(_url.value))
+                    app.myspoti.spotify.bridge.PageAuth.unauthorized("http ${request.method} ${request.url.path?.take(80)}",
+                        licence = request.url.path?.let { it.contains("widevine-license") || it.endsWith("/license_url") } == true)
                 if (request.isForMainFrame && WebPolicy.isPlayer(request.url.toString()) && (response.statusCode >= 500 || response.statusCode == 429))
                     playerPageFailed("http ${response.statusCode}")
                 if (request.isForMainFrame && _loginLoad.value != LoginLoad.NONE && LoginLoad.isSpotifyAccounts(request.url.toString()) && response.statusCode >= 500)

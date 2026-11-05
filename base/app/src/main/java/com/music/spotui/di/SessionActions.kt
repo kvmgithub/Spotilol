@@ -68,6 +68,7 @@ object SessionActions {
             app.getSharedPreferences(name, android.content.Context.MODE_PRIVATE).edit().clear().apply()
         }
         com.music.spotui.data.local.ListenHistory.clear()
+        com.music.spotui.data.NewReleaseNotifier.forget(app)
     }
 
     /** The new account is signed in. */

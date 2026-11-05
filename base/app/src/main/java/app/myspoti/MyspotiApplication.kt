@@ -23,6 +23,8 @@ class MyspotiApplication : Application() {
         // whose replays sent play commands that took over the Web Player.
         runCatching { java.io.File(filesDir, "wrapped_queue.json").delete() }
         prefetch()
+        // New releases of the artists followed, said in a notification (a setting).
+        com.music.spotui.data.NewReleaseNotifier.start(this)
     }
 
     /**

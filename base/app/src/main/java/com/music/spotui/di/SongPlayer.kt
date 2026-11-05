@@ -342,8 +342,11 @@ object SongPlayer {
 
     /** System controls (notification, headset, car) land here. */
     private object Controls : app.myspoti.host.android.PlaybackControls {
-        override fun play() = SongPlayer.play()
-        override fun pause() = SongPlayer.pause()
+        // The session says the new state at once, not when the page answers: a Bluetooth headset or
+        // stereo reads it (AVRCP play status) to choose between play and pause, and kept sending
+        // "pause" to a paused player while the session still said playing (Myspoti 2.4.0, #108).
+        override fun play() { SongPlayer.play(); pushNotification(null, boundState?.likeState?.value ?: false) }
+        override fun pause() { SongPlayer.pause(); pushNotification(null, boundState?.likeState?.value ?: false) }
         override fun next() = SongPlayer.next()
         override fun previous() = SongPlayer.previous()
         override fun seekTo(ms: Long) = SongPlayer.seekTo(ms)
@@ -391,6 +394,14 @@ object SongPlayer {
             album = p.getString("album", "").orEmpty(),
         )
         state.likeState.value = p.getBoolean("liked", false)
+        // The media session has the last song, paused, before anything plays: a car or a Bluetooth
+        // stereo that binds first (after the app was killed too) shows it and can resume it (Myspoti 2.4.0, #142).
+        PlaybackService.update(Graph.app, NowPlayingInfo(
+            id = uri, title = title, artist = p.getString("singer", "").orEmpty(), album = p.getString("album", "").orEmpty(),
+            coverUrl = p.getString("cover", "").orEmpty().ifBlank { null }, durationMs = durationMs, positionMs = positionMs,
+            playing = false, liked = state.likeState.value, shuffle = state.shuffle.value == true,
+            episode = uri.startsWith("spotify:episode:"),
+        ))
     }
 
     /** Saved on track change and on play/pause (not on every state). */
@@ -1770,7 +1781,8 @@ object SongPlayer {
             runCatching { api.devices.refresh() }
             val active = api.devices.devices.value.firstOrNull { it.active }
             _activeDevice.value = active?.takeIf { !it.local }?.let { ConnectDevice(it.id, it.name, it.type, false, true) }
-            active?.volume?.let { if (SystemClock.elapsedRealtime() > volumeHoldUntil) _remoteVolume.intValue = (it * 100).toInt().coerceIn(0, 100) }
+            // A negative volume is a device with a fixed one (Web Player: disable_volume): not 0 % (Myspoti 2.4.0).
+            active?.volume?.takeIf { it >= 0 }?.let { if (SystemClock.elapsedRealtime() > volumeHoldUntil) _remoteVolume.intValue = (it * 100).toInt().coerceIn(0, 100) }
             PlaybackService.setPlaybackDevice(_activeDevice.value != null, remoteVolume)
         }
     }

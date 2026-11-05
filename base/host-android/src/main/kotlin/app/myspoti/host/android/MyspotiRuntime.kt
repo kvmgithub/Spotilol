@@ -42,6 +42,7 @@ object MyspotiRuntime {
         spotify.player.reloadHost = { host.reload() }
         spotify.player.online = network::online
         watchNetwork(context)
+        PhoneCall.install(context)
         // Repairs wait while Spotify limits playback, and while a Spotify sign-in page is open:
         // the player is not there to answer, and the "page not answering" reload threw the user
         // off the e-mail code step while they were away reading the code (reported, log seen).

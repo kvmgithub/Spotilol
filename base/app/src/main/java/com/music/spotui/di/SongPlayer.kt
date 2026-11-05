@@ -235,6 +235,7 @@ object SongPlayer {
     /** Wires the API's flows into the UI's now-playing state. Call once, on the main thread. */
     fun attachEngine(state: CurrentSongState) {
         boundState = state
+        app.myspoti.host.android.PhoneCall.listener = { busy -> main.post { phoneCall(busy) } }
         restoreLastTrack(state)
         restoreRepeat(state)
         scope.launch { api.player.state.collect { s -> if (acceptsSessionUpdates()) applyState(s) } }
@@ -1009,6 +1010,7 @@ object SongPlayer {
     }
 
     fun play() {
+        if (!byCall) callPause.userActed()
         if (LocalPlayer.active.value) { Haptics.click(); LocalPlayer.resume(); return }
         // Smart shuffle was turned off while paused: the list's order comes back as it plays on.
         plainOrderDue?.let { if (restorePlainOrder(it)) return }
@@ -1039,7 +1041,29 @@ object SongPlayer {
         }
     }
 
-    fun pause() { Haptics.click(); cancelBurst(); pauseSilently() }
+    fun pause() { if (!byCall) callPause.userActed(); Haptics.click(); cancelBurst(); pauseSilently() }
+
+    private val callPause = CallPause()
+    /** The play or pause below comes from [phoneCall], not from the user. */
+    private var byCall = false
+
+    /**
+     * The phone rings or a call ends, on the main thread (Myspoti 2.4.0): the song pauses for the
+     * call and plays again after it, unless the user touched the player meanwhile. ExoPlayer (the
+     * phone's own files) deals with its own audio focus; another device playing is left alone.
+     */
+    private fun phoneCall(busy: Boolean) {
+        if (LocalPlayer.active.value || _activeDevice.value != null) return
+        val action = callPause.modeChanged(busy, isPlaying(), SystemClock.elapsedRealtime())
+        byCall = true
+        try {
+            when (action) {
+                CallPause.Action.PAUSE -> { app.myspoti.host.android.Logbook.log("phone call: paused"); pause() }
+                CallPause.Action.RESUME -> { app.myspoti.host.android.Logbook.log("phone call over: playing again"); play() }
+                CallPause.Action.NONE -> Unit
+            }
+        } finally { byCall = false }
+    }
 
     /** [send] false: the engine has paused already (the sleep timer's fade). */
     private fun pauseSilently(send: Boolean = true) {

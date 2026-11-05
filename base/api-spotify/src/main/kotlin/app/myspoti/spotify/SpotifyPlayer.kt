@@ -1533,9 +1533,12 @@ class SpotifyPlayer(private val bridge: Bridge, private val scope: CoroutineScop
         }
         adsOffSent = false
         adMuteTries = 0
-        // A real song is playing: the fallback after a refusal (play the list without picking the
-        // song) is armed again for the next command, not held once per five seconds for all of them.
-        refusalStep = 0
+        // The song asked is playing (or the ask is long gone): the fallback after a refusal (play the
+        // list without picking the song) is armed again for the next command. Another song (the one
+        // left playing) does not count: each state of the old song reset the steps (Myspoti 2.4.0).
+        val asked = lastPlay
+        if (asked == null || System.currentTimeMillis() - asked.third > LATE_REFUSED_WINDOW_MS ||
+            (if (asked.second != null) s?.item?.uri == asked.second else s?.contextUri == asked.first)) refusalStep = 0
         // A transient empty report at the loop must not erase the song that just ended (Myspoti 2.4.0).
         val repeatBefore = lastTrackState ?: lastSong?.takeIf {
             System.currentTimeMillis() - lastSongUntil in 0..UNLOAD_NULL_MS

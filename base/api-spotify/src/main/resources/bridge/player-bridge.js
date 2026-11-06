@@ -271,7 +271,8 @@
   // there (fades and ad muting keep working); a cross-origin source without CORS comes through
   // as silence. A probe listens while an element
   // plays: {type: 'boost', sound: true} once per page when sound comes through, sound: false
-  // after every BOOST_SILENT_S seconds of playing in silence (the host then reloads the page).
+  // after every BOOST_SILENT_S seconds of playing in silence, at once for a cross-origin source
+  // without CORS (the host then reloads the page).
   const BOOST_MAX = 2;
   const BOOST_SILENT_S = 10;
   // The graph (named after its first use): {ctx, gain, paths: [{delay, g}, {delay, g}], limiter, out, analyser, ...}.
@@ -332,7 +333,7 @@
 
   const boostProbe = () => {
     const buf = new Float32Array(boost.analyser.fftSize);
-    let silent = 0, last = -1, heard = false;
+    let silent = 0, last = -1, heard = false, reported = false;
     setInterval(async () => {
       const player = await localPlayer().catch(() => null);
       const el = player && player._player;
@@ -355,9 +356,14 @@
       }
       // Silence counts only where sound is due (Chromium applies the element's volume in the graph).
       if (window.__mspMuted || el.volume < 0.05 || boost.gain.gain.value === 0) { silent = 0; return; }
-      if (++silent < BOOST_SILENT_S) return;
-      // Listening on: a host that kept the graph (the network looked at fault) hears of it again.
+      // A cross-origin source without CORS (a podcast from its own host) never reaches Web Audio:
+      // said at its first silent second, not after BOOST_SILENT_S. Once moving, the page has
+      // reported the episode, so the reload plays that one on, not the song before.
+      const tainted = srcKind(el) === 'cross-origin' && el.crossOrigin == null;
+      if (++silent < (tainted && !reported ? 1 : BOOST_SILENT_S)) return;
+      // Listening on: a host that kept the graph (offline) hears of it again, every BOOST_SILENT_S.
       silent = 0;
+      reported = true;
       post({ type: 'boost', sound: false, src: srcKind(el), state: boost.ctx.state, level });
     }, 1000);
   };

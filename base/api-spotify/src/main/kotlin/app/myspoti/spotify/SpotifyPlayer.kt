@@ -2344,7 +2344,7 @@ class SpotifyPlayer(private val bridge: Bridge, private val scope: CoroutineScop
             bridge.logger?.invoke("no sound through Web Audio while the audio waits for the network: boost and crossfade kept")
             return
         }
-        bridge.logger?.invoke("boost and crossfade off: no sound through Web Audio, the page reloads")
+        bridge.logger?.invoke("boost and crossfade off: no sound through Web Audio (source ${(msg["src"] as? JsonPrimitive)?.content}), the page reloads")
         webAudioOff = true
         boost = 1.0
         _boostSilent.tryEmit(Unit)

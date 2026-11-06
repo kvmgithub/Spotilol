@@ -6,6 +6,11 @@ Each version section is the text of the GitHub release tagged `ui-v<version>` (p
 
 ## [Unreleased]
 
+## [1.1.3] - 2026-11-06
+
+### Changed
+- A podcast from its own host reloads the page as soon as it plays (about 2 seconds of silence) instead of after 10 seconds of silence.
+
 ## [1.1.2] - 2026-11-06
 
 ### Fixed

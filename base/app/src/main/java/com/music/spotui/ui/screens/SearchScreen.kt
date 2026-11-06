@@ -1,5 +1,10 @@
 package com.music.spotui.ui.screens
 
+import com.music.spotui.ui.theme.tone
+import com.music.spotui.ui.theme.AppAccent
+import com.music.spotui.ui.theme.AppText
+import com.music.spotui.ui.theme.AppMuted
+
 import kotlinx.coroutines.launch
 import com.music.spotui.ui.components.pressable
 import androidx.compose.ui.res.stringResource
@@ -875,12 +880,12 @@ fun SearchStickyBar(
             .padding(10.dp)
             .clip(RoundedCornerShape(10.dp))
             .height(55.dp)
-            .background(Color.White)
+            .background(tone(0xFF2A2A2A))
             .padding(10.dp, 0.dp)
     ){
         Icon(
             painterResource(id = R.drawable.ic_search_big),
-            tint = Color.Black,
+            tint = AppMuted,
             contentDescription = "")
 
         TextField(
@@ -889,7 +894,7 @@ fun SearchStickyBar(
                 .focusRequester(fieldFocus)
                 .onFocusChanged { onFocusChange(it.isFocused) },
             value = text,
-            textStyle = TextStyle.Default.copy(fontSize = 16.sp, color = Color.Black, fontWeight = FontWeight(500)),
+            textStyle = TextStyle.Default.copy(fontSize = 16.sp, color = AppText, fontWeight = FontWeight(500)),
             colors = TextFieldDefaults.colors(
                 unfocusedContainerColor = Color.Transparent,
                 disabledContainerColor = Color.Transparent,
@@ -897,21 +902,22 @@ fun SearchStickyBar(
                 disabledIndicatorColor = Color.Transparent,
                 focusedIndicatorColor = Color.Transparent,
                 unfocusedIndicatorColor = Color.Transparent,
-                cursorColor = Color.Black
+                cursorColor = AppAccent
 
             ),
             singleLine = true,
             onValueChange = onTextChange,
             placeholder = {
                 Text(
-                     textAlign = TextAlign.Center,
+                    textAlign = TextAlign.Center,
+                    color = AppMuted,
                     fontWeight = FontWeight.Bold,
                     text = stringResource(R.string.search_header_field_hint)
 
                 )
             },
             trailingIcon = if (text.isEmpty()) null else {
-                { SearchClearButton(fieldFocus, Color.Black) { onTextChange("") } }
+                { SearchClearButton(fieldFocus, AppMuted) { onTextChange("") } }
             },
         )
     }

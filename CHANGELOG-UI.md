@@ -6,9 +6,14 @@ Each version section is the text of the GitHub release tagged `ui-v<version>` (p
 
 ## [Unreleased]
 
+## [1.1.1] - 2026-11-06
+
+### Changed
+- The search field on the Search tab is dark like the rest of the app (grey field, white text, accent cursor) instead of white with black text (Myspoti 2.4.0).
+
 ## [1.1.0] - 2026-11-05
 
-Taken from Myspoti 2.4.0. Not taken: AutoMix and spatial audio (they work on songs the app plays itself), Live Radio, Android TV, Android Auto, picture-in-picture, several accounts in separate web player profiles (the encrypted profiles stay), voice search, the Friends tab and Jam, Sonos and other speaker logins, downloads and extensions, the Immersive look, the settings search and the regrouped settings, the Following chip on Home, other lyrics sources and romanized lyrics, the dark search field, and one APK per architecture.
+Taken from Myspoti 2.4.0. Not taken: AutoMix and spatial audio (they work on songs the app plays itself), Live Radio, Android TV, Android Auto, picture-in-picture, several accounts in separate web player profiles (the encrypted profiles stay), voice search, the Friends tab and Jam, Sonos and other speaker logins, downloads and extensions, the Immersive look, the settings search and the regrouped settings, the Following chip on Home, other lyrics sources and romanized lyrics, and one APK per architecture. The dark search field followed in 1.1.1.
 
 ### Added
 - What's New: a bell on Home opens the new releases and episodes of the artists and shows you follow, newest first, with play, add to library, and add to the queue or a playlist.

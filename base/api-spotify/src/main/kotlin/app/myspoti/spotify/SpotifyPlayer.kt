@@ -2336,8 +2336,11 @@ class SpotifyPlayer(private val bridge: Bridge, private val scope: CoroutineScop
     private fun onBoost(msg: JsonObject) {
         // Also at 100 %: a page that has built the graph stays routed through it, silent or not.
         if ((msg["sound"] as? JsonPrimitive)?.booleanOrNull != false) return
-        // Silence while the element waits for audio data is the network's, not Web Audio's.
-        if (!online() || lastMedia?.starved == true) {
+        // Silence while the element waits for audio data is the network's, not Web Audio's. A
+        // cross-origin source (a podcast from its own host) is always silent there: the last
+        // state push may still show the element starved after a seek, which kept a silent graph.
+        val crossOrigin = (msg["src"] as? JsonPrimitive)?.content == "cross-origin"
+        if (!online() || lastMedia?.starved == true && !crossOrigin) {
             bridge.logger?.invoke("no sound through Web Audio while the audio waits for the network: boost and crossfade kept")
             return
         }

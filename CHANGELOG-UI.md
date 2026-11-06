@@ -6,6 +6,12 @@ Each version section is the text of the GitHub release tagged `ui-v<version>` (p
 
 ## [Unreleased]
 
+## [1.1.2] - 2026-11-06
+
+### Fixed
+- A notification for a new podcast episode opens that episode's page and names the show; it opened an album page that could not load the episode, also on reload.
+- Podcasts from their own host (not from Spotify's servers) were silent with the crossfade or the volume boost on: Web Audio never gets their sound, and the switch to direct output was skipped when the episode had just been resumed at its saved position. The page now reloads and plays the episode on; crossfade and boost stay off until the app is restarted.
+
 ## [1.1.1] - 2026-11-06
 
 ### Changed

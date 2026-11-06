@@ -407,8 +407,10 @@ class MainActivity : AppCompatActivity() {
         if (com.music.spotui.data.api.InviteLinks.handle(link)) return
         val uri = spotifyUri(link) ?: return
         // A shared list (or artist, podcast) opens on its page, as in the official app; a song or
-        // an episode still plays (Myspoti 2.0.0).
-        if (uri.split(':').getOrNull(1) in setOf("playlist", "album", "artist", "show")) {
+        // an episode still plays (Myspoti 2.0.0), unless a new-episode notification opens its page.
+        val type = uri.split(':').getOrNull(1)
+        if (type in setOf("playlist", "album", "artist", "show") ||
+            type == "episode" && intent.getBooleanExtra(com.music.spotui.data.NewReleaseNotifier.EXTRA_PAGE, false)) {
             com.music.spotui.data.api.InviteLinks.page.value = uri
             return
         }

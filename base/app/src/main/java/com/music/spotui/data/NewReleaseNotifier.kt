@@ -42,6 +42,9 @@ object NewReleaseNotifier {
     private const val MAX_SHOWN = 5
     private const val SEEN_KEPT = 300
 
+    /** On a notification's intent: an episode link opens the episode's page instead of playing it (MySpotilol). */
+    const val EXTRA_PAGE = "app.myspoti.page"
+
     /** The notifications are wanted (a setting, on by default). */
     var on by mutableStateOf(true)
         private set
@@ -78,7 +81,7 @@ object NewReleaseNotifier {
         val prefs = context.getSharedPreferences(PREFS, 0)
         val now = System.currentTimeMillis()
         if (now - prefs.getLong(KEY_AT, 0L) in 0 until GAP_MS) return
-        val feed = MyspotiRuntime.api.home.whatsNew(0, 30).items
+        val feed = MyspotiRuntime.api.home.whatsNewFeed(0, 30).items
         val seen = prefs.getString(KEY_SEEN, null)?.split('\n')?.filter { it.isNotBlank() }
         val fresh = if (seen == null) emptyList() else feed.filter { it.uri !in seen }
         prefs.edit()
@@ -88,23 +91,26 @@ object NewReleaseNotifier {
         if (fresh.isNotEmpty()) show(context, fresh.take(MAX_SHOWN))
     }
 
-    private fun show(context: Context, releases: List<app.myspoti.api.Album>) {
+    private fun show(context: Context, releases: List<app.myspoti.api.WhatsNewItem>) {
         if (Build.VERSION.SDK_INT >= 33 &&
             context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) return
         val manager = context.getSystemService(NotificationManager::class.java) ?: return
         if (manager.getNotificationChannel(CHANNEL) == null)
             manager.createNotificationChannel(NotificationChannel(CHANNEL, context.getString(R.string.notify_releases_channel), NotificationManager.IMPORTANCE_DEFAULT))
         val compat = NotificationManagerCompat.from(context)
-        releases.forEach { a ->
-            val id = a.uri.substringAfterLast(':')
-            val open = Intent(Intent.ACTION_VIEW, Uri.parse("https://open.spotify.com/album/$id")).setClassName(context, "app.myspoti.MainActivity")
-                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        releases.forEach { r ->
+            val id = r.uri.substringAfterLast(':')
+            // A followed podcast's new episode is in the feed too: its own link, not an album's
+            // (an album page asked for an episode id could not load, MySpotilol 1.1.2).
+            val kind = if (r.episode != null) "episode" else "album"
+            val open = Intent(Intent.ACTION_VIEW, Uri.parse("https://open.spotify.com/$kind/$id")).setClassName(context, "app.myspoti.MainActivity")
+                .putExtra(EXTRA_PAGE, true).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             val tap = PendingIntent.getActivity(context, id.hashCode(), open, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
-            val artist = a.artists.joinToString { it.name }
+            val from = r.album?.artists?.joinToString { it.name } ?: r.episode?.show?.name.orEmpty()
             val n = NotificationCompat.Builder(context, CHANNEL)
                 .setSmallIcon(R.drawable.msp_ic_notification)
-                .setContentTitle(context.getString(R.string.notify_release_title, artist))
-                .setContentText(a.name)
+                .setContentTitle(context.getString(R.string.notify_release_title, from))
+                .setContentText(r.album?.name ?: r.episode?.name)
                 .setContentIntent(tap).setAutoCancel(true).setGroup(GROUP)
                 .build()
             runCatching { compat.notify(id.hashCode(), n) }

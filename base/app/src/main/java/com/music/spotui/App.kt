@@ -68,6 +68,7 @@ fun App() {
                 "playlist" -> com.music.spotui.ui.navigation.playlistRoute(id)
                 "album" -> com.music.spotui.ui.navigation.albumRoute("", "", id)
                 "artist" -> com.music.spotui.ui.navigation.artistRoute("artist", id)
+                "episode" -> com.music.spotui.ui.navigation.episodeRoute(id)
                 else -> com.music.spotui.ui.navigation.showRoute(id)
             })
         }

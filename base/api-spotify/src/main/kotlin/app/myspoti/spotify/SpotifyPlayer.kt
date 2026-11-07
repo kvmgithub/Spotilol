@@ -1243,9 +1243,13 @@ class SpotifyPlayer(
                 continue
             }
             // With a crossfade the page shows what is heard, which lags its element by the
-            // reserve: the song really ends that much sooner.
-            val lag = if (crossfadeSeconds > 0) ((runCatching { readMedia() }.getOrNull()?.lag ?: 0.0) * 1000).toLong() else 0L
-            val left = s.item!!.durationMs - s.positionAt(System.currentTimeMillis()) - lag
+            // reserve: the song really ends that much sooner. And the element plays up to
+            // CROSSFADE_K_MAX times faster while the reserve builds, so its end comes sooner
+            // still in real time (log 07.11.: the play went out 0.5 s before the end, not 1 s).
+            val crossfade = crossfadeSeconds > 0
+            val lag = if (crossfade) ((runCatching { readMedia() }.getOrNull()?.lag ?: 0.0) * 1000).toLong() else 0L
+            val left = ((s.item!!.durationMs - s.positionAt(System.currentTimeMillis()) - lag) /
+                if (crossfade) CROSSFADE_K_MAX else 1.0).toLong()
             if (left <= AD_AHEAD_LEAD_MS) break
             // Re-read now and then: a seek or a late state moves the end.
             delay((left - AD_AHEAD_LEAD_MS).coerceAtMost(AD_AHEAD_CHECK_MS))
@@ -2474,6 +2478,8 @@ class SpotifyPlayer(
 
         /** How long before the end of the song before an ad its next song is played. */
         const val AD_AHEAD_LEAD_MS = 1_000L
+        /** The fastest the bridge plays an element to build a crossfade's reserve (XF_K_MAX there). */
+        const val CROSSFADE_K_MAX = 1.12
         /** The song an [app.myspoti.spotify.bridge.AdBlock.AdAhead] names, awaited that long. */
         const val AD_AHEAD_WAIT_MS = 30_000L
         /** While waiting for that song's end, the end is computed again at least that often. */

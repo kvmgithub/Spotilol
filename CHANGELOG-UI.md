@@ -6,6 +6,11 @@ Each version section is the text of the GitHub release tagged `ui-v<version>` (p
 
 ## [Unreleased]
 
+## [1.2.1] - 2026-11-07
+
+### Fixed
+- With the crossfade on, the next song before an ad that cannot be left out is played a full second before the end again: the element plays slightly faster while the crossfade builds up, so the song ended sooner than counted and the play went out only half a second before the end.
+
 ## [1.2.0] - 2026-11-07
 
 ### Added

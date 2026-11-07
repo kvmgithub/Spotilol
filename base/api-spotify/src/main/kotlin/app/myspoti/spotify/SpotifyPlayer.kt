@@ -2368,7 +2368,7 @@ class SpotifyPlayer(
         val on = normalize
         if (!on && !normalizeSent) return
         val s = lastTrackState
-        val uris = (listOfNotNull(s?.item, s?.next) + _queue.value.nextUp.take(3))
+        val uris = (listOfNotNull(s?.item, s?.next) + _queue.value?.nextUp.orEmpty().take(3))
             .map { it.uri }.filter { it.startsWith("spotify:track:") }.distinct()
         if (on) readLoudness(uris)
         val gains = buildJsonObject {
@@ -2394,7 +2394,7 @@ class SpotifyPlayer(
      */
     private suspend fun readLoudness(uris: List<String>) {
         val http = http ?: return
-        val missing = uris.filter { it !in loudness }
+        val missing = uris.filterNot { loudness.containsKey(it) }
         if (missing.isEmpty() || System.currentTimeMillis() < loudnessRetryAt) return
         // ponytail: cleared when full; an LRU only if the same songs keep being read again.
         if (loudness.size > 2_000) loudness.clear()

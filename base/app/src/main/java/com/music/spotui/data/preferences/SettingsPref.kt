@@ -182,6 +182,29 @@ object BoostPref {
     }
 }
 
+/**
+ * Volume normalization (off by default): every song at a common loudness from Spotify's
+ * loudness value for it, through the same graph in the page as the boost (SpotifyPlayer.setNormalize).
+ */
+object NormalizePref {
+    private const val KEY = "volume_normalize"
+    var on by androidx.compose.runtime.mutableStateOf(prefs(com.music.spotui.di.Graph.app).getBoolean(KEY, false))
+        private set
+
+    fun set(c: Context, value: Boolean) {
+        on = value
+        prefs(c).edit().putBoolean(KEY, value).apply()
+        applyToPlayer()
+    }
+
+    /** Gives the setting to the player (at start, and at every change). */
+    fun applyToPlayer() {
+        val runtime = app.myspoti.host.android.MyspotiRuntime
+        if (!runtime.isStarted) return
+        runtime.scope.launch { runtime.spotify.player.setNormalize(on) }
+    }
+}
+
 fun getLyricTranslateLang(c: Context): String =
     prefs(c).getString(KEY_LYRIC_TRANSLATE_LANG, "").orEmpty()
 

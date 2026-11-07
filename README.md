@@ -6,7 +6,7 @@ An Android app for Spotify without ads: [Myspoti](https://github.com/kota-zo/mys
 
 - No audio ads; Spotify's ad and telemetry requests are blocked
 - Spotify Connect, Spotify's own lyrics (word by word where Spotify times them), Canvas, podcasts, local files, sleep timer, a Recap kept on the phone
-- A real crossfade and a volume boost up to 200 %
+- A real crossfade, a volume boost up to 200 % and volume normalization
 - Encrypted account profiles: switch accounts without signing in again
 - No Google Play services, no Firebase, no in-app updater, no social features
 
@@ -51,11 +51,11 @@ Removed:
 
 Added from Spotilol:
 
-- Encrypted account profiles (EncryptedSharedPreferences, fail closed): save the current session, switch without signing in again
+- Encrypted account profiles (AES-256-GCM with an Android Keystore key, fail closed): save the current session, switch without signing in again
 - Switchable, redacted diagnostics (Settings → App)
 - Spotilol's ad and telemetry blocking, including Spotify's `gabo-receiver-service` events and ad hosts; telemetry gets an empty `200` so the page does not retry
 
-Added in MySpotilol: a volume boost up to 200 % through a gain and a limiter in the page (Settings → Playback); it turns itself off and reloads the player when no sound comes through Web Audio. A real crossfade: the page plays a song slightly faster while the graph slows it back down (tempo and pitch unchanged), and the reserve that builds up lets the end of one song overlap the start of the next; a switch in the mini player turns it on and off.
+Added in MySpotilol: a volume boost up to 200 % through a gain and a limiter in the page (Settings → Playback); it turns itself off and reloads the player when no sound comes through Web Audio. A real crossfade: the page plays a song slightly faster while the graph slows it back down (tempo and pitch unchanged), and the reserve that builds up lets the end of one song overlap the start of the next; a switch in the mini player turns it on and off. Volume normalization (Settings → Playback, off by default): every song at a similar loudness, from Spotify's loudness value for it, through the same graph.
 
 Kept from Myspoti: native screens, library tools, Spotify Connect, local Recap, sleep timer, Canvas, local files, streaming quality, data and energy saver.
 

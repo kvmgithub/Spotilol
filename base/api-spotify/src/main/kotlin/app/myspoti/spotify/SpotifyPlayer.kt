@@ -51,7 +51,12 @@ import kotlinx.serialization.json.putJsonArray
  * the end with a next song, buffering for ever). After [STUCK_MS] the next song is played;
  * if that does not help either, [reloadHost] reloads the page and playback resumes there.
  */
-class SpotifyPlayer(private val bridge: Bridge, private val scope: CoroutineScope) : Player {
+class SpotifyPlayer(
+    private val bridge: Bridge,
+    private val scope: CoroutineScope,
+    /** For Spotify's loudness values (volume normalization); null: no normalization. */
+    private val http: app.myspoti.spotify.gql.SpotifyHttp? = null,
+) : Player {
     private val _state = MutableStateFlow<PlayerState?>(null)
     override val state: StateFlow<PlayerState?> = _state
     private val _queue = MutableStateFlow<Queue?>(null)
@@ -334,6 +339,7 @@ class SpotifyPlayer(private val bridge: Bridge, private val scope: CoroutineScop
                 if (audioQuality != "auto") applyAudioQuality()
                 if (boost > 1.0) applyBoost()
                 if (crossfadeSeconds > 0) applyCrossfade()
+                if (normalize) { normalizedFor = null; normalizeSoon() }
                 // The page keeps its volume: an app closed during a muted ad must not stay silent.
                 // Only when this page is Connect's active device: the volume is that device's otherwise, and a
                 // speaker at 0 went to 100 % (Myspoti 2.4.0, #159).
@@ -1551,6 +1557,7 @@ class SpotifyPlayer(private val bridge: Bridge, private val scope: CoroutineScop
         val shown = s?.let { followRepeat(it, repeatBefore) }
         lastTrackState = shown
         _state.value = shown
+        normalizeSoon()
         // A song plays, the user's pause over: nothing left to play on from after a paused ad.
         if (s?.item != null && !s.isPaused && !pausedByUser) { onwardAfterPausedAd = null; pickAfterPause = null }
         // Reported (2.0.2-beta.3, log seen): Spotify refusing the audio licences (429), the page
@@ -2325,6 +2332,84 @@ class SpotifyPlayer(private val bridge: Bridge, private val scope: CoroutineScop
             .onFailure { bridge.logger?.invoke("crossfade ${crossfadeSeconds}s not set: ${it.message}") }
     }
 
+    /**
+     * Volume normalization: every song at a common loudness. Spotify's loudness value for the
+     * song playing and the next ones ([readLoudness]) becomes a gain the page applies when its
+     * song changes ("media.normalize" in the bridge). Needs the same Web Audio graph as the boost.
+     */
+    @Volatile var normalize: Boolean = false
+        private set
+
+    /** Spotify's loudness in dB by track uri; NaN: Spotify has none for it. */
+    private val loudness = java.util.concurrent.ConcurrentHashMap<String, Double>()
+    @Volatile private var loudnessRetryAt = 0L
+    /** The song and the next one the page last got gains for. */
+    @Volatile private var normalizedFor: String? = null
+    @Volatile private var normalizeSent = false
+
+    suspend fun setNormalize(on: Boolean) {
+        normalize = on
+        normalizedFor = null
+        if (bridge.ready.value) applyNormalize()
+    }
+
+    /** A new song or next song: their gains, once each. */
+    private fun normalizeSoon() {
+        if (!normalize || webAudioOff || !bridge.ready.value) return
+        val s = lastTrackState ?: return
+        val key = "${s.item?.uri}|${s.next?.uri}"
+        if (key == normalizedFor) return
+        normalizedFor = key
+        scope.launch { applyNormalize() }
+    }
+
+    private suspend fun applyNormalize() {
+        if (webAudioOff || !bridge.ready.value) return
+        val on = normalize
+        if (!on && !normalizeSent) return
+        val s = lastTrackState
+        val uris = (listOfNotNull(s?.item, s?.next) + _queue.value.nextUp.take(3))
+            .map { it.uri }.filter { it.startsWith("spotify:track:") }.distinct()
+        if (on) readLoudness(uris)
+        val gains = buildJsonObject {
+            for (u in uris) loudness[u]?.takeIf { !it.isNaN() }?.let { put(u, normalizeGain(it)) }
+        }
+        runCatching { bridge.call("media.normalize", buildJsonObject { put("on", on); put("gains", gains) }, quiet = true) }
+            .onSuccess {
+                normalizeSent = true
+                val item = s?.item ?: return@onSuccess
+                val l = loudness[item.uri]
+                bridge.logger?.invoke(when {
+                    !on -> "normalization off"
+                    l == null || l.isNaN() -> "normalization: no loudness value for ${item.name}, played at 0 dB"
+                    else -> "normalization: ${item.name} loudness ${"%.1f".format(java.util.Locale.ROOT, l)} dB, gain ${"%.1f".format(java.util.Locale.ROOT, normalizeGain(l))} dB"
+                })
+            }
+            .onFailure { bridge.logger?.invoke("normalization not set: ${it.message}") }
+    }
+
+    /**
+     * Spotify's loudness (its audio features: dB over the whole song) for [uris] not read yet, in
+     * one request. A refused request is tried again after [LOUDNESS_RETRY_MS] at the earliest.
+     */
+    private suspend fun readLoudness(uris: List<String>) {
+        val http = http ?: return
+        val missing = uris.filter { it !in loudness }
+        if (missing.isEmpty() || System.currentTimeMillis() < loudnessRetryAt) return
+        // ponytail: cleared when full; an LRU only if the same songs keep being read again.
+        if (loudness.size > 2_000) loudness.clear()
+        runCatching {
+            http.getJson("https://spclient.wg.spotify.com/audio-attributes/v1/audio-features?ids=" +
+                missing.joinToString(",") { it.substringAfterLast(':') } + "&format=json")
+        }.onSuccess { json ->
+            val byId = loudnessById(json)
+            for (u in missing) loudness[u] = byId[u.substringAfterLast(':')] ?: Double.NaN
+        }.onFailure {
+            loudnessRetryAt = System.currentTimeMillis() + LOUDNESS_RETRY_MS
+            bridge.logger?.invoke("normalization: loudness not read (${it.javaClass.simpleName}: ${it.message?.take(120)})")
+        }
+    }
+
     /** No sound came through Web Audio on this phone: boost and crossfade stay off until restart. */
     @Volatile private var webAudioOff = false
 
@@ -2365,6 +2450,28 @@ class SpotifyPlayer(private val bridge: Bridge, private val scope: CoroutineScop
     }
 
     companion object {
+        /**
+         * The loudness every song is brought to, in the unit of Spotify's audio features (dB over
+         * the whole song; a loud modern master reads about -5, a quiet older one -12 or less).
+         * ponytail: one level, near Spotify's own "Loud" setting; a choice like Spotify's three if wanted.
+         */
+        const val NORMALIZE_TARGET_DB = -10.0
+        const val NORMALIZE_MIN_DB = -12.0
+        /** Raised at most that much: the limiter catches the peaks. */
+        const val NORMALIZE_MAX_DB = 6.0
+        const val LOUDNESS_RETRY_MS = 5 * 60_000L
+        fun normalizeGain(loudnessDb: Double): Double = (NORMALIZE_TARGET_DB - loudnessDb).coerceIn(NORMALIZE_MIN_DB, NORMALIZE_MAX_DB)
+
+        /** An audio-attributes answer (`{"audio_features": [{id, loudness, ...} | null]}`): loudness by track id. */
+        internal fun loudnessById(json: kotlinx.serialization.json.JsonElement?): Map<String, Double> =
+            ((json as? JsonObject)?.get("audio_features") as? kotlinx.serialization.json.JsonArray).orEmpty()
+                .mapNotNull { it as? JsonObject }
+                .mapNotNull { o ->
+                    val id = (o["id"] as? JsonPrimitive)?.contentOrNull ?: return@mapNotNull null
+                    val db = (o["loudness"] as? JsonPrimitive)?.doubleOrNull?.takeIf { it.isFinite() && it in -80.0..10.0 } ?: return@mapNotNull null
+                    id to db
+                }.toMap()
+
         /** How long before the end of the song before an ad its next song is played. */
         const val AD_AHEAD_LEAD_MS = 1_000L
         /** The song an [app.myspoti.spotify.bridge.AdBlock.AdAhead] names, awaited that long. */

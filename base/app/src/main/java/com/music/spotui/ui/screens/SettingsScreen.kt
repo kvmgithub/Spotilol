@@ -95,6 +95,12 @@ fun SettingsScreen(navController: NavController) {
             )
             CrossfadeRow()
             BoostRow()
+            OptionRow(
+                label = stringResource(R.string.spotilol_normalize_title),
+                detail = stringResource(R.string.spotilol_normalize_detail),
+                checked = com.music.spotui.data.preferences.NormalizePref.on,
+                onChecked = { com.music.spotui.data.preferences.NormalizePref.set(ctx, it) },
+            )
             var keepPlaying by remember { mutableStateOf(app.myspoti.host.android.PlaybackService.keepsPlayingOnClose(ctx)) }
             OptionRow(
                 label = stringResource(R.string.settings_keep_playing_title),

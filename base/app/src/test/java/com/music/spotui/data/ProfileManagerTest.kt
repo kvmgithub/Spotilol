@@ -1,7 +1,5 @@
 package com.music.spotui.data
 
-import android.content.SharedPreferences
-import java.lang.reflect.Proxy
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertThrows
@@ -9,14 +7,10 @@ import org.junit.Test
 
 /** Spotilol's fail-closed profile regressions. */
 class ProfileManagerTest {
-    private fun preferences(read: () -> String?, onEdit: () -> Unit = {}): SharedPreferences =
-        Proxy.newProxyInstance(SharedPreferences::class.java.classLoader, arrayOf(SharedPreferences::class.java)) { _, method, _ ->
-            when (method.name) {
-                "getString" -> read()
-                "edit" -> { onEdit(); error("Unexpected write") }
-                else -> error("Unexpected preferences call: ${method.name}")
-            }
-        } as SharedPreferences
+    private fun preferences(value: () -> String?, onEdit: () -> Unit = {}) = object : ProfileManager.Store {
+        override fun read() = value()
+        override fun write(value: String) { onEdit(); error("Unexpected write") }
+    }
 
     @Test fun unreadableEncryptedProfilesCannotBecomeEmptyWriteInput() {
         var writes = 0

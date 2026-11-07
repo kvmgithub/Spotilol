@@ -23,6 +23,8 @@ object Graph {
         com.music.spotui.data.preferences.applyCrossfade(com.music.spotui.data.preferences.getCrossfadeSeconds(application))
         // The volume boost (100 % = off), and back to 100 % when no sound comes through it.
         com.music.spotui.data.preferences.BoostPref.applyToPlayer()
+        // Volume normalization (off by default), through the same graph as the boost.
+        com.music.spotui.data.preferences.NormalizePref.applyToPlayer()
         if (MyspotiRuntime.isStarted) MyspotiRuntime.scope.launch {
             MyspotiRuntime.spotify.player.boostSilent.collect { com.music.spotui.data.preferences.BoostPref.turnedOff(application) }
         }

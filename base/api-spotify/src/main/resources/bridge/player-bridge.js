@@ -275,8 +275,32 @@
   // without CORS (the host then reloads the page).
   const BOOST_MAX = 2;
   const BOOST_SILENT_S = 10;
-  // The graph (named after its first use): {ctx, gain, paths: [{delay, g}, {delay, g}], limiter, out, analyser, ...}.
+  // The graph (named after its first use): {ctx, norm, gain, paths: [{delay, g}, {delay, g}], limiter, out, analyser, ...}.
   let boost = null;
+
+  // --- normalization ------------------------------------------------------------
+  //
+  // Every song at a common loudness, from Spotify's loudness value for it: the host reads the
+  // values and sends a gain per song ('media.normalize'), applied here when the page's song
+  // changes. `norm` sits between the elements and the boost, so the gain is part of what enters
+  // the crossfade's delay: the end of the old song keeps its gain while the new one starts at
+  // its own. A song without a value (an episode, an ad, a local file) plays at 0 dB.
+  const NZ_MIN_DB = -12, NZ_MAX_DB = 6;
+  const nz = { on: false, gains: new Map(), uri: null, gain: 1 };
+  // The limiter works while the boost or a song's gain raises the level.
+  const setLimiter = () => {
+    const hot = boost.level > 1 || nz.gain > 1;
+    boost.limiter.threshold.value = hot ? -1 : 0;
+    boost.limiter.ratio.value = hot ? 20 : 1;
+  };
+  const nzApply = () => {
+    if (!boost) return;
+    const db = nz.on && nz.uri ? (nz.gains.get(nz.uri) || 0) : 0;
+    nz.gain = Math.pow(10, db / 20);
+    boost.norm.gain.setTargetAtTime(nz.gain, boost.ctx.currentTime, 0.05);
+    setLimiter();
+  };
+  const nzTrack = uri => { if (uri !== nz.uri) { nz.uri = uri; nzApply(); } };
 
   const srcKind = el => {
     const s = el.currentSrc || '';
@@ -308,7 +332,7 @@
     if (!(el instanceof HTMLMediaElement) || boost.routed.has(el)) return;
     boost.routed.add(el);
     try {
-      boost.ctx.createMediaElementSource(el).connect(boost.gain);
+      boost.ctx.createMediaElementSource(el).connect(boost.norm);
       el.__mspId = ++boost.count;
       xfWatch(el);
       if (el.__mspId > 1) post({ type: 'boost', routed: el.__mspId });
@@ -372,7 +396,9 @@
   const ensureGraph = () => {
     if (boost) return boost;
     const ctx = new AudioContext({ latencyHint: 'playback' });
+    const norm = ctx.createGain();
     const gain = ctx.createGain();
+    norm.connect(gain);
     const paths = [0, 1].map(i => {
       const path = { delay: ctx.createDelay(XF_MAX_S + 4), g: ctx.createGain(), dm: [{ t: 0, v: 0 }], an: ctx.createAnalyser() };
       path.g.gain.value = i === 0 ? 1 : 0;
@@ -396,7 +422,7 @@
     const heard = ctx.createAnalyser();
     heard.fftSize = 2048;
     out.connect(heard);
-    boost = { ctx, gain, paths, mix, limiter, out, analyser, heard, level: 1, routed: new WeakSet(), count: 0 };
+    boost = { ctx, norm, gain, paths, mix, limiter, out, analyser, heard, level: 1, routed: new WeakSet(), count: 0 };
     boostProbe();
     return boost;
   };
@@ -1106,10 +1132,24 @@
       ensureGraph();
       boost.level = level;
       boost.gain.gain.value = window.__mspMuted ? 0 : level;
-      boost.limiter.threshold.value = level > 1 ? -1 : 0;
-      boost.limiter.ratio.value = level > 1 ? 20 : 1;
+      setLimiter();
       await boostRoute();
       return { level, routed: boost.count, state: boost.ctx.state };
+    },
+
+    // Volume normalization (see "normalization"): {on, gains: {uri: dB}} -> {on, uri, gain (dB
+    // of the song now), known, routed, state}. Gains add to those already sent.
+    'media.normalize': async a => {
+      nz.on = !!a.on;
+      for (const [uri, db] of Object.entries(a.gains || {})) {
+        if (Number.isFinite(db)) nz.gains.set(uri, Math.min(NZ_MAX_DB, Math.max(NZ_MIN_DB, db)));
+      }
+      if (!boost && !nz.on) return { on: false, routed: 0, state: 'off' };
+      ensureGraph();
+      await boostRoute();
+      nzApply();
+      return { on: nz.on, uri: nz.uri, gain: Math.round(200 * Math.log10(nz.gain)) / 10, known: nz.gains.has(nz.uri),
+        routed: boost.count, state: boost.ctx.state };
     },
 
     // The crossfade (see "crossfade"): {seconds: 0..12} -> {seconds, routed, state}.
@@ -1210,6 +1250,8 @@
   const pushState = () => {
     if (!services) return;
     const state = mapState(services.player.getState());
+    // The song's gain from its first moment (see "normalization").
+    nzTrack(state && state.track ? state.track.uri : null);
     // An ad is on: the page's ad managers are turned off again (it re-arms them per break).
     if (state && state.track && state.track.kind === 'ad') { try { adsOff(); } catch (e) { /* no service */ } }
     const json = JSON.stringify(state);

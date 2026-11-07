@@ -6,6 +6,14 @@ Each version section is the text of the GitHub release tagged `ui-v<version>` (p
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-11-07
+
+### Added
+- Even out volume (Settings → Playback, off by default): every song plays at a similar loudness, from Spotify's loudness value for it. Loud songs get a little quieter, quiet ones up to 6 dB louder with the limiter catching the peaks. With the crossfade on, the end of one song keeps its level while the next starts at its own. Episodes and songs without a value play as they are. Like the boost and the crossfade, it plays the music through Web Audio. The diagnostic log names each song's loudness and gain.
+
+### Changed
+- Account profiles are sealed with an AES-256-GCM key of the Android Keystore instead of androidx EncryptedSharedPreferences, which Google deprecated. Saved profiles move over once on first use; the old store is removed only after the copy is written, and a store that cannot be read is left as it is.
+
 ## [1.1.3] - 2026-11-06
 
 ### Changed

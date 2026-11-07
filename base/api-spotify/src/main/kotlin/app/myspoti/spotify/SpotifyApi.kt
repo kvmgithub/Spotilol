@@ -53,7 +53,7 @@ class SpotifyApi(
     fun updateOps(newOps: GqlOps) { currentOps = newOps }
 
     override val ready: StateFlow<Boolean> = bridge.ready
-    override val player = SpotifyPlayer(bridge, scope)
+    override val player = SpotifyPlayer(bridge, scope, this.http)
     override val search = SpotifySearch(gql)
     override val catalog = SpotifyCatalog(gql, this.http)
     override val library = SpotifyLibrary(bridge, gql)

@@ -269,9 +269,8 @@ class SpotifyPlaylists(private val gql: Gql, private val bridge: Bridge, private
      * Made public again it is not put back on the profile, as there either ([setPublished]).
      */
     override suspend fun setAccess(uri: Uri, access: PlaylistAccess) {
-        // The permission first: a refusal there leaves the playlist as it was, listed where it was.
-        bridge.service("PlaylistPermissionsAPI", "setBasePermission", JsonPrimitive(uri), JsonPrimitive(access.permission))
         if (access == PlaylistAccess.PRIVATE && published(uri)) setPublished(uri, false)
+        bridge.service("PlaylistPermissionsAPI", "setBasePermission", JsonPrimitive(uri), JsonPrimitive(access.permission))
     }
 
     /** The library's own "public" flag on the playlist: listed on the profile. */

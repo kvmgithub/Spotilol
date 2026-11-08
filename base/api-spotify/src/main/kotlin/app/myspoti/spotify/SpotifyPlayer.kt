@@ -2382,7 +2382,7 @@ class SpotifyPlayer(
     /** One [applyNormalize] at a time: a switch turned off while the loudness is read is sent after it. */
     private val normalizeLock = kotlinx.coroutines.sync.Mutex()
 
-    private suspend fun applyNormalize(): Unit = normalizeLock.withLock {
+    private suspend fun applyNormalize() { normalizeLock.withLock {
         if (webAudioOff || !bridge.ready.value) return
         val on = normalize
         if (!on && !normalizeSent) return
@@ -2407,7 +2407,7 @@ class SpotifyPlayer(
                 })
             }
             .onFailure { bridge.logger?.invoke("normalization not set: ${it.message}") }
-    }
+    } }
 
     /**
      * Spotify's loudness (its audio features: dB over the whole song) for [uris] not read yet, in

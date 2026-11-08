@@ -348,8 +348,10 @@ class SpotifyPlayer(
                 // Level and device from one reading, so both describe the same moment.
                 runCatching {
                     val wanted = wantedVolume ?: 1.0
-                    val media = readMedia()
-                    if (wanted > 0.0 && (media?.playerVolume ?: volume()) == 0.0 && ownsConnectVolume(media)) setVolume(wanted)
+                    if (wanted > 0.0 && volume() == 0.0) {
+                        val media = readMedia()
+                        if ((media?.playerVolume ?: 0.0) == 0.0 && ownsConnectVolume(media)) setVolume(wanted)
+                    }
                 }
                 // A reloaded page during an ad break plays the ad again: muted again at once. So is a
                 // page reloaded to get past an ad, until a real song plays (an ad can come first).

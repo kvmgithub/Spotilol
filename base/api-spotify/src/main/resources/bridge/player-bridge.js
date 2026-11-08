@@ -444,10 +444,17 @@
   // moment that is heard at full level; the next song change uses the other path again.
   //
   // A pause suspends the context, so the reserve neither plays on nor gets lost. A seek or a
-  // skip drops it (the sound jumps to where the page is). What is heard lags the page by the
+  // skip drops it (the sound jumps to where the page is). With the crossfade turned off (or
+  // shorter) the song plays on as it is heard, and the reserve goes the way it came: the
+  // element runs slower than 1 and the read side catches up with it, over the rest of the song
+  // and on into the next one if need be (a song end without a crossfade keeps the path, so the
+  // old song's end and the new song follow each other on it). What is heard lags the page by the
   // reserve: the page's player sees the heard time (see xfMask), so slider and lyrics follow the ear.
   const XF_MAX_S = 12;
   const XF_K_MAX = 1.12;
+  // A reserve longer than wanted (the crossfade turned off or shortened) is played away at no
+  // lower speed: the element runs slower and the delay shrinks, heard tempo and pitch unchanged.
+  const XF_K_MIN = 1 / XF_K_MAX;
   // A song that ends with less than this left at the last look ended by itself (else: a skip).
   const XF_NATURAL_S = 1.0;
   // Within this of its end the page sees the element's real time (see xfMask).
@@ -558,10 +565,13 @@
     for (let i = 0; i < xf.segs.length; i++) {
       const k = xf.segs[i].k, next = xf.segs[i + 1];
       if (!next) {
-        // Still being written at this speed: read on at 1/k until the delay's limit.
+        // Still being written at this speed: read on at 1/k until the delay's limit, or (slower
+        // than 1, the reserve played away) until the read side has caught up with the element.
         if (k > 1) {
           const slope = 1 - 1 / k, H = Math.max(0, (XF_MAX_S + 3 - d) / slope);
           if (H > 0) dRamp(path, d + slope * H, t + H);
+        } else if (k > 0 && k < 1 && d > 0) {
+          dRamp(path, 0, t + d / (1 / k - 1));
         }
         return;
       }
@@ -719,7 +729,9 @@
   };
 
   // Every timeupdate of the player's element: builds the reserve towards xf.seconds by the
-  // song's end, at the lowest speed that gets there (at most XF_K_MAX).
+  // song's end, at the lowest speed that gets there (at most XF_K_MAX), or plays a reserve
+  // longer than that away by the song's end, at the highest speed below 1 that gets there (at
+  // least XF_K_MIN; what is left then goes on in the next song).
   const xfTick = () => {
     const el = xf.el;
     if (!boost || !el || !boost.routed.has(el) || el.paused) return;
@@ -734,15 +746,20 @@
     const C = xfReserve();
     // Reserve C grows by (k - 1) seconds per second, for rem / k more seconds: k = rem / (rem - (N - C)).
     const need = target - C;
-    let k = need <= 0.02 ? 1 : (rem > need ? rem / (rem - need) : XF_K_MAX);
-    k = Math.min(XF_K_MAX, Math.max(1, k));
+    // Played away only at the page's own speed 1 (a podcast speed is the page's) and while sound is
+    // due; started past 0.3 s too much (a build ends a little over), then down to its target.
+    const drain = (xf.speed || 1) === 1 && !window.__mspMuted && xf.resets < XF_MAX_RESETS &&
+      need < (xf.ours && xf.k < 1 ? -0.02 : -0.3);
+    let k = need > 0.02 ? (rem > need ? rem / (rem - need) : XF_K_MAX)
+      : drain ? (rem > 0 ? rem / (rem - need) : XF_K_MIN) : 1;
+    k = Math.min(XF_K_MAX, Math.max(need > 0.02 ? 1 : XF_K_MIN, k));
     // Few speed changes: each is a step the media pipeline has to follow.
     if (k === 1 ? !xf.ours : (xf.ours && Math.abs(k - xf.k) < 0.01)) return;
     xfRate(k);
-    const key = xf.durationMs + ':' + Math.round(el.duration);
-    if (k > 1 && xf.planned !== key) {
+    const key = xf.durationMs + ':' + Math.round(el.duration) + (k < 1 ? ':drain' : '');
+    if (k !== 1 && xf.planned !== key) {
       xf.planned = key;
-      xfNote('build', { speed: Math.round(k * 1000) / 1000, target, reserve: r1(C), left: Math.round(rem), el: el.__mspId });
+      xfNote(k > 1 ? 'build' : 'drain', { speed: Math.round(k * 1000) / 1000, target, reserve: r1(C), left: rem === null ? null : Math.round(rem), el: el.__mspId });
     }
   };
 
@@ -1163,9 +1180,7 @@
       ensureGraph();
       await boostRoute();
       xf.planned = null;
-      // Turned off: the reserve goes now (a jump to where the page is), not at the next song,
-      // which would otherwise start as late as the reserve and stay that late.
-      if (xf.seconds === 0 && xfReserve() > 0.05) xfFlush('off');
+      // Turned off or shorter: no jump, the reserve too much is played away from here (see xfTick).
       xfTick();
       return { seconds: xf.seconds, routed: boost.count, state: boost.ctx.state };
     },

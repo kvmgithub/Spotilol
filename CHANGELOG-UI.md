@@ -6,6 +6,14 @@ Each version section is the text of the GitHub release tagged `ui-v<version>` (p
 
 ## [Unreleased]
 
+## [1.3.1] - 2026-11-08
+
+### Changed
+- Turning the crossfade off (or shorter) during a song no longer jumps ahead by its reserve, as 1.3.0 did: the song plays on as it is heard, no more reserve is built, and the reserve is played away without being heard (the page's element runs slightly slower, tempo and pitch stay as recorded) by the end of the song, or on into the next song when the end is too near. The diagnostic log names it (`page xfade: drain`).
+
+### Fixed
+- A reserve still being played away counts like a crossfade's for the play before an ad (it goes out in time, and the end of the song is not cut) and for the track-change log.
+
 ## [1.3.0] - 2026-11-08
 
 Fixes from a code review of 1.2.1.

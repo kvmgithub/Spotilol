@@ -1254,14 +1254,15 @@ class SpotifyPlayer(
                 _state.first { it == null || !isThat(it.item) || (!it.isPaused && !it.isBuffering) }
                 continue
             }
-            // With a crossfade the page shows what is heard, which lags its element by the
-            // reserve: the song really ends that much sooner. And the element plays up to
-            // CROSSFADE_K_MAX times faster while the reserve builds, so its end comes sooner
-            // still in real time (log 07.11.: the play went out 0.5 s before the end, not 1 s).
-            val crossfade = crossfadeSeconds > 0
-            val lag = if (crossfade) ((runCatching { readMedia() }.getOrNull()?.lag ?: 0.0) * 1000).toLong() else 0L
+            // With a reserve (the crossfade on, or one still played away after it was turned
+            // off) the page shows what is heard, which lags its element by the reserve: the song
+            // really ends that much sooner. And the element plays up to CROSSFADE_K_MAX times
+            // faster while the reserve builds, so its end comes sooner still in real time (log
+            // 07.11.: the play went out 0.5 s before the end, not 1 s). While it is played away
+            // the element runs slower: the play only goes out a little earlier.
+            val lag = ((runCatching { readMedia() }.getOrNull()?.lag ?: 0.0) * 1000).toLong()
             val left = ((s.item!!.durationMs - s.positionAt(System.currentTimeMillis()) - lag) /
-                if (crossfade) CROSSFADE_K_MAX else 1.0).toLong()
+                if (crossfadeSeconds > 0) CROSSFADE_K_MAX else 1.0).toLong()
             if (left <= AD_AHEAD_LEAD_MS) break
             // Re-read now and then: a seek or a late state moves the end.
             delay((left - AD_AHEAD_LEAD_MS).coerceAtMost(AD_AHEAD_CHECK_MS))
@@ -1284,9 +1285,9 @@ class SpotifyPlayer(
                 return@withContext
             }
             bridge.logger?.invoke("ad after this song: ${a.nextUri} played before its end")
-            // A crossfade's reserve is still to be heard: this switch is the song's end, so the
-            // bridge crosses into the next song, and no skip fade dips what is still heard.
-            val crossing = crossfadeSeconds > 0 && (runCatching { readMedia() }.getOrNull()?.lag ?: 0.0) > 0.3
+            // A reserve is still to be heard: this switch is the song's end, so the bridge crosses
+            // (or, with the crossfade off, plays on) into the next song, and no skip fade dips it.
+            val crossing = (runCatching { readMedia() }.getOrNull()?.lag ?: 0.0) > 0.3
             if (crossing) runCatching { bridge.call("media.ending", timeoutMs = LEVEL_TIMEOUT_MS, quiet = true) }
             endingSwitch = crossing
             try {
@@ -1420,9 +1421,10 @@ class SpotifyPlayer(
         val to = s?.item ?: return
         if (from.uri == to.uri || from.kind == ItemKind.AD || remoteActive) return
         val now = System.currentTimeMillis()
-        // With a crossfade the state shows what is heard, which lags the page's element by the
-        // reserve: the page left the song that much further on. The reserve is the last tick's.
-        val reserve = if (crossfadeSeconds > 0) ((lastMedia?.lag ?: 0.0) * 1000).toLong() else 0L
+        // With a reserve the state shows what is heard, which lags the page's element by the
+        // reserve: the page left the song that much further on. The reserve is the last tick's
+        // (also one still played away after the crossfade was turned off).
+        val reserve = ((lastMedia?.lag ?: 0.0) * 1000).toLong()
         val played = old.positionAt(now) + reserve
         val play = lastPlay
         val commandAt = maxOf(userMoveAt, play?.third ?: 0L)

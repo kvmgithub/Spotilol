@@ -6,6 +6,38 @@ Each version section is the text of the GitHub release tagged `ui-v<version>` (p
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-11-08
+
+Fixes from a code review of 1.2.1.
+
+### Added
+- Moving songs of your playlist by hand also works without dragging: the handle of each row offers "Move up" and "Move down" to TalkBack and keyboards.
+
+### Fixed
+- Data saver: on mobile data the app really uses no data now. Searches, pages, covers in the notification, short links and the account pages no longer went out with a token still in hand, and no repair loads the player again until Wi-Fi is back.
+- A pause tapped while the player was still starting is kept: the player's first state no longer started the song again. A play sent again after Spotify lost the new page's device, a song picked or skipped while an ad was being avoided, and a shuffled pick made while a long list was still loading no longer override a newer pause or pick.
+- After the page is loaded again to get past an ad or a stall, songs you queued come back in full: a song resumed from the album was taken for the same song in the queue, and the songs queued before it were lost.
+- Even out volume turned off while the loudness was still being read stays off. The limiter keeps working while the louder end of the previous song still plays under the next one. A seek right after a song change also drops the crossfade's reserve, and turning the crossfade off drops it at once instead of leaving every later song that much late.
+- A volume set to 0 stays at 0 when the page is loaded again; it went to 100 %.
+- A quiet podcast from its own host is noticed like a louder one (it played silent through Web Audio).
+- "Make private" says the playlist is private only once Spotify has taken it, and a refusal is reported (with what Spotify really has read back) even when the menu is already closed.
+- A playlist that failed to load to its end can no longer be reordered by hand as if it were complete; a move writes only its own order to the copy kept on the phone; a copy served from the phone no longer counts as freshly loaded.
+- The saved (heart) state of songs could be swapped when two screens asked about the same songs in a different order.
+- New-release notifications: nothing counts as announced while notifications are off or not allowed; signing out removes the ones already shown.
+- The lock screen, notification and Bluetooth show a short seek at once (the position was only sent again after 10 seconds of difference). A notification left after a long pause is removed when you sign out.
+- Playing from the app starts the playback service at once, not only once the page answers (on Android 17 audio without it can be silenced).
+- Account pages: a page whose renderer died closes instead of taking the whole app with it, and they do not open with the data saver on.
+- Signing out, another profile, or a lost session: answers and writes of the account before (a late library change, a liked-songs read, a listen in progress, a new-release check) no longer reach the next account. After a lost session, another account than the last one gets a clean start; the same account keeps its history and caches.
+
+### Security
+- Requests repeated for the page are checked again exactly as they are sent, and encoded dot segments are refused, so one cannot leave the two allowed playback routes.
+- A form sent from a page to another site is stopped like any other navigation, in the player and on the account pages. Refused licences and expired tokens count only from Spotify's own hosts.
+- The page's play reports (`melody` message batches) are blocked in the page too, not only in the request relay; the licence address melody also serves stays reachable.
+- Switching profiles needs the profile's sign-in cookie to be accepted before the player loads, and the old page's bridge ends first. A profile store move cut off before the old store was deleted is finished at the next start.
+- OkHttp 5.5.1, which blocks the compromised eMudhra intermediate certificates on phones without Google Play's update.
+- The diagnostic report's page address is written without its query.
+- Release builds check the signing certificate against the fork key, pin the Gradle setup action to a commit and the Gradle download to its checksum, publish only from `myspoti-ui`, and remove merged work branches only as they were checked.
+
 ## [1.2.1] - 2026-11-07
 
 ### Fixed

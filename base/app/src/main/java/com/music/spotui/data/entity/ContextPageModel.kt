@@ -21,4 +21,7 @@ data class ContextPageModel(
     val isBlend: Boolean = false,
     /** A member who is not the owner and may leave (`canCancelMembership`). */
     val canLeave: Boolean = false,
-)
+) {
+    /** Every song of the list is here: loaded to its end, no page missing (kept, queued, dealt as a whole). */
+    val whole: Boolean get() = complete && !partial
+}

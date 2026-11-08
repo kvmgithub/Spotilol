@@ -145,7 +145,11 @@ class SpotifyHttp(
     private suspend fun webToken(): WebToken {
         val now = System.currentTimeMillis()
         return web?.takeIf { it.expiresAtMs - now > 60_000 } ?: run {
+            // The page answered for the session this call began in: a token that arrives after a
+            // change of account is the account before's, never kept for the next one.
+            val asked = session
             val t = bridge.call("token.get").jsonObject
+            if (session != asked) throw SessionChanged()
             // A page that answers without a field (a build that changed) is a bridge error, not a crash.
             fun field(name: String): JsonPrimitive = t[name] as? JsonPrimitive ?: throw BridgeException("token.get: no $name")
             WebToken(
@@ -159,12 +163,16 @@ class SpotifyHttp(
     }
 
     /** Sends a request with browser headers. Returns the status and body text. */
+    /** [started]: the session the call belongs to (by default the one it is sent in); a call of another one is refused. */
     suspend fun send(method: String, url: String, body: String? = null, contentType: String = JSON_TYPE, accept: String = "application/json",
-                     retry: Boolean = true): Pair<Int, String> {
+                     retry: Boolean = true, started: Int = session): Pair<Int, String> {
         // The account's token only ever goes to Spotify itself.
         require(app.myspoti.spotify.security.WebPolicy.isSpotifyApi(url)) { "not a Spotify HTTPS host: ${url.toHttpUrl().host}" }
-        val started = session
+        if (session != started) throw SessionChanged()
         val (w, c) = tokens()
+        // Checked again before it goes: the tokens may have been waited for across a change of account,
+        // and a write of the account before must not leave with the next one's token.
+        if (session != started) throw SessionChanged()
         val builder = Request.Builder().url(url)
             .header("authorization", "Bearer ${w.access}")
             .header("client-token", c.value)
@@ -302,10 +310,10 @@ class HttpGql(private val http: SpotifyHttp, private val source: OpsSource, priv
         suspend fun fallBack(): JsonElement {
             if (http.session != session) throw SpotifyHttp.SessionChanged()
             fellBack.incrementAndGet()
-            return fallback.query(name, variables)
+            return fallback.query(name, variables).also { if (http.session != session) throw SpotifyHttp.SessionChanged() }
         }
         val (code, text) = try {
-            http.send("POST", "https://api-partner.spotify.com/pathfinder/v2/query", body.toString(), retry = !mutation)
+            http.send("POST", "https://api-partner.spotify.com/pathfinder/v2/query", body.toString(), retry = !mutation, started = session)
         } catch (e: kotlinx.coroutines.CancellationException) {
             throw e
         } catch (e: SpotifyHttp.SessionChanged) {

@@ -81,7 +81,8 @@ class Bridge(private val host: BridgeHost, scope: CoroutineScope) {
 
     private fun licenceNote(msg: JsonObject) {
         val url = (msg["url"] as? JsonPrimitive)?.contentOrNull ?: return
-        if ("widevine-license" !in url) return
+        // Spotify's own licence route only (the page reads every resource's status, any host's).
+        if ("widevine-license" !in url || !app.myspoti.spotify.security.WebPolicy.isSpotifyApi(url)) return
         // The player reads them too: refusals in a row stop playback (see SpotifyPlayer.onLicence).
         _events.tryEmit("licence" to msg)
     }

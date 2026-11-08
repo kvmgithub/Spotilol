@@ -132,7 +132,13 @@ object LibraryEdits {
     }
 
     /** Signed out or another account: the edits shown for the one before go. */
+    /** Bumped by [clear]: a screen holding the library of the account before drops it and reads again. */
+    val accounts = MutableStateFlow(0)
+
     fun clear() {
+        accounts.value++
+        // Writes of the account before still waiting (for the page, for their turn) are not sent.
+        scope.coroutineContext[kotlinx.coroutines.Job]?.children?.forEach { it.cancel() }
         pending.clear()
         version.value++
     }

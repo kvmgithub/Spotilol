@@ -286,11 +286,22 @@
   // the crossfade's delay: the end of the old song keeps its gain while the new one starts at
   // its own. A song without a value (an episode, an ad, a local file) plays at 0 dB.
   const NZ_MIN_DB = -12, NZ_MAX_DB = 6;
-  const nz = { on: false, gains: new Map(), uri: null, gain: 1, prev: 1 };
-  // The limiter works while the boost or a song's gain raises the level, the song before
-  // included: its end still sounds through the crossfade's delay, at its own gain.
+  const nz = { on: false, gains: new Map(), uri: null, gain: 1, level: 1, held: 1, heldUntil: 0, timer: 0 };
+  // The limiter works while the boost or a song's gain raises the level, and on after either
+  // drops for as long as what was raised still sounds: it sits behind the crossfade's delay
+  // (the reserve, and the old path while two songs overlap), and was written at the old gain.
   const setLimiter = () => {
-    const hot = boost.level > 1 || nz.gain > 1 || nz.prev > 1;
+    const level = Math.max(boost.level, nz.gain);
+    if (level < nz.level) {
+      const t = boost.ctx.currentTime;
+      const left = Math.max(dAt(boost.paths[xf.cur], t), (xf.overlapUntil - performance.now()) / 1000, 0) + 0.2;
+      nz.held = nz.level;
+      nz.heldUntil = performance.now() + left * 1000;
+      clearTimeout(nz.timer);
+      nz.timer = setTimeout(setLimiter, left * 1000 + 50);
+    }
+    nz.level = level;
+    const hot = level > 1 || (nz.held > 1 && performance.now() < nz.heldUntil);
     boost.limiter.threshold.value = hot ? -1 : 0;
     boost.limiter.ratio.value = hot ? 20 : 1;
   };
@@ -301,7 +312,7 @@
     boost.norm.gain.setTargetAtTime(nz.gain, boost.ctx.currentTime, 0.05);
     setLimiter();
   };
-  const nzTrack = uri => { if (uri !== nz.uri) { nz.uri = uri; nz.prev = nz.gain; nzApply(); } };
+  const nzTrack = uri => { if (uri !== nz.uri) { nz.uri = uri; nzApply(); } };
 
   const srcKind = el => {
     const s = el.currentSrc || '';
@@ -748,8 +759,9 @@
     const need = target - C;
     // Played away only at the page's own speed 1 (a podcast speed is the page's) and while sound is
     // due; started past 0.3 s too much (a build ends a little over), then down to its target.
+    // With no crossfade wanted any reserve goes, however small (it would stay behind song after song).
     const drain = (xf.speed || 1) === 1 && !window.__mspMuted && xf.resets < XF_MAX_RESETS &&
-      need < (xf.ours && xf.k < 1 ? -0.02 : -0.3);
+      need < (target === 0 || (xf.ours && xf.k < 1) ? -0.02 : -0.3);
     let k = need > 0.02 ? (rem > need ? rem / (rem - need) : XF_K_MAX)
       : drain ? (rem > 0 ? rem / (rem - need) : XF_K_MIN) : 1;
     k = Math.min(XF_K_MAX, Math.max(need > 0.02 ? 1 : XF_K_MIN, k));
@@ -1057,7 +1069,7 @@
       }
       let playerVolume = null;
       try { playerVolume = await need().playback.getVolume(); } catch (e) { /* unknown */ }
-      return { paused: el.paused, muted: el.muted, volume: el.volume, level: levelOf(el), own: ownLevel(player), time: el.currentTime, readyState: el.readyState, networkState: el.networkState, keys: el.mediaKeys ? 1 : 0, keyWaits: el.__mspKeyWaits || 0, error: el.error ? el.error.code + ':' + String(el.error.message || '').slice(0, 80) : null, ended: el.ended, playerVolume, active: await activeDevice(), lag: Math.round(heardLag() * 100) / 100 };
+      return { paused: el.paused, muted: el.muted, volume: el.volume, level: levelOf(el), own: ownLevel(player), time: el.currentTime, readyState: el.readyState, networkState: el.networkState, keys: el.mediaKeys ? 1 : 0, keyWaits: el.__mspKeyWaits || 0, error: el.error ? el.error.code + ':' + String(el.error.message || '').slice(0, 80) : null, ended: el.ended, playerVolume, active: await activeDevice(), lag: Math.round(heardLag() * 100) / 100, realTime: realTime(el) };
     },
     // The media element's volume, on this phone only: no Spotify Connect command (refused on
     // some accounts, slow on a busy network) and nothing reported to Spotify, as the player's

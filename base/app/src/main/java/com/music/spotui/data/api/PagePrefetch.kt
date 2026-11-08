@@ -59,7 +59,8 @@ object PagePrefetch {
                 val page = runCatching {
                     Graph.api.getPlaylistPage(id).first { it is Response.Success && it.data.complete || it is Response.Error }
                 }.getOrNull()
-                val kept = (page as? Response.Success)?.data?.takeIf { it.tracks.isNotEmpty() && it.tracks.size <= MAX_TRACKS }
+                // A list with a page missing does not replace a whole copy on storage.
+                val kept = (page as? Response.Success)?.data?.takeIf { it.whole && it.tracks.isNotEmpty() && it.tracks.size <= MAX_TRACKS }
                 kept?.let { ScreenCache.page(id).write(it) }
                 android.util.Log.d("Myspoti", "prefetch playlist ${id.take(6)}…: ${kept?.tracks?.size?.let { "$it songs kept on storage" } ?: "not kept"}")
                 delay(1_500) // one after the other, gently
@@ -70,7 +71,7 @@ object PagePrefetch {
 
     /** A page just read whole from the network: its copy on storage, when it has one, follows. */
     fun refreshed(id: String, page: com.music.spotui.data.entity.ContextPageModel) {
-        if (!page.complete || page.tracks.size > MAX_TRACKS || ScreenCache.pageSavedAt(id) == null) return
+        if (!page.whole || page.tracks.size > MAX_TRACKS || ScreenCache.pageSavedAt(id) == null) return
         ScreenCache.page(id).write(page)
     }
 }

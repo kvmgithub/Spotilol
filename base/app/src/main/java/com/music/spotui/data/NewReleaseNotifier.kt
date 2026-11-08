@@ -58,7 +58,11 @@ object NewReleaseNotifier {
      * Signed out or another profile: the feed read is that account's. Forgotten, so the next
      * account's first read only remembers its own feed and announces nothing old (MySpotilol).
      */
+    /** Bumped by [forget]: a read still under way was the account before's, and keeps nothing. */
+    @Volatile private var forgotten = 0
+
     fun forget(context: Context) {
+        forgotten++
         context.getSharedPreferences(PREFS, 0).edit().remove(KEY_SEEN).remove(KEY_AT).apply()
         // What was announced for that account goes from the shade too.
         runCatching {
@@ -99,7 +103,11 @@ object NewReleaseNotifier {
         val now = System.currentTimeMillis()
         if (now - prefs.getLong(KEY_AT, 0L) in 0 until GAP_MS) return
         if (!deliverable(context)) return
+        val asked = forgotten
         val feed = MyspotiRuntime.api.home.whatsNewFeed(0, 30).items
+        // Checked again with the answer in hand: notifications turned off meanwhile announce nothing,
+        // so nothing counts as announced; a sign-out meanwhile leaves the feed of the next account alone.
+        if (asked != forgotten || !deliverable(context)) return
         val seen = prefs.getString(KEY_SEEN, null)?.split('\n')?.filter { it.isNotBlank() }
         val fresh = if (seen == null) emptyList() else feed.filter { it.uri !in seen }
         prefs.edit()

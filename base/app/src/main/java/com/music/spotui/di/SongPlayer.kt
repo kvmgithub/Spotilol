@@ -1658,9 +1658,12 @@ object SongPlayer {
         val (known, unknown) = uris.partition { library.containsKey(it) && now - (savedAt[it] ?: 0L) < SAVED_FRESH_MS }
         val out = known.filterTo(mutableSetOf()) { library[it] == true }
         if (unknown.isEmpty()) return LibraryCheck(out, emptySet(), false)
+        val session = sessionGen.get()
         val flags = savedFlags(unknown) ?: return LibraryCheck(out, emptySet(), true)
         val saved = unknown.filterIndexed { i, _ -> flags.getOrNull(i) == true }.toSet()
         main.post {
+            // Answered for the account before (signed out meanwhile): not kept for the next one.
+            if (session != sessionGen.get()) return@post
             for (u in unknown) {
                 if (u == intentUri && SystemClock.elapsedRealtime() < intentUntil) continue
                 library[u] = u in saved

@@ -112,7 +112,10 @@ object ProfileManager {
         val store = SealedStore(app.getSharedPreferences(PREFS, Context.MODE_PRIVATE))
         // Checked as a file: EncryptedSharedPreferences.create would make an empty one.
         if (File(app.dataDir, "shared_prefs/$LEGACY_PREFS.xml").exists()) {
-            if (store.isEmpty()) {
+            // The new store counts only once it reads back (its key there, its value whole): until
+            // then the old one is the profiles' only copy, moved again rather than deleted.
+            val moved = !store.isEmpty() && runCatching { store.read()?.let(::parseProfiles) }.isSuccess
+            if (!moved) {
                 val raw = legacyPrefs(app).getString(KEY_PROFILES, null)
                 if (raw != null) {
                     parseProfiles(raw)

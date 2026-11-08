@@ -31,7 +31,7 @@ object CollectionQueue {
     fun queue(uri: String, next: Boolean, known: ContextPageModel? = null) {
         val app = Graph.app
         scope.launch {
-            val shown = known?.takeIf { it.complete }
+            val shown = known?.takeIf { it.whole }
             if (shown == null) withContext(Dispatchers.Main) { Toast.makeText(app, R.string.add_collection_reading, Toast.LENGTH_SHORT).show() }
             val songs = shown?.tracks ?: read(uri)
             val list = songs?.let { TrackOrder.load(app, uri).apply(it) }.orEmpty()
@@ -58,6 +58,7 @@ object CollectionQueue {
             else -> return null
         }
         val last = withTimeoutOrNull(READ_MS) { flow.first { it is Response.Error || (it is Response.Success && it.data.complete) } }
-        return (last as? Response.Success)?.data?.tracks
+        // A list with a page missing is not queued as if it were all of it.
+        return (last as? Response.Success)?.data?.takeIf { it.whole }?.tracks
     }
 }

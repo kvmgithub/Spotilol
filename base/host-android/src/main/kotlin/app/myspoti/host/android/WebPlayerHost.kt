@@ -225,6 +225,14 @@ class WebPlayerHost(private val context: Context) : BridgeHost {
         webViewClient = object : WebViewClient() {
             override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? {
                 val url = request.url.toString()
+                // The data saver on a metered network: nothing leaves the page either (sign-in included).
+                if (app.myspoti.spotify.security.BoundedHttp.refuse()) return refused(503, "Data saver")
+                // A document of another site (a form POST asks no shouldOverrideUrlLoading) is refused
+                // before it is sent, not only stopped once it has started (onPageStarted).
+                if (request.isForMainFrame && url.startsWith("http") && !WebPolicy.isNavigation(url)) {
+                    log("navigation blocked before sending: ${request.method} ${request.url.host}")
+                    return refused(403, "Blocked")
+                }
                 // Spotify is limiting audio licences (429) and the app holds playback: the page still
                 // skipped on by itself through every song it got no licence for (~4 requests a second,
                 // each answered 429). It gets the same 429 from here, and Spotify sees none of them
@@ -312,7 +320,9 @@ class WebPlayerHost(private val context: Context) : BridgeHost {
                     playerPageFailed("http ${response.statusCode}")
                 if (request.isForMainFrame && _loginLoad.value != LoginLoad.NONE && LoginLoad.isSpotifyAccounts(request.url.toString()) && response.statusCode >= 500)
                     loginFailed("http ${response.statusCode}")
-                if (response.statusCode == 429 && WebPolicy.isSpotifyApi(request.url.toString()) && request.url.path?.contains("widevine-license") == true) onLicenseLimited()
+                // Audio licences only (POST): not the GET of the Widevine certificate under the same route.
+                if (response.statusCode == 429 && request.method == "POST" && WebPolicy.isSpotifyApi(request.url.toString()) &&
+                    request.url.path?.contains("widevine-license") == true) onLicenseLimited()
             }
 
             override fun onPageFinished(view: WebView, url: String) {
@@ -397,7 +407,7 @@ class WebPlayerHost(private val context: Context) : BridgeHost {
         // attach() loads the page itself when a load is pending; the pending load is asked again
         // just after, once, so a rebuilt page is loaded exactly once.
         loadAsked = false
-        box?.let { attach(it, lastVisible) }
+        box?.let { attachNow(it, lastVisible) }
         // The new view's first navigation can be lost while the browser side still settles after
         // the kill (seen: no page start for 4 s): the watchdog looks again after 1.5 s, not 4 s.
         if (wasLogin) { loadAsked = wasLoaded; beginLoginLoad(); view.loadUrl(LOGIN_URL) }
@@ -405,6 +415,9 @@ class WebPlayerHost(private val context: Context) : BridgeHost {
     }
 
     private fun isLoginPage(url: String?) = WebPolicy.isLoginPage(url)
+
+    private fun refused(code: Int, reason: String) =
+        WebResourceResponse("text/plain", "utf-8", code, reason, emptyMap(), ByteArrayInputStream(ByteArray(0)))
 
     /** Telemetry gets an empty success (with CORS), so the page neither breaks nor retries. */
     private fun emptySuccess(request: WebResourceRequest): WebResourceResponse {
@@ -423,6 +436,7 @@ class WebPlayerHost(private val context: Context) : BridgeHost {
     fun load() = load(firstWatchMs = LOAD_WATCH_MS)
 
     private fun load(firstWatchMs: Long) = main.post {
+        suspended = false
         pageStarts = 0
         quickRetried = false
         loadAsked = true
@@ -469,7 +483,7 @@ class WebPlayerHost(private val context: Context) : BridgeHost {
     /** The player's own URL, not the page's current one: the bridge parks the page on an empty route. */
     fun reload() = main.post {
         // Unloaded (data saver): a repair does not bring the page back, only [load] does.
-        if (!loadAsked) return@post
+        if (suspended) return@post
         // A page whose player never started is not helped by loading it again in the same renderer.
         if (pageStarts > 0 && !drmAsked && !mainFrameFailed && _url.value.startsWith(PLAYER_URL) && newViewAllowed()) {
             Logbook.log("reload: the player never started on this page (no DRM request): new WebView instead")
@@ -709,7 +723,10 @@ class WebPlayerHost(private val context: Context) : BridgeHost {
      * page then runs as it already does whenever the app is in the background or the screen is
      * off, which is how most listening happens.
      */
-    fun attach(container: ViewGroup, visible: Boolean) = main.post {
+    fun attach(container: ViewGroup, visible: Boolean) = main.post { attachNow(container, visible) }
+
+    /** [attach] on the main thread now: a rebuild puts the new page back at once, so a detach already queued still finds it. */
+    private fun attachNow(container: ViewGroup, visible: Boolean) {
         this.container = container
         lastVisible = visible
         // A <select> (the birth month on Spotify's sign-up page) opens its list as a dialog, which
@@ -775,7 +792,10 @@ class WebPlayerHost(private val context: Context) : BridgeHost {
     }
 
     /** Frees the page (data saver) until [load]: its bridge calls fail now, and no repair reloads it. */
-    fun unload() = main.post { loadAsked = false; onPageStarting?.invoke(); view.loadUrl("about:blank") }
+    fun unload() = main.post { suspended = true; loadAsked = false; onPageStarting?.invoke(); view.loadUrl("about:blank") }
+
+    /** [unload] holds the page off until [load]: apart from [loadAsked], which a failed profile switch also clears. */
+    @Volatile private var suspended = false
 
     companion object {
         /** Logcat tag of the engine: `adb logcat -s Myspoti`. */

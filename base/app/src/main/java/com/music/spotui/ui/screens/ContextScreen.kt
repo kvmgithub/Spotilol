@@ -308,8 +308,9 @@ class ContextViewModel(
                 // Offline or refused: the page already on screen stays rather than an error.
                 if (r is Response.Error && fromDisk && _page.value is Response.Success) return@collect
                 // A refresh keeps the full list on screen until the new one is complete: the first
-                // page alone would cut a long playlist short and lose the place in it.
-                if ((refreshing.value || fromDisk) && r is Response.Success && !r.data.complete &&
+                // page alone would cut a long playlist short and lose the place in it. So would a
+                // list that ended with a page missing.
+                if ((refreshing.value || fromDisk) && r is Response.Success && !r.data.whole &&
                     (_page.value as? Response.Success)?.data?.let { it.uri == r.data.uri && it.tracks.size > r.data.tracks.size } == true) return@collect
                 _page.value = r
                 if (r is Response.Success) {
@@ -383,6 +384,8 @@ class ContextViewModel(
 
     // Moves are written one at a time, in the order they were made.
     private val moveWrites = kotlinx.coroutines.sync.Mutex()
+    /** Moves Spotify refused: a later move was made on top of a refused one, its order is not Spotify's. */
+    @Volatile private var movesRefused = 0
 
     /**
      * A row of this page's playlist moved by hand: the list takes its new order at once, then
@@ -396,6 +399,7 @@ class ContextViewModel(
         val updated = Response.Success(current.copy(tracks = tracks))
         _page.value = updated
         recent[k] = updated
+        val refusedBefore = movesRefused
         viewModelScope.launch {
             val ok = withContext(Dispatchers.IO) {
                 moveWrites.withLock {
@@ -407,12 +411,15 @@ class ContextViewModel(
                 // The songs kept for this playlist (same count, so reused as they were) are read again,
                 // and its copies on storage take the new order.
                 Api.invalidatePlaylist(id)
-                // The order this move made, not the screen's: a later move still on its way is not on Spotify yet.
-                com.music.spotui.data.api.PagePrefetch.refreshed(id, updated.data)
+                // The order this move made, not the screen's: a later move still on its way is not on
+                // Spotify yet. Not when one made before it was refused: this order still has that one in
+                // it; the page read again after the refusal holds Spotify's own.
+                if (movesRefused == refusedBefore) com.music.spotui.data.api.PagePrefetch.refreshed(id, updated.data)
             } else if (_page.value === updated) {
+                movesRefused++
                 _page.value = Response.Success(current)
                 recent[k] = Response.Success(current)
-            } else reload()
+            } else { movesRefused++; reload() }
             onDone(ok)
         }
         return true

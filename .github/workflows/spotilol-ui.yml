@@ -156,9 +156,10 @@ jobs:
         if: always()
         run: rm -f "$RUNNER_TEMP/release.p12"
       - name: Remove merged work branches
-        # Work branches (try-*, ui-merge-*) whose every change is in the commit just built
-        # (git cherry: no "+" line, so rebased copies count too), and the failure log of an
-        # earlier run: once myspoti-ui builds, they only clutter the branch list.
+        # Work branches (try-*, ui-merge-*) whose commit is part of the one just built (ancestry:
+        # a change made only in a merge commit counts too, which a patch comparison misses), and
+        # the failure log of an earlier run: once myspoti-ui builds, they only clutter the branch
+        # list. A rebased or squashed copy is not proof: such a branch stays.
         if: success() && github.ref == 'refs/heads/myspoti-ui'
         working-directory: ${{ github.workspace }}
         env:
@@ -171,8 +172,8 @@ jobs:
           refs=()
           for b in $(git for-each-ref --format='%(refname:strip=3)' 'refs/remotes/origin/try-*' 'refs/remotes/origin/ui-merge-*'); do
             sha=$(git rev-parse "origin/$b")
-            if ! out=$(git cherry "$GITHUB_SHA" "$sha"); then echo "$b kept: not compared"; continue; fi
-            if grep -q '^+' <<<"$out"; then echo "$b kept: changes not in this build"; else refs+=("--force-with-lease=refs/heads/$b:$sha" ":refs/heads/$b"); fi
+            if git merge-base --is-ancestor "$sha" "$GITHUB_SHA"; then refs+=("--force-with-lease=refs/heads/$b:$sha" ":refs/heads/$b")
+            else echo "$b kept: its commit is not part of this build"; fi
           done
           if logs=$(git ls-remote origin refs/heads/ui-ci-logs | cut -f1) && [ -n "$logs" ]; then refs+=("--force-with-lease=refs/heads/ui-ci-logs:$logs" ":refs/heads/ui-ci-logs"); fi
           if [ ${#refs[@]} -eq 0 ]; then echo "nothing to remove"; exit 0; fi

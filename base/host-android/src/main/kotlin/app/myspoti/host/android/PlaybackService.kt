@@ -715,14 +715,15 @@ class PlaybackService : MediaBrowserServiceCompat() {
         }
 
         /** Signed out: the notification and the media session go, nothing of the account stays. */
-        fun end() {
+        fun end(context: Context) {
             current = null
             published = null
+            // A notification left after a long pause (detached) is not the service's any more, and it
+            // can outlive the service: removed through the app, with or without one.
+            runCatching { NotificationManagerCompat.from(context).cancel(NOTIFICATION_ID) }
             instance?.let { svc ->
                 svc.handler.removeCallbacksAndMessages(null)
                 ServiceCompat.stopForeground(svc, ServiceCompat.STOP_FOREGROUND_REMOVE)
-                // A notification the service left after a long pause (detached) is not its own any more.
-                runCatching { NotificationManagerCompat.from(svc).cancel(NOTIFICATION_ID) }
                 svc.foreground = false
                 svc.session.isActive = false
                 svc.stopSelf()

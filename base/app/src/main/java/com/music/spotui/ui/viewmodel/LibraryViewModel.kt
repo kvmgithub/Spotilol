@@ -57,6 +57,10 @@ class LibraryViewModel constructor(
         // A delete, rename or new playlist is shown at once, and taken back if Spotify refuses.
         viewModelScope.launch { LibraryEdits.version.drop(1).collect { show() } }
         viewModelScope.launch { LibraryEdits.reloads.collect { load() } }
+        // Another account (signed out, another profile): the list of the one before is not shown again.
+        viewModelScope.launch {
+            LibraryEdits.accounts.drop(1).collect { server = null; _entries.value = Response.Loading(); load() }
+        }
         val cachedArtists = getCachedFollowedArtists(context)
         if (cachedArtists.isNotEmpty()) _followedArtists.value = cachedArtists
 

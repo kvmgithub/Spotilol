@@ -6,6 +6,31 @@ Each version section is the text of the GitHub release tagged `ui-v<version>` (p
 
 ## [Unreleased]
 
+## [1.3.2] - 2026-11-08
+
+Fixes from a second code review (of 1.3.1).
+
+### Fixed
+- Turning the crossfade off near a song's end: while the end of that song is still played from the reserve, the playback watchdog no longer takes the next song's element for stalled (it watched the heard time, which stands still there) and no longer cuts that end with a repair. A reserve under 0.3 s is played away too, instead of staying behind song after song.
+- The limiter stays on as long as audio raised by the boost or by evening out the volume is still heard from the crossfade's delay, and no longer than that (it stayed on until the next song change after a raised song).
+- A pause during the wait for a new page's device, or while the play before an ad is being prepared, is no longer overridden by that play.
+- With repeat one, the songs you queued come back in full after the page is loaded again (the head of the queue was taken as played).
+- A volume set while the page is being read after a reload is kept, and the volume is only repaired when the page says, in that very reading, that this phone is the active device.
+- After a failed profile switch, repairs can load the player page again (they stayed off until the next explicit load).
+- A shuffled pick from a long list still loading no longer stops a file of the phone started meanwhile.
+- A playlist that ended with a page missing no longer replaces the whole copy kept on the phone or the longer list on screen, and is not queued or shuffled as if it were all of it.
+- Two moves by hand in a row, the first refused: the copy on the phone no longer keeps the refused one.
+- New-release notifications: notifications turned off while the feed is read, or a sign-out meanwhile, no longer mark releases as announced; the notification left after a long pause is removed at sign-out even when the playback service is gone.
+- After the player page is rebuilt (its renderer died), it no longer goes back into a screen that was closed meanwhile.
+
+### Security
+- A document of another site (a form POST included) is refused before it is sent, in the player and on the account pages, not only stopped once it has started.
+- With the data saver on, the player page itself sends nothing either (sign-in, sign-out and profile switch included), and an account page already open stops loading when the data saver starts to apply.
+- Audio licence limits count only Spotify's own licence requests (POST): not the certificate requested under the same route, and not a status the page reads of another host.
+- Account boundary: a request is checked against the session again after it waited for the tokens, and a token the page gives after a change of account is not kept; library writes still waiting at a sign-out are dropped, the library list on screen is read again, and a saved (heart) answer of the account before is not kept.
+- A profile store moved to the Android Keystore counts as moved only once it reads back; until then the old store is kept and moved again.
+- Release builds remove merged work branches only when their commit is part of the build (a change made only in a merge commit counts).
+
 ## [1.3.1] - 2026-11-08
 
 ### Changed

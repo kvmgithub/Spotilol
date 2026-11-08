@@ -59,7 +59,7 @@ object SessionActions {
     private fun clearAccountData(app: android.content.Context) {
         // Nothing of the account keeps playing or showing: local songs, the notification.
         LocalPlayer.stop()
-        PlaybackService.end()
+        PlaybackService.end(app)
         runCatching { MyspotiRuntime.scope.launch { runCatching { MyspotiRuntime.api.player.pause() } } }
         com.music.spotui.ui.screens.ContextViewModel.clearCache()
         com.music.spotui.data.api.Api.HomeCache.clear()

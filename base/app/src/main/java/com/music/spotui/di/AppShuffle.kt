@@ -87,17 +87,21 @@ object AppShuffle {
      */
     fun play(p: ContextPageModel, song: SongsModel, plain: List<String>?): Boolean {
         if (!AppShufflePref.on) return false
-        noted = Noted(p.uri, p.tracks, plain, p.complete)
+        noted = Noted(p.uri, p.tracks, plain, p.whole)
         if (!Graph.currentSongState.shuffle.value || !usable(p.uri) || !dealable(p.uri) || song.spotifyTrackId.isBlank()) return false
         val first = TRACK + song.spotifyTrackId
-        if (p.complete) return start(p.uri, p.tracks, first, plain)
+        if (p.whole) return start(p.uri, p.tracks, first, plain)
         // The list is still loading: every page of it first, so all its songs are dealt.
         val g = gen.incrementAndGet()
-        // Anything played, paused or skipped while the list loads is newer than this pick.
+        // Anything played, paused or skipped while the list loads is newer than this pick, a file of
+        // the phone started meanwhile too (the local player sends no command).
         val sent = SongPlayer.transportCount
+        val local = LocalPlayer.active.value
         MyspotiRuntime.scope.launch {
             val all = load(p.uri)?.takeIf { l -> l.any { it.spotifyTrackId == song.spotifyTrackId } } ?: p.tracks
-            main.post { if (g == gen.get() && sent == SongPlayer.transportCount) start(p.uri, all, first, plain) }
+            main.post {
+                if (g == gen.get() && sent == SongPlayer.transportCount && (local || !LocalPlayer.active.value)) start(p.uri, all, first, plain)
+            }
         }
         return true
     }
@@ -284,6 +288,6 @@ object AppShuffle {
             else -> return null
         }
         val page = withContext(Dispatchers.IO) { runCatching { flow.filterIsInstance<Response.Success<ContextPageModel>>().lastOrNull()?.data }.getOrNull() }
-        return page?.takeIf { it.complete }?.tracks?.takeIf { it.isNotEmpty() }
+        return page?.takeIf { it.whole }?.tracks?.takeIf { it.isNotEmpty() }
     }
 }

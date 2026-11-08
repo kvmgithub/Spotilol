@@ -92,6 +92,8 @@ class SpotifyPlayer(
     @Volatile private var adMuteTries = 0
     /** A pause asked through [pause]; it holds until playback is asked for again, never expires. */
     @Volatile private var pausedByUser = false
+    /** Bumped by every pause asked for: a play of ours that waited compares it, a pause meanwhile wins. */
+    @Volatile private var pausesAsked = 0
     /**
      * The song before an ad the user paused during, got past by a reload with nothing resumed (see
      * the watcher): the user's next [resume] plays on from it when the new page has no song of its own.
@@ -346,11 +348,14 @@ class SpotifyPlayer(
                 // speaker at 0 went to 100 % (Myspoti 2.4.0, #159).
                 // A volume the user set to 0 stays 0 (it went to 100 %), as in the guard during a song.
                 // Level and device from one reading, so both describe the same moment.
+                // A volume the user sets while the page is read wins (compared after the reads), and an
+                // active device the page did not say this time is no proof (ownsConnectVolume).
                 runCatching {
-                    val wanted = wantedVolume ?: 1.0
+                    val asked = wantedVolume
+                    val wanted = asked ?: 1.0
                     if (wanted > 0.0 && volume() == 0.0) {
                         val media = readMedia()
-                        if ((media?.playerVolume ?: 0.0) == 0.0 && ownsConnectVolume(media)) setVolume(wanted)
+                        if ((media?.playerVolume ?: 0.0) == 0.0 && ownsConnectVolume(media) && wantedVolume == asked) setVolume(wanted)
                     }
                 }
                 // A reloaded page during an ad break plays the ad again: muted again at once. So is a
@@ -401,7 +406,8 @@ class SpotifyPlayer(
                     bridge.logger?.invoke("page back after a reload: played or picked meanwhile, ${s.item?.name} not played on")
                     return@runCatching
                 }
-                playedOn = next
+                // Repeat one plays the same song again (see [playOn]): nothing of the queue is taken then.
+                playedOn = next && wantedRepeat != Repeat.TRACK
                 if (next) playOnNewPage { playOn(s, nextUp) } else {
                     val sent = System.currentTimeMillis()
                     val movedAt = userMoveAt
@@ -501,9 +507,15 @@ class SpotifyPlayer(
      * unless something else was played or skipped meanwhile.
      */
     private suspend fun playOnNewPage(play: suspend () -> Unit) {
-        val joined = awaitDeviceJoined()
-        val sent = System.currentTimeMillis()
+        // Taken before the wait: a pick, a skip or a pause while the device joins is newer than this play.
         val movedAt = userMoveAt
+        val pauses = pausesAsked
+        val joined = awaitDeviceJoined()
+        if (userMoveAt != movedAt || pausesAsked != pauses) {
+            bridge.logger?.invoke("play on the new page dropped: the user played, picked or paused meanwhile")
+            return
+        }
+        val sent = System.currentTimeMillis()
         play()
         val p = lastPlay?.takeIf { it.third >= sent } ?: return
         if (!joined) scope.launch { playWhenJoined(p, movedAt) }
@@ -511,10 +523,10 @@ class SpotifyPlayer(
         scope.launch {
             val device = app.myspoti.spotify.bridge.PageDevice
             withTimeoutOrNull(DEVICE_LOST_WAIT_MS) { while (device.commandLostAt < sent) delay(100) } ?: return@launch
-            if (userMoveAt != movedAt || lastPlay?.third != p.third || pausedByUser) return@launch
+            if (userMoveAt != movedAt || lastPlay?.third != p.third || pausesAsked != pauses) return@launch
             bridge.logger?.invoke("play on the new page answered DEVICE_NOT_FOUND: sent again once the device has joined")
             awaitDeviceJoined()
-            if (userMoveAt != movedAt || lastPlay?.third != p.third || pausedByUser) return@launch
+            if (userMoveAt != movedAt || lastPlay?.third != p.third || pausesAsked != pauses) return@launch
             runCatching { playNow(p.first, trackUri = p.second, index = lastIndex, order = lastOrder?.takeIf { it.first == p.first }?.second, refusable = lastPlayRefusable) }
         }
     }
@@ -653,7 +665,7 @@ class SpotifyPlayer(
      * Connect volume of the active device, so it may be set by us (not by the user) only when
      * [media] says this page is that device. Unknown (no element, the device list not read) is no.
      */
-    private fun ownsConnectVolume(media: Media?): Boolean = media?.active == true
+    private fun ownsConnectVolume(media: Media?): Boolean = media?.activeSaid == true
 
     /** Loads the song after the current one in advance (see "player.preloadNext"); on by default. */
     @Volatile var preloadNext = true
@@ -687,6 +699,10 @@ class SpotifyPlayer(
         val active: Boolean?,
         /** Seconds what is heard lags the element: the crossfade's reserve (0 without one). */
         val lag: Double = 0.0,
+        /** [active] as the page said it in this very reading (null: not read this time, [active] is the last one). */
+        val activeSaid: Boolean? = null,
+        /** The element's own time, past the crossfade's mask ([time] is what is heard); null when not said. */
+        val realTime: Double? = null,
         /** HTMLMediaElement readyState / networkState and its error, for the log only (a stall's "why"). */
         val readyState: Int = -1,
         val networkState: Int = -1,
@@ -714,6 +730,8 @@ class SpotifyPlayer(
             // The device list is read at most every few seconds in the page: what it did not
             // answer this time is what it answered last time.
             active = p("active")?.booleanOrNull ?: lastMedia?.active,
+            activeSaid = p("active")?.booleanOrNull,
+            realTime = p("realTime")?.doubleOrNull,
             lag = p("lag")?.doubleOrNull ?: 0.0,
             readyState = p("readyState")?.intOrNull ?: -1,
             networkState = p("networkState")?.intOrNull ?: -1,
@@ -954,8 +972,11 @@ class SpotifyPlayer(
             val fading = fadeBackTo != null || fadeBack?.isActive == true
             val heardHere = s != null && !s.isPaused && !s.isBuffering && media != null && media.active != false
             val playingHere = heardHere && !fading
-            val moved = media != null && !media.paused && kotlin.math.abs(media.time - lastMediaTime) > 0.25
-            lastMediaTime = media?.time ?: -1.0
+            // The element's own time: what is heard can stand still while it plays (the end of the
+            // song before, still played from a reserve, while the next song's element runs on).
+            val elementTime = media?.let { it.realTime ?: it.time }
+            val moved = media != null && !media.paused && kotlin.math.abs(elementTime!! - lastMediaTime) > 0.25
+            lastMediaTime = elementTime ?: -1.0
             silentSince = if (playingHere && !moved) (if (silentSince == 0L) now else silentSince) else 0L
             // Reported: the clock counted on while nothing was heard. Still over one tick and
             // waiting for data (or paused) is a stall at once; still over two, whatever the element
@@ -1269,6 +1290,8 @@ class SpotifyPlayer(
         }
         val song = _state.value ?: return
         val ctx = song.contextUri ?: return
+        // A pause from here on is the user's too (it moves nothing, so userMoveAt does not show it).
+        val pauses = pausesAsked
         if (userMoveAt != movedAt) return
         // Another device plays this list (the ad is this phone's page's, not its): not skipped from here.
         if (remoteActive) return
@@ -1288,11 +1311,12 @@ class SpotifyPlayer(
             // A reserve is still to be heard: this switch is the song's end, so the bridge crosses
             // (or, with the crossfade off, plays on) into the next song, and no skip fade dips it.
             val crossing = (runCatching { readMedia() }.getOrNull()?.lag ?: 0.0) > 0.3
+            if (userMoveAt != movedAt || pausesAsked != pauses) return@withContext
             if (crossing) runCatching { bridge.call("media.ending", timeoutMs = LEVEL_TIMEOUT_MS, quiet = true) }
             endingSwitch = crossing
             try {
-                // A pick or a skip made while the calls above ran is the user's: theirs wins.
-                if (userMoveAt != movedAt) return@withContext
+                // A pick, a skip or a pause made while the calls above ran is the user's: theirs wins.
+                if (userMoveAt != movedAt || pausesAsked != pauses) return@withContext
                 if (skipPastAd(a)) return@withContext
                 runCatching { playNow(ctx, trackUri = a.nextUri, order = lastOrder?.takeIf { it.first == ctx }?.second) }
                     .onFailure { bridge.logger?.invoke("play before the ad refused: ${it.message}") }
@@ -1908,6 +1932,7 @@ class SpotifyPlayer(
     override suspend fun pauseSlowly(fadeMs: Long) = pauseOver(fadeMs)
 
     private suspend fun pauseOver(fadeMs: Long) {
+        pausesAsked++
         // A long fade is still playing: the song is only marked paused once it is.
         if (fadeMs <= PAUSE_MS) pausedByUser = true
         endCrossfade(restore = true)

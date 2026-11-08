@@ -48,6 +48,15 @@ class AccountBrowser : ComponentActivity() {
                     return true
                 }
 
+                // The data saver (turned on, or mobile data, after the page opened), and a document of
+                // another site before it is sent (a form POST asks no shouldOverrideUrlLoading).
+                override fun shouldInterceptRequest(view: WebView, request: android.webkit.WebResourceRequest): android.webkit.WebResourceResponse? {
+                    val target = request.url.toString()
+                    val blocked = com.music.spotui.data.DataSaver.active ||
+                        (request.isForMainFrame && target.startsWith("http") && !app.myspoti.spotify.security.WebPolicy.isNavigation(target))
+                    return if (blocked) android.webkit.WebResourceResponse("text/plain", "utf-8", 403, "Blocked", emptyMap(), java.io.ByteArrayInputStream(ByteArray(0))) else null
+                }
+
                 // A form POST (or a page's own navigation) to another host never asks
                 // shouldOverrideUrlLoading: the document that starts loading is checked too.
                 override fun onPageStarted(view: WebView, url: String, favicon: android.graphics.Bitmap?) {

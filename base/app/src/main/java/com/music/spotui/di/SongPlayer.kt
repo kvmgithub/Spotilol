@@ -450,6 +450,8 @@ object SongPlayer {
         synchronized(wantedSaved) { wantedSaved.clear() }
         _queue.value = EngineQueue(); apiQueue = null; _nowPlaying.value = NowPlaying()
         lastTrackPrefs().edit().clear().apply(); savedLast = ""; resumeWhenReady = false
+        // The listen under way is the account's that ends: not written to the next one's history.
+        listenKey = ""; listenSong = null; listenPlayedMs = 0L; listenTickAt = 0L; listenWasPlaying = false
         _activeDevice.value = null; _sleepEndsAt.value = null; sleepFade?.cancel(); main.removeCallbacks(sleepFadeRunnable); sleepTrackId = null
         _video.value = VideoState(); videoFullscreen.value = false
         boundState?.let { state ->
@@ -787,6 +789,8 @@ object SongPlayer {
 
     private val transportLock = kotlinx.coroutines.sync.Mutex()
     private val transportGen = java.util.concurrent.atomic.AtomicInteger()
+    /** Bumped by every command sent (play, pause, skip, seek): a late start compares it to see a newer one. */
+    val transportCount: Int get() = transportGen.get()
 
     /** Moved by [clearSession]: a transport started for an account that signed out is never sent. */
     private val sessionGen = java.util.concurrent.atomic.AtomicInteger()
@@ -1075,6 +1079,8 @@ object SongPlayer {
     /** [send] false: the engine has paused already (the sleep timer's fade). */
     private fun pauseSilently(send: Boolean = true) {
         if (LocalPlayer.active.value) { LocalPlayer.pause(); return }
+        // A play tapped before the page's first state is over: that state must not start it again.
+        resumeWhenReady = false
         intendPaused()
         positionMs = getCurrentPosition(); positionAt = SystemClock.elapsedRealtime(); playing = false
         if (send) transport(pullBack = false) { api.player.pause() }

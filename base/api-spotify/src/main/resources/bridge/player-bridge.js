@@ -286,10 +286,11 @@
   // the crossfade's delay: the end of the old song keeps its gain while the new one starts at
   // its own. A song without a value (an episode, an ad, a local file) plays at 0 dB.
   const NZ_MIN_DB = -12, NZ_MAX_DB = 6;
-  const nz = { on: false, gains: new Map(), uri: null, gain: 1 };
-  // The limiter works while the boost or a song's gain raises the level.
+  const nz = { on: false, gains: new Map(), uri: null, gain: 1, prev: 1 };
+  // The limiter works while the boost or a song's gain raises the level, the song before
+  // included: its end still sounds through the crossfade's delay, at its own gain.
   const setLimiter = () => {
-    const hot = boost.level > 1 || nz.gain > 1;
+    const hot = boost.level > 1 || nz.gain > 1 || nz.prev > 1;
     boost.limiter.threshold.value = hot ? -1 : 0;
     boost.limiter.ratio.value = hot ? 20 : 1;
   };
@@ -300,7 +301,7 @@
     boost.norm.gain.setTargetAtTime(nz.gain, boost.ctx.currentTime, 0.05);
     setLimiter();
   };
-  const nzTrack = uri => { if (uri !== nz.uri) { nz.uri = uri; nzApply(); } };
+  const nzTrack = uri => { if (uri !== nz.uri) { nz.uri = uri; nz.prev = nz.gain; nzApply(); } };
 
   const srcKind = el => {
     const s = el.currentSrc || '';
@@ -378,12 +379,13 @@
         if (!heard) { heard = true; post({ type: 'boost', sound: true, src: srcKind(el), state: boost.ctx.state, level }); }
         return;
       }
-      // Silence counts only where sound is due (Chromium applies the element's volume in the graph).
-      if (window.__mspMuted || el.volume < 0.05 || boost.gain.gain.value === 0) { silent = 0; return; }
       // A cross-origin source without CORS (a podcast from its own host) never reaches Web Audio:
-      // said at its first silent second, not after BOOST_SILENT_S. Once moving, the page has
-      // reported the episode, so the reload plays that one on, not the song before.
+      // said at its first silent second, not after BOOST_SILENT_S, and at any volume (a quiet
+      // one is silent there too). Once moving, the page has reported the episode, so the reload
+      // plays that one on, not the song before.
       const tainted = srcKind(el) === 'cross-origin' && el.crossOrigin == null;
+      // Silence counts only where sound is due (Chromium applies the element's volume in the graph).
+      if (!tainted && (window.__mspMuted || el.volume < 0.05 || boost.gain.gain.value === 0)) { silent = 0; return; }
       if (++silent < (tainted && !reported ? 1 : BOOST_SILENT_S)) return;
       // Listening on: a host that kept the graph (offline) hears of it again, every BOOST_SILENT_S.
       silent = 0;
@@ -457,7 +459,7 @@
   const xf = { seconds: 0, el: null, k: 1, ours: false, pageRate: 1, pitch: null, segs: [{ at: 0, k: 1 }], cur: 0,
     switchAt: -1e9, lastRem: Infinity, kind: null, durationMs: 0, speed: 1, planned: null, noted: '',
     resets: 0, sets: 0, endingUntil: 0, overlapUntil: 0, probes: [], masked: new WeakSet(),
-    holdWait: false, holdRate: false, hold: null };
+    holdWait: false, holdRate: false, hold: null, seekAsked: 0 };
 
   // The element's own speed and time, past the masks below.
   const RATE = Object.getOwnPropertyDescriptor(HTMLMediaElement.prototype, 'playbackRate');
@@ -769,7 +771,9 @@
     on('ended', xfSwitch);
     on('emptied', xfSwitch);
     on('loadstart', xfSwitch);
-    on('seeking', () => { if (performance.now() - xf.switchAt > 2000) xfFlush('seek'); });
+    // The page seeks a new source itself as it starts: not a reason to drop the reserve. A seek
+    // the user asked for ('player.seek') is one, however soon after the switch.
+    on('seeking', () => { if (performance.now() - xf.switchAt > 2000 || performance.now() - xf.seekAsked < 2000) { xf.seekAsked = 0; xfFlush('seek'); } });
     on('pause', () => { xfHold('holdWait', false); if (!xfAtEnd(el)) boost.ctx.suspend().catch(() => {}); });
     on('play', () => boost.ctx.resume().catch(() => {}));
     on('playing', () => { boost.ctx.resume().catch(() => {}); xfHold('holdWait', false); });
@@ -948,7 +952,7 @@
     },
     'player.pause': () => need().player.pause(),
     'player.resume': () => need().player.resume(),
-    'player.seek': a => need().player.seekTo(a.positionMs),
+    'player.seek': a => { xf.seekAsked = performance.now(); return need().player.seekTo(a.positionMs); },
     'player.next': () => need().player.skipToNext(),
     'player.previous': () => need().player.skipToPrevious(),
     'player.setShuffle': a => need().player.setShuffle(!!a.on),
@@ -1159,6 +1163,9 @@
       ensureGraph();
       await boostRoute();
       xf.planned = null;
+      // Turned off: the reserve goes now (a jump to where the page is), not at the next song,
+      // which would otherwise start as late as the reserve and stay that late.
+      if (xf.seconds === 0 && xfReserve() > 0.05) xfFlush('off');
       xfTick();
       return { seconds: xf.seconds, routed: boost.count, state: boost.ctx.state };
     },

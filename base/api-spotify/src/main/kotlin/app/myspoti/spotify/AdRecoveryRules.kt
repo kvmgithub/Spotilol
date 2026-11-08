@@ -11,10 +11,12 @@ object AdRecoveryRules {
      * The songs of the user's queue [queued] (before our reload) to add again to the new page's:
      * all in their order, but for the one now [playing] (played on from the queue) and those the
      * page lists already ([has]). Reported: the queue was gone after an ad got past by a reload (#144).
+     * [playedOn] false: the reload resumed the song it had, or the user picked one, and no queued
+     * song was played; the same song queued again stays queued (a URI alone does not say it was).
      */
-    fun requeued(queued: List<Uri>, playing: Uri?, has: Collection<Uri>): List<Uri> {
+    fun requeued(queued: List<Uri>, playing: Uri?, has: Collection<Uri>, playedOn: Boolean = true): List<Uri> {
         // Played on from the queue: that song and the ones before it in the queue are done.
-        val from = queued.indexOf(playing).let { if (it >= 0) it + 1 else 0 }
+        val from = if (!playedOn) 0 else queued.indexOf(playing).let { if (it >= 0) it + 1 else 0 }
         // One restored occurrence accounts for one queued occurrence, not every copy of its URI.
         val counts = has.groupingBy { it }.eachCount().toMutableMap()
         return queued.drop(from).filter { uri ->

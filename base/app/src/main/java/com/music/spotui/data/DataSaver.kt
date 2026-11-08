@@ -10,10 +10,10 @@ import androidx.compose.runtime.setValue
 
 /**
  * Data saver (a switch in the profile menu): on mobile data or another metered network
- * (never on Wi-Fi) the app uses no data at all, as if offline. Every connection is
- * refused ([check], [interceptor], the WebView and Glide guards), the hidden Spotify
- * player is shut down, and only downloaded songs and Local Files play. Back on Wi-Fi,
- * the player is rebuilt.
+ * (never on Wi-Fi) the app uses no data at all, as if offline. Every native connection is
+ * refused (BoundedHttp.refuse, which all of the app's OkHttp clients ask, and the Glide
+ * guard), the hidden Spotify player is unloaded and no repair loads it again, the account
+ * pages do not open, and only the phone's own files play. Back on Wi-Fi, the player loads again.
  */
 object DataSaver {
     private const val PREFS = "myspoti_prefs"
@@ -35,14 +35,6 @@ object DataSaver {
     /** A connection refused by the data saver. */
     class Blocked : java.io.IOException("Data saver: no mobile data")
 
-    /** Throws [Blocked] while the saver applies: call before opening any connection. */
-    fun check() {
-        if (active) throw Blocked()
-    }
-
-    /** For OkHttp clients (and Ktor's OkHttp engine). */
-    val interceptor = okhttp3.Interceptor { chain -> check(); chain.proceed(chain.request()) }
-
     /** Shuts the hidden Spotify player down when the saver starts applying, rebuilds it when it stops. */
     private fun changed() {
         val now = active
@@ -58,6 +50,7 @@ object DataSaver {
         if (context != null) return
         val app = c.applicationContext
         context = app
+        app.myspoti.spotify.security.BoundedHttp.refuse = { active }
         enabled = app.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean(KEY, false)
         val cm = app.getSystemService(ConnectivityManager::class.java) ?: return
         metered = cm.isActiveNetworkMetered

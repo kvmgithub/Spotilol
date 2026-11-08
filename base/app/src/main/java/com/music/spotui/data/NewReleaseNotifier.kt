@@ -60,6 +60,23 @@ object NewReleaseNotifier {
      */
     fun forget(context: Context) {
         context.getSharedPreferences(PREFS, 0).edit().remove(KEY_SEEN).remove(KEY_AT).apply()
+        // What was announced for that account goes from the shade too.
+        runCatching {
+            val manager = context.getSystemService(NotificationManager::class.java) ?: return
+            manager.activeNotifications.filter { it.notification.group == GROUP }.forEach { manager.cancel(it.id) }
+        }
+    }
+
+    /**
+     * A notification would reach the user: the permission given, the app's and the channel's
+     * notifications on. Otherwise the feed is not read at all, so nothing counts as announced.
+     */
+    private fun deliverable(context: Context): Boolean {
+        if (Build.VERSION.SDK_INT >= 33 &&
+            context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) return false
+        if (!NotificationManagerCompat.from(context).areNotificationsEnabled()) return false
+        val channel = context.getSystemService(NotificationManager::class.java)?.getNotificationChannel(CHANNEL)
+        return channel == null || channel.importance != NotificationManager.IMPORTANCE_NONE
     }
 
     /** Started once with the app: waits for the session, then looks every hour whether a read is due. */
@@ -81,6 +98,7 @@ object NewReleaseNotifier {
         val prefs = context.getSharedPreferences(PREFS, 0)
         val now = System.currentTimeMillis()
         if (now - prefs.getLong(KEY_AT, 0L) in 0 until GAP_MS) return
+        if (!deliverable(context)) return
         val feed = MyspotiRuntime.api.home.whatsNewFeed(0, 30).items
         val seen = prefs.getString(KEY_SEEN, null)?.split('\n')?.filter { it.isNotBlank() }
         val fresh = if (seen == null) emptyList() else feed.filter { it.uri !in seen }

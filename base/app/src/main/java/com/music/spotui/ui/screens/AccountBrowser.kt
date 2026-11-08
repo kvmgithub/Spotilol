@@ -15,9 +15,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
-import okhttp3.OkHttpClient
 import okhttp3.Request
-import java.util.concurrent.TimeUnit
 
 /**
  * Spotify's account pages (plan, privacy, apps, devices) in a browser that shares the
@@ -29,6 +27,12 @@ class AccountBrowser : ComponentActivity() {
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // The data saver on a metered network: no page at all (see DataSaver).
+        if (com.music.spotui.data.DataSaver.active) {
+            android.widget.Toast.makeText(this, app.myspoti.engine.R.string.data_saver_blocked, android.widget.Toast.LENGTH_SHORT).show()
+            finish()
+            return
+        }
         web = WebView(this).apply {
             settings.javaScriptEnabled = true
             settings.domStorageEnabled = true
@@ -41,6 +45,22 @@ class AccountBrowser : ComponentActivity() {
                     if (app.myspoti.spotify.security.WebPolicy.isNavigation(target)) return false
                     if (request.isForMainFrame && app.myspoti.spotify.security.WebPolicy.httpsHost(target) != null)
                         runCatching { startActivity(Intent(Intent.ACTION_VIEW, request.url)) }
+                    return true
+                }
+
+                // A form POST (or a page's own navigation) to another host never asks
+                // shouldOverrideUrlLoading: the document that starts loading is checked too.
+                override fun onPageStarted(view: WebView, url: String, favicon: android.graphics.Bitmap?) {
+                    if (url == "about:blank" || app.myspoti.spotify.security.WebPolicy.isNavigation(url)) return
+                    view.stopLoading()
+                    if (view.canGoBack()) view.goBack() else finish()
+                }
+
+                // The renderer died (killed or crashed): this page is closed, the app goes on.
+                // Unhandled, Android ends the whole process, the music with it.
+                override fun onRenderProcessGone(view: WebView, detail: android.webkit.RenderProcessGoneDetail): Boolean {
+                    (view.parent as? android.view.ViewGroup)?.removeView(view)
+                    if (!isFinishing) finish()
                     return true
                 }
             }
@@ -67,13 +87,13 @@ class AccountBrowser : ComponentActivity() {
     }
 
     override fun onDestroy() {
-        web.destroy()
+        if (::web.isInitialized) web.destroy()
         super.onDestroy()
     }
 
     companion object {
         private val http by lazy {
-            OkHttpClient.Builder().followRedirects(false).callTimeout(6, TimeUnit.SECONDS).build()
+            app.myspoti.spotify.security.BoundedHttp.client(callTimeoutSeconds = 6)
         }
         private val MARKET = Regex("^/([a-z]{2})(?:-[a-z]{2})?/")
 

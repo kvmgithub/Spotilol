@@ -100,7 +100,7 @@ class Api constructor(
             albums = null; artists = null; home = null; library = null
             libraryRoot = null; folders.clear(); newEpisodes = null
             facets.clear()
-            LikedCache.tracks = null
+            LikedCache.clear()
             ArtistCache.map.clear()
             ScreenCache.clear()
         }
@@ -115,15 +115,27 @@ class Api constructor(
          * All liked songs, loaded once for the whole app (not again by every screen that needs
          * them, nor started over when that screen closes before the end).
          */
+        @Volatile private var generation = 0
+
+        /** Signed out or another account: a load of the one before still under way keeps nothing. */
+        @Synchronized
+        fun clear() {
+            generation++
+            tracks = null
+            loading?.cancel()
+            loading = null
+        }
+
         @Synchronized
         fun loadOnce(): kotlinx.coroutines.Deferred<List<SongsModel>?> {
             tracks?.let { return kotlinx.coroutines.CompletableDeferred(it) }
             loading?.takeIf { it.isActive }?.let { return it }
+            val gen = generation
             return scope.async {
                 runCatching {
                     Graph.api.getLikedPage().first { it is Response.Success && it.data.complete || it is Response.Error }
                         .let { (it as? Response.Success)?.data?.tracks }
-                }.getOrNull()?.also { if (tracks == null) tracks = it }
+                }.getOrNull()?.also { synchronized(this@LikedCache) { if (tracks == null && gen == generation) tracks = it } }
             }.also { loading = it }
         }
 

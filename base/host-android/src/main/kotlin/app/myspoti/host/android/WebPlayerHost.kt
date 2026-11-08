@@ -260,6 +260,14 @@ class WebPlayerHost(private val context: Context) : BridgeHost {
             }
 
             override fun onPageStarted(view: WebView, url: String, favicon: Bitmap?) {
+                // A form POST (or the page's own navigation) to another host never asks
+                // shouldOverrideUrlLoading: the document that starts is checked here.
+                if (url.startsWith("http") && !WebPolicy.isNavigation(url)) {
+                    log("navigation blocked: ${Logbook.noQuery(url).substringAfter("://").substringBefore('/').take(80)}")
+                    view.stopLoading()
+                    view.loadUrl(if (loadAsked) playerRoot() else "about:blank")
+                    return
+                }
                 log("page start ${Logbook.noQuery(url).take(120)}")
                 mainFrameFailed = false
                 // A "finished" comes just before the player's document starts: its wait must not run out on a
@@ -297,14 +305,14 @@ class WebPlayerHost(private val context: Context) : BridgeHost {
                     log("http ${response.statusCode} ${request.method} ${request.url.toString().substringBefore('?').take(120)}")
                 // The page's own requests answered 401: its token went stale (see PageAuth). A licence or
                 // its address (melody license_url) so answered leaves the next song silent: at once (Myspoti 2.4.0).
-                if (response.statusCode == 401 && request.url.host?.endsWith("spotify.com") == true && !isLoginPage(_url.value))
+                if (response.statusCode == 401 && WebPolicy.isSpotifyApi(request.url.toString()) && !isLoginPage(_url.value))
                     app.myspoti.spotify.bridge.PageAuth.unauthorized("http ${request.method} ${request.url.path?.take(80)}",
                         licence = request.url.path?.let { it.contains("widevine-license") || it.endsWith("/license_url") } == true)
                 if (request.isForMainFrame && WebPolicy.isPlayer(request.url.toString()) && (response.statusCode >= 500 || response.statusCode == 429))
                     playerPageFailed("http ${response.statusCode}")
                 if (request.isForMainFrame && _loginLoad.value != LoginLoad.NONE && LoginLoad.isSpotifyAccounts(request.url.toString()) && response.statusCode >= 500)
                     loginFailed("http ${response.statusCode}")
-                if (response.statusCode == 429 && request.url.path?.contains("widevine-license") == true) onLicenseLimited()
+                if (response.statusCode == 429 && WebPolicy.isSpotifyApi(request.url.toString()) && request.url.path?.contains("widevine-license") == true) onLicenseLimited()
             }
 
             override fun onPageFinished(view: WebView, url: String) {
@@ -460,6 +468,8 @@ class WebPlayerHost(private val context: Context) : BridgeHost {
 
     /** The player's own URL, not the page's current one: the bridge parks the page on an empty route. */
     fun reload() = main.post {
+        // Unloaded (data saver): a repair does not bring the page back, only [load] does.
+        if (!loadAsked) return@post
         // A page whose player never started is not helped by loading it again in the same renderer.
         if (pageStarts > 0 && !drmAsked && !mainFrameFailed && _url.value.startsWith(PLAYER_URL) && newViewAllowed()) {
             Logbook.log("reload: the player never started on this page (no DRM request): new WebView instead")
@@ -637,18 +647,25 @@ class WebPlayerHost(private val context: Context) : BridgeHost {
      */
     fun switchSession(cookies: Map<String, String>, done: (Boolean) -> Unit) = main.post {
         val manager = CookieManager.getInstance()
-        // The old account's page goes first, so it cannot write its cookies back meanwhile.
+        // The old account's page goes first, so it cannot write its cookies back meanwhile, and its
+        // bridge with it: nothing of that page (a sign-in check, a call) answers for the new one.
         loadAsked = false
+        onPageStarting?.invoke()
         view.loadUrl("about:blank")
         manager.removeAllCookies {
             val pairs = cookies.flatMap { (origin, header) ->
                 header.split(';').mapNotNull { WebPolicy.restoreCookie(it.trim())?.let { cookie -> origin to cookie } }
             }
-            if (pairs.isEmpty()) { done(false); return@removeAllCookies }
+            // Without its auth cookie a profile signs nobody in: refused before anything is loaded.
+            if (pairs.none { it.second.startsWith("sp_dc=") }) { done(false); return@removeAllCookies }
             var left = pairs.size
+            var authSet = false
             pairs.forEach { (origin, cookie) ->
-                manager.setCookie(origin, cookie) {
+                manager.setCookie(origin, cookie) { ok ->
+                    if (ok && cookie.startsWith("sp_dc=")) authSet = true
                     if (--left > 0) return@setCookie
+                    // The WebView refused the auth cookie: no session to load.
+                    if (!authSet) { done(false); return@setCookie }
                     manager.flush()
                     android.webkit.WebStorage.getInstance().deleteAllData()
                     view.clearCache(true)
@@ -757,8 +774,8 @@ class WebPlayerHost(private val context: Context) : BridgeHost {
         (view.context as? android.content.MutableContextWrapper)?.baseContext = context.applicationContext
     }
 
-    /** Frees the page (data saver, low memory). [load] brings it back. */
-    fun unload() = main.post { loadAsked = false; view.loadUrl("about:blank") }
+    /** Frees the page (data saver) until [load]: its bridge calls fail now, and no repair reloads it. */
+    fun unload() = main.post { loadAsked = false; onPageStarting?.invoke(); view.loadUrl("about:blank") }
 
     companion object {
         /** Logcat tag of the engine: `adb logcat -s Myspoti`. */

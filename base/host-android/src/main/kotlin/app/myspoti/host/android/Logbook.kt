@@ -136,7 +136,7 @@ object Logbook {
             appendLine("android : ${android.os.Build.VERSION.RELEASE} (SDK ${android.os.Build.VERSION.SDK_INT})")
             appendLine("device  : ${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL}")
             appendLine("locale  : ${Locale.getDefault().toLanguageTag()}")
-            if (!pageUrl.isNullOrEmpty()) appendLine("page    : $pageUrl")
+            if (!pageUrl.isNullOrEmpty()) appendLine("page    : ${noQuery(pageUrl)}")
             appendLine("--- power ---")
             powerLines(context).forEach { (k, v) -> appendLine("${k.padEnd(8)}: $v") }
             appendLine()

@@ -47,19 +47,26 @@ object SessionActions {
     }
 
     private fun clearAccount(app: android.content.Context) {
+        // Calls of this account still under way hand nothing on to the next one.
+        MyspotiRuntime.spotify.newSession()
         app.getSharedPreferences("myspoti_prefs", android.content.Context.MODE_PRIVATE)
-            .edit().putBoolean("LoggedIn", false).remove("CurrentAccountName").apply()
+            .edit().putBoolean("LoggedIn", false).remove("CurrentAccountName").remove(LAST_ACCOUNT).apply()
+        com.music.spotui.data.api.ProfileCache.clearSession()
+        clearAccountData(app)
+    }
+
+    /** What the app keeps of an account, in memory and on the phone. */
+    private fun clearAccountData(app: android.content.Context) {
         // Nothing of the account keeps playing or showing: local songs, the notification.
         LocalPlayer.stop()
         PlaybackService.end()
         runCatching { MyspotiRuntime.scope.launch { runCatching { MyspotiRuntime.api.player.pause() } } }
         com.music.spotui.ui.screens.ContextViewModel.clearCache()
         com.music.spotui.data.api.Api.HomeCache.clear()
-        com.music.spotui.data.api.Api.LikedCache.tracks = null
+        com.music.spotui.data.api.LibraryEdits.clear()
         com.music.spotui.data.api.TopStats.clear()
         // Likes kept for later stay this account's, sent when it signs in again; the next account gets none.
         com.music.spotui.data.LibraryOutbox.signedOut()
-        com.music.spotui.data.api.ProfileCache.clearSession()
         SongPlayer.clearSession()
         // The playlists kept for the pickers are this account's (Myspoti 2.4.0).
         com.music.spotui.data.api.EditablePlaylists.clear()
@@ -82,7 +89,26 @@ object SessionActions {
      */
     fun sessionLost() {
         app.myspoti.host.android.Logbook.log("session lost without a sign-out: the account is read again at the next session")
+        MyspotiRuntime.spotify.newSession()
         com.music.spotui.data.api.ProfileCache.clearSession()
         com.music.spotui.data.LibraryOutbox.signedOut()
+    }
+
+    private const val LAST_ACCOUNT = "LastAccountId"
+
+    /**
+     * The profile read for a session ([id]). Another account than the last one (a session lost,
+     * then someone else signed in): what the app kept of the one before goes, as at a sign-out.
+     * The same account keeps it all (its listen history, its caches).
+     */
+    fun accountSeen(app: android.content.Context, id: String) {
+        val prefs = app.getSharedPreferences("myspoti_prefs", android.content.Context.MODE_PRIVATE)
+        val last = prefs.getString(LAST_ACCOUNT, null)
+        if (last == id) return
+        if (last != null) {
+            app.myspoti.host.android.Logbook.log("another account than the last one: its data cleared")
+            clearAccountData(app)
+        }
+        prefs.edit().putString(LAST_ACCOUNT, id).apply()
     }
 }

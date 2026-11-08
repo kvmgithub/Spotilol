@@ -101,11 +101,28 @@ class SpotifyHttp(
     private data class ClientToken(val value: String, val expiresAtMs: Long, val clientId: String = "")
 
     private val lock = Mutex()
-    private var web: WebToken? = null
+    @Volatile private var web: WebToken? = null
     private var client: ClientToken? = null
 
     /** Drops the cached web token (it belongs to one account); the client token is kept. */
     suspend fun forgetWebToken() = lock.withLock { web = null }
+
+    /** An answer that came for a session which has ended since (see [newSession]). */
+    class SessionChanged : java.io.IOException("the session changed during the call")
+
+    /** Bumped by [newSession]: a call compares it before it hands its answer on. */
+    @Volatile var session = 0
+        private set
+
+    /**
+     * The account may change (a sign-out, another profile, the session lost): calls still under way
+     * end in [SessionChanged] instead of handing the earlier account's answer, or writing it, to the
+     * next one, and the next call asks the page for its token.
+     */
+    fun newSession() { session++; web = null }
+
+    /** Writes are not resent by OkHttp after a broken connection: the first one may have gone through. */
+    private val once by lazy { http.newBuilder().retryOnConnectionFailure(false).build() }
 
     /** True when the page's token belongs to a signed-in user (the cached one is reused). */
     /**
@@ -142,9 +159,11 @@ class SpotifyHttp(
     }
 
     /** Sends a request with browser headers. Returns the status and body text. */
-    suspend fun send(method: String, url: String, body: String? = null, contentType: String = JSON_TYPE, accept: String = "application/json"): Pair<Int, String> {
+    suspend fun send(method: String, url: String, body: String? = null, contentType: String = JSON_TYPE, accept: String = "application/json",
+                     retry: Boolean = true): Pair<Int, String> {
         // The account's token only ever goes to Spotify itself.
         require(app.myspoti.spotify.security.WebPolicy.isSpotifyApi(url)) { "not a Spotify HTTPS host: ${url.toHttpUrl().host}" }
+        val started = session
         val (w, c) = tokens()
         val builder = Request.Builder().url(url)
             .header("authorization", "Bearer ${w.access}")
@@ -159,7 +178,9 @@ class SpotifyHttp(
         // Bytes keep the content type exactly as given (OkHttp appends a charset to String bodies,
         // which some Spotify endpoints reject with 400).
         builder.method(method, body?.toByteArray()?.toRequestBody(contentType.toMediaType()) ?: if (method == "GET" || method == "DELETE") null else ByteArray(0).toRequestBody(null))
-        val result = withContext(Dispatchers.IO) { http.newCall(builder.build()).execute().use { it.code to app.myspoti.spotify.security.BoundedHttp.text(it.body) } }
+        val client = if (retry) http else once
+        val result = withContext(Dispatchers.IO) { client.newCall(builder.build()).execute().use { it.code to app.myspoti.spotify.security.BoundedHttp.text(it.body) } }
+        if (session != started) throw SessionChanged()
         if (result.first == 401) lock.withLock { web = null }
         return result
     }
@@ -275,21 +296,34 @@ class HttpGql(private val http: SpotifyHttp, private val source: OpsSource, priv
             }
         }
         val mutation = isMutation(name)
+        val session = http.session
+        // Through the page, for the session this call was made in only: after a sign-out or another
+        // profile, the page is the next account's, and a write of the one before would land there.
+        suspend fun fallBack(): JsonElement {
+            if (http.session != session) throw SpotifyHttp.SessionChanged()
+            fellBack.incrementAndGet()
+            return fallback.query(name, variables)
+        }
         val (code, text) = try {
-            http.send("POST", "https://api-partner.spotify.com/pathfinder/v2/query", body.toString())
+            http.send("POST", "https://api-partner.spotify.com/pathfinder/v2/query", body.toString(), retry = !mutation)
         } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: SpotifyHttp.SessionChanged) {
+            throw e
+        } catch (e: app.myspoti.spotify.security.BoundedHttp.Refused) {
+            // The data saver: the page is not asked either.
             throw e
         } catch (e: java.io.IOException) {
             // The write may have reached Spotify before the connection broke: never sent twice.
             if (mutation) throw GqlException(name, "no answer: ${e.message}")
-            fellBack.incrementAndGet(); return fallback.query(name, variables)
+            return fallBack()
         } catch (e: Exception) {
-            fellBack.incrementAndGet(); return fallback.query(name, variables)
+            return fallBack()
         }
         if (code != 200) {
             // A server error may come after the write was done; a refusal (4xx) was not applied.
             if (mutation && code >= 500) throw GqlException(name, "HTTP $code")
-            fellBack.incrementAndGet(); return fallback.query(name, variables)
+            return fallBack()
         }
         direct.incrementAndGet()
         val response = Bridge.json.parseToJsonElement(text)

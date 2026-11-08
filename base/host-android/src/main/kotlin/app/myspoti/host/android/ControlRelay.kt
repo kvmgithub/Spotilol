@@ -142,7 +142,9 @@ internal class ControlRelay(private val view: WebView, private val fingerprint: 
             "GET", "HEAD" -> { require(body.isNullOrEmpty()) { "body on $method" }; null }
             else -> (body ?: "").toByteArray().toRequestBody(null)
         }
+        // Checked again as OkHttp will send it (its parser resolves what the raw string hid).
         return Request.Builder().url(url).headers(headers.build()).method(method, payload).build()
+            .also { require(WebPolicy.isRelayTarget(it.url.toString()) && !AdBlock.isBlocked(it.url.toString())) { "untrusted target" } }
     }
 
     private fun send(id: Int, request: Request, body: String?, reply: JavaScriptReplyProxy) {

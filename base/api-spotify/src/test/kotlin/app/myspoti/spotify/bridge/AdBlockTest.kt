@@ -33,6 +33,9 @@ class AdBlockTest {
         assertTrue(AdBlock.isTelemetry("https://gew4-spclient.spotify.com/gabo-receiver-service/public/v3/events"))
         assertTrue(AdBlock.isTelemetry("https://spclient.wg.spotify.com/gabo-receiver-service/v3/events?x=1"))
         assertTrue(AdBlock.isTelemetry("https://adeventtracker.spotify.com/x"))
+        // The page's play reports, not the licence address melody also serves.
+        assertTrue(AdBlock.isTelemetry("https://gew4-spclient.spotify.com/melody/v1/msg/batch"))
+        assertFalse(AdBlock.isTelemetry("https://gew4-spclient.spotify.com/melody/v1/license_url?keysystem=com.widevine.alpha"))
         assertTrue(AdBlock.isTelemetry("https://o1.ingest.sentry.io/api/1/envelope/"))
         assertTrue(AdBlock.isTelemetry("https://www.google-analytics.com/g/collect"))
         assertFalse(AdBlock.isTelemetry("https://evil.test/gabo-receiver-service/x"))

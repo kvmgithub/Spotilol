@@ -131,6 +131,12 @@ object LibraryEdits {
         if (pending.removeAll { (it.edit as? Remove)?.uri == uri }) version.value++
     }
 
+    /** Signed out or another account: the edits shown for the one before go. */
+    fun clear() {
+        pending.clear()
+        version.value++
+    }
+
     /** The write failed: the list goes back to what it was. */
     fun cancel(edit: Edit) {
         if (pending.removeAll { it.edit === edit }) version.value++

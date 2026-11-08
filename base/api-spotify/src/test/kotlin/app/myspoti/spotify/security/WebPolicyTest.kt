@@ -64,6 +64,10 @@ class WebPolicyTest {
             "http://gew4-spclient.spotify.com/connect-state/v1/", "https://gew4-spclient.spotify.com:8443/connect-state/v1/",
             "https://gew4-spclient.spotify.com/connect-state/v1/../../melody/v1/x", "https://a.b-spclient.spotify.com/connect-state/v1/",
             "https://evil.test/?https://gew4-spclient.spotify.com/connect-state/v1/",
+            // Encoded dot segments: OkHttp resolves them, the request would leave the route.
+            "https://gew4-spclient.spotify.com/connect-state/v1/%2e%2e/%2E%2E/melody/v1/msg/batch",
+            "https://gew4-spclient.spotify.com/connect-state/v1/.%2e/.%2E/melody/v1/msg/batch",
+            "https://gew4-spclient.spotify.com/connect-state/v1/x%2f..%2fmelody",
         ).forEach { assertFalse(WebPolicy.isRelayTarget(it), it) }
     }
 

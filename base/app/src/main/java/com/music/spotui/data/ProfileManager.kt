@@ -111,14 +111,17 @@ object ProfileManager {
         val app = context.applicationContext
         val store = SealedStore(app.getSharedPreferences(PREFS, Context.MODE_PRIVATE))
         // Checked as a file: EncryptedSharedPreferences.create would make an empty one.
-        if (store.isEmpty() && File(app.dataDir, "shared_prefs/$LEGACY_PREFS.xml").exists()) {
-            val raw = legacyPrefs(app).getString(KEY_PROFILES, null)
-            if (raw != null) {
-                parseProfiles(raw)
-                store.write(raw)
+        if (File(app.dataDir, "shared_prefs/$LEGACY_PREFS.xml").exists()) {
+            if (store.isEmpty()) {
+                val raw = legacyPrefs(app).getString(KEY_PROFILES, null)
+                if (raw != null) {
+                    parseProfiles(raw)
+                    store.write(raw)
+                }
+                android.util.Log.i(TAG, "profiles moved to the Android Keystore")
             }
+            // Also a move cut off between the write and this delete: finished at the next start.
             app.deleteSharedPreferences(LEGACY_PREFS)
-            android.util.Log.i(TAG, "profiles moved to the Android Keystore")
         }
         return store
     }

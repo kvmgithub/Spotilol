@@ -16,6 +16,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -343,7 +344,13 @@ class SpotifyPlayer(
                 // The page keeps its volume: an app closed during a muted ad must not stay silent.
                 // Only when this page is Connect's active device: the volume is that device's otherwise, and a
                 // speaker at 0 went to 100 % (Myspoti 2.4.0, #159).
-                runCatching { if (volume() == 0.0 && ownsConnectVolume(readMedia())) setVolume(wantedVolume?.takeIf { v -> v > 0.0 } ?: 1.0) }
+                // A volume the user set to 0 stays 0 (it went to 100 %), as in the guard during a song.
+                // Level and device from one reading, so both describe the same moment.
+                runCatching {
+                    val wanted = wantedVolume ?: 1.0
+                    val media = readMedia()
+                    if (wanted > 0.0 && (media?.playerVolume ?: volume()) == 0.0 && ownsConnectVolume(media)) setVolume(wanted)
+                }
                 // A reloaded page during an ad break plays the ad again: muted again at once. So is a
                 // page reloaded to get past an ad, until a real song plays (an ad can come first).
                 if (_adPlaying.value || muteUntilSong) muteForAd()
@@ -375,6 +382,8 @@ class SpotifyPlayer(
             ?.let { _queue.value?.nextUp }
         // The songs the user queued: the new page has no queue, they are added to it again (#144).
         val queued = _queue.value?.queued.orEmpty().filter { it.kind == ItemKind.TRACK || it.kind == ItemKind.EPISODE }
+        // Only a play on from [s] can take the head of the queue; a resume or a pick takes none of it.
+        var playedOn = false
         ownReload = true
         try {
             runCatching {
@@ -390,6 +399,7 @@ class SpotifyPlayer(
                     bridge.logger?.invoke("page back after a reload: played or picked meanwhile, ${s.item?.name} not played on")
                     return@runCatching
                 }
+                playedOn = next
                 if (next) playOnNewPage { playOn(s, nextUp) } else {
                     val sent = System.currentTimeMillis()
                     val movedAt = userMoveAt
@@ -399,7 +409,7 @@ class SpotifyPlayer(
                     if (!joined) lastPlay?.takeIf { it.third >= sent }?.let { p -> scope.launch { playWhenJoined(p, movedAt) } }
                 }
             }
-            if (queued.isNotEmpty()) runCatching { requeue(queued) }
+            if (queued.isNotEmpty()) runCatching { requeue(queued, playedOn) }
                 .onFailure { bridge.logger?.invoke("page back after a reload: the queue was not added again (${it.message})") }
         } finally {
             ownReload = false
@@ -499,10 +509,10 @@ class SpotifyPlayer(
         scope.launch {
             val device = app.myspoti.spotify.bridge.PageDevice
             withTimeoutOrNull(DEVICE_LOST_WAIT_MS) { while (device.commandLostAt < sent) delay(100) } ?: return@launch
-            if (userMoveAt != movedAt || lastPlay?.third != p.third) return@launch
+            if (userMoveAt != movedAt || lastPlay?.third != p.third || pausedByUser) return@launch
             bridge.logger?.invoke("play on the new page answered DEVICE_NOT_FOUND: sent again once the device has joined")
             awaitDeviceJoined()
-            if (userMoveAt != movedAt || lastPlay?.third != p.third) return@launch
+            if (userMoveAt != movedAt || lastPlay?.third != p.third || pausedByUser) return@launch
             runCatching { playNow(p.first, trackUri = p.second, index = lastIndex, order = lastOrder?.takeIf { it.first == p.first }?.second, refusable = lastPlayRefusable) }
         }
     }
@@ -563,12 +573,12 @@ class SpotifyPlayer(
      * [queued] (the user's queue before a reload of ours) added again to the new page's queue, but
      * for the song now playing (played on from the first of them) and those the page has already.
      */
-    private suspend fun requeue(queued: List<NowPlaying>) {
+    private suspend fun requeue(queued: List<NowPlaying>, playedOn: Boolean) {
         // The queue the page reports after the song it plays on.
         delay(REQUEUE_WAIT_MS)
         val playing = _state.value?.item?.uri
         val has = _queue.value?.queued.orEmpty().map { it.uri }
-        val missing = AdRecoveryRules.requeued(queued.map { it.uri }, playing, has)
+        val missing = AdRecoveryRules.requeued(queued.map { it.uri }, playing, has, playedOn)
         if (missing.isEmpty()) return
         bridge.logger?.invoke("page back after a reload: ${missing.size} queued songs added to the queue again")
         addToQueue(missing)
@@ -1278,6 +1288,8 @@ class SpotifyPlayer(
             if (crossing) runCatching { bridge.call("media.ending", timeoutMs = LEVEL_TIMEOUT_MS, quiet = true) }
             endingSwitch = crossing
             try {
+                // A pick or a skip made while the calls above ran is the user's: theirs wins.
+                if (userMoveAt != movedAt) return@withContext
                 if (skipPastAd(a)) return@withContext
                 runCatching { playNow(ctx, trackUri = a.nextUri, order = lastOrder?.takeIf { it.first == ctx }?.second) }
                     .onFailure { bridge.logger?.invoke("play before the ad refused: ${it.message}") }
@@ -2367,7 +2379,10 @@ class SpotifyPlayer(
         scope.launch { applyNormalize() }
     }
 
-    private suspend fun applyNormalize() {
+    /** One [applyNormalize] at a time: a switch turned off while the loudness is read is sent after it. */
+    private val normalizeLock = kotlinx.coroutines.sync.Mutex()
+
+    private suspend fun applyNormalize(): Unit = normalizeLock.withLock {
         if (webAudioOff || !bridge.ready.value) return
         val on = normalize
         if (!on && !normalizeSent) return
@@ -2375,6 +2390,8 @@ class SpotifyPlayer(
         val uris = (listOfNotNull(s?.item, s?.next) + _queue.value?.nextUp.orEmpty().take(3))
             .map { it.uri }.filter { it.startsWith("spotify:track:") }.distinct()
         if (on) readLoudness(uris)
+        // Turned off while the loudness was read: the call that follows says so, this one is stale.
+        if (on != normalize) return
         val gains = buildJsonObject {
             for (u in uris) loudness[u]?.takeIf { !it.isNaN() }?.let { put(u, normalizeGain(it)) }
         }

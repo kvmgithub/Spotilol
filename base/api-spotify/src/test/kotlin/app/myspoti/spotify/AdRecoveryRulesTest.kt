@@ -21,4 +21,12 @@ class AdRecoveryRulesTest {
         assertEquals(listOf("t:c"), AdRecoveryRules.requeued(q, playing = "t:a", has = listOf("t:b", "t:b")))
         assertEquals(listOf("t:b", "t:b", "t:c"), AdRecoveryRules.requeued(q, playing = "t:a", has = emptyList()))
     }
+
+    @Test fun aResumedSongIsNotTakenAsTheQueuedCopyOfIt() {
+        // Album song A resumes after the reload, the queue was [B, A, C]: all of it comes again.
+        val q = listOf("t:b", "t:a", "t:c")
+        assertEquals(q, AdRecoveryRules.requeued(q, playing = "t:a", has = emptySet(), playedOn = false))
+        // Played on from the queue's head: only that one is done.
+        assertEquals(listOf("t:a", "t:c"), AdRecoveryRules.requeued(q, playing = "t:b", has = emptySet(), playedOn = true))
+    }
 }

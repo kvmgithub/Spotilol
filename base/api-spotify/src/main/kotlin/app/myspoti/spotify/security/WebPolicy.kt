@@ -69,7 +69,10 @@ object WebPolicy {
         val host = httpsHost(url) ?: return false
         if (host != "spclient.wg.spotify.com" && !SPCLIENT.matches(host)) return false
         val p = path(url!!)
-        return RELAY_PATHS.any { p.startsWith(it) } && ".." !in p
+        // OkHttp resolves encoded dot segments (%2e%2e) and the request would leave the route
+        // checked here: an encoded dot or slash is refused, Spotify's routes have none.
+        val lower = p.lowercase(Locale.ROOT)
+        return RELAY_PATHS.any { p.startsWith(it) } && ".." !in p && "%2e" !in lower && "%2f" !in lower && "%5c" !in lower
     }
 
     /** Direct API calls with the account's token: HTTPS Spotify hosts only. */

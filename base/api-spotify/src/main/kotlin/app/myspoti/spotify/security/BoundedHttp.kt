@@ -14,6 +14,12 @@ object BoundedHttp {
     /** Shared by every client built here, so a network change can drop all dead connections. */
     val pool = okhttp3.ConnectionPool()
 
+    /** A connection the app does not allow right now (the data saver on a metered network). */
+    class Refused : IOException("Data saver: no mobile data")
+
+    /** Set by the app: true while no connection may go out. Every client built here asks it per request. */
+    @Volatile var refuse: () -> Boolean = { false }
+
     /** [base] without redirects (a 3xx comes back as is) and with a total call deadline. */
     fun client(base: OkHttpClient = OkHttpClient(), callTimeoutSeconds: Long = 45): OkHttpClient = base.newBuilder()
         .followRedirects(false)
@@ -22,6 +28,7 @@ object BoundedHttp {
         .connectTimeout(10, TimeUnit.SECONDS)
         .readTimeout(30, TimeUnit.SECONDS)
         .callTimeout(callTimeoutSeconds, TimeUnit.SECONDS)
+        .addInterceptor { chain -> if (refuse()) throw Refused(); chain.proceed(chain.request()) }
         .build()
 
     fun readBytes(input: InputStream, maxBytes: Int): ByteArray {

@@ -48,6 +48,8 @@ object ProfileCache {
                     if (generation.get() != requestGeneration) continue
                     // No account (an anonymous token): nothing is kept, the next session's is read.
                     if (me == null || me.username.isBlank()) return@launch
+                    // Another account than the last one: the data kept of that one goes first.
+                    com.music.spotui.di.SessionActions.accountSeen(context.applicationContext, me.username)
                     name = me.name
                     imageUrl = me.images.best(160)?.url
                     id = me.username

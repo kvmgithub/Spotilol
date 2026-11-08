@@ -94,11 +94,16 @@ object AdBlock {
         return adHosts.matchesHost(host) || (spotifyOwned(host) && "/mp3-ad/" in pathOf(url))
     }
 
-    /** Event telemetry and trackers (Spotify's gabo event sender included). */
+    /**
+     * Event telemetry and trackers (Spotify's gabo event sender included), and the page's play
+     * reports (melody's message batches). melody's other routes stay: `license_url` gives the
+     * address of a song's licence.
+     */
     fun isTelemetry(url: String): Boolean {
         val host = hostOf(url)
         if (telemetryHosts.matchesHost(host) || "retargeting-pixels" in url) return true
-        return spotifyOwned(host) && pathOf(url).startsWith("/gabo-receiver-service/")
+        val path = pathOf(url)
+        return spotifyOwned(host) && (path.startsWith("/gabo-receiver-service/") || path.startsWith("/melody/v1/msg/"))
     }
 
     fun isBlocked(url: String): Boolean = isAd(url) || isTelemetry(url)

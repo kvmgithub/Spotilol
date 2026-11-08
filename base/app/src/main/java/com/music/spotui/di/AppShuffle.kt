@@ -93,9 +93,11 @@ object AppShuffle {
         if (p.complete) return start(p.uri, p.tracks, first, plain)
         // The list is still loading: every page of it first, so all its songs are dealt.
         val g = gen.incrementAndGet()
+        // Anything played, paused or skipped while the list loads is newer than this pick.
+        val sent = SongPlayer.transportCount
         MyspotiRuntime.scope.launch {
             val all = load(p.uri)?.takeIf { l -> l.any { it.spotifyTrackId == song.spotifyTrackId } } ?: p.tracks
-            main.post { if (g == gen.get()) start(p.uri, all, first, plain) }
+            main.post { if (g == gen.get() && sent == SongPlayer.transportCount) start(p.uri, all, first, plain) }
         }
         return true
     }

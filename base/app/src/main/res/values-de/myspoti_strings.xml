@@ -489,6 +489,8 @@
     <string name="playlist_by">Von %1$s</string>
     <string name="playlist_make_public">Öffentlich machen</string>
     <string name="playlist_make_private">Privat machen</string>
+    <string name="playlist_row_move_up">Nach oben</string>
+    <string name="playlist_row_move_down">Nach unten</string>
     <string name="playlist_stop_collab">Zusammenarbeit beenden</string>
     <string name="playlist_add_profile">Zum Profil hinzufügen</string>
     <string name="playlist_remove_profile">Vom Profil entfernen</string>

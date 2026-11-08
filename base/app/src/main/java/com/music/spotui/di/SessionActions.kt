@@ -101,13 +101,13 @@ object SessionActions {
      * then someone else signed in): what the app kept of the one before goes, as at a sign-out.
      * The same account keeps it all (its listen history, its caches).
      */
-    fun accountSeen(app: android.content.Context, id: String) {
-        val prefs = app.getSharedPreferences("myspoti_prefs", android.content.Context.MODE_PRIVATE)
+    fun accountSeen(context: android.content.Context, id: String) {
+        val prefs = context.getSharedPreferences("myspoti_prefs", android.content.Context.MODE_PRIVATE)
         val last = prefs.getString(LAST_ACCOUNT, null)
         if (last == id) return
         if (last != null) {
             app.myspoti.host.android.Logbook.log("another account than the last one: its data cleared")
-            clearAccountData(app)
+            clearAccountData(context)
         }
         prefs.edit().putString(LAST_ACCOUNT, id).apply()
     }

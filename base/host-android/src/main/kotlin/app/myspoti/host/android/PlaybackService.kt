@@ -162,6 +162,7 @@ class PlaybackService : MediaBrowserServiceCompat() {
 
     override fun onDestroy() {
         instance = null
+        published = null
         holdLocks(false)
         session.release()
         scope.cancel()
@@ -630,6 +631,9 @@ class PlaybackService : MediaBrowserServiceCompat() {
 
         @Volatile private var instance: PlaybackService? = null
         @Volatile private var current: NowPlayingInfo? = null
+        /** What the session last got, and when (elapsedRealtime): the system extrapolates from it. */
+        @Volatile private var published: NowPlayingInfo? = null
+        @Volatile private var publishedAt = 0L
 
         /** True while the service runs (its notification is up): the app may be in the background. */
         val isRunning: Boolean get() = instance != null
@@ -649,6 +653,8 @@ class PlaybackService : MediaBrowserServiceCompat() {
         private const val PAUSE_GRACE_MS = 60_000L
         /** A state that did not change is republished at most that often (see [update]). */
         private const val POSITION_REPUSH_MS = 10_000L
+        /** A position this far from the published one's run is a seek (or a stall): published at once. */
+        private const val POSITION_DRIFT_MS = 1_500L
 
         /** Packages allowed to browse the library (see onGetRoot). */
         private val ALLOWED_BROWSERS = setOf(
@@ -681,22 +687,42 @@ class PlaybackService : MediaBrowserServiceCompat() {
             }
             // The player reports several times per second (position, buffering): only a real
             // change reaches the session and the notification, the system extrapolates the
-            // position in between (the known state is republished every POSITION_REPUSH_MS).
-            if (before != null && before.sameAs(info) &&
-                kotlin.math.abs(info.positionMs - before.positionMs) < POSITION_REPUSH_MS
-            ) return
+            // position in between. A seek is one, however short: the position is compared with
+            // where the published state has run to since, not with the report just before.
+            val now = android.os.SystemClock.elapsedRealtime()
+            val shown = published
+            if (before != null && shown != null && shown.sameAs(info)) {
+                val expected = shown.positionMs + if (shown.playing && !shown.buffering) now - publishedAt else 0L
+                if (kotlin.math.abs(info.positionMs - expected) < POSITION_DRIFT_MS && now - publishedAt < POSITION_REPUSH_MS) return
+            }
+            published = info
+            publishedAt = now
             svc.apply(info)
             svc.show(info)
             // Sound with no foreground service (promotion refused from the background): start it.
             if (info.makesSound && !svc.foreground) svc.ensureStarted()
         }
 
+        /**
+         * The user asked for sound on the app's own screen, where a foreground service may still be
+         * started: it is, before the page answers. Started from the page's answer, it could come
+         * too late (the phone locked meanwhile) and Android 17 silences audio without one.
+         */
+        fun prepare(context: Context) {
+            if (current == null || instance?.foreground == true) return
+            runCatching { androidx.core.content.ContextCompat.startForegroundService(context, Intent(context, PlaybackService::class.java)) }
+                .onFailure { Logbook.logEvery("service-start", 10_000, "service not started for a play: ${it.javaClass.simpleName} ${it.message?.take(80)}") }
+        }
+
         /** Signed out: the notification and the media session go, nothing of the account stays. */
         fun end() {
             current = null
+            published = null
             instance?.let { svc ->
                 svc.handler.removeCallbacksAndMessages(null)
                 ServiceCompat.stopForeground(svc, ServiceCompat.STOP_FOREGROUND_REMOVE)
+                // A notification the service left after a long pause (detached) is not its own any more.
+                runCatching { NotificationManagerCompat.from(svc).cancel(NOTIFICATION_ID) }
                 svc.foreground = false
                 svc.session.isActive = false
                 svc.stopSelf()

@@ -22,6 +22,8 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedback
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.semantics.customActions
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
@@ -138,15 +140,38 @@ class PlaylistDrag(private val listState: LazyListState, private val haptic: Hap
         if (dragged == null) order = null
     }
 
-    /** The handle of the row [uid]: a drag on it moves the row. */
-    fun handle(uid: String): Modifier = Modifier.pointerInput(this, uid) {
-        try {
-            detectDragGestures(
-                onDragStart = { begin(uid) },
-                onDragEnd = { end() },
-                onDragCancel = { cancel() },
-            ) { change, amount -> change.consume(); offset += amount.y; follow() }
-        } finally { if (dragged == uid) cancel() }
+    /** The row [uid] one place up ([by] -1) or down (+1), as a drop there would: without a drag (TalkBack, keyboard). */
+    fun step(uid: String, by: Int): Boolean {
+        val uids = rows.map { it.rowUid }
+        val from = uids.indexOf(uid)
+        val to = from + by
+        if (from < 0 || to !in uids.indices || dragged != null) return false
+        val after = uids.toMutableList().apply { add(to, removeAt(from)) }
+        val move = PlaylistReorder.rowMove(uids, after, uid) ?: return false
+        order = rows.toMutableList().apply { add(to, removeAt(from)) }
+        if (!onDrop(move)) { order = null; return false }
+        return true
+    }
+
+    /** The handle of the row [uid]: a drag on it moves the row; "move up" and "move down" do too, as actions. */
+    @Composable
+    fun handle(uid: String): Modifier {
+        val up = androidx.compose.ui.res.stringResource(app.myspoti.engine.R.string.playlist_row_move_up)
+        val down = androidx.compose.ui.res.stringResource(app.myspoti.engine.R.string.playlist_row_move_down)
+        return Modifier.semantics {
+            customActions = listOf(
+                androidx.compose.ui.semantics.CustomAccessibilityAction(up) { step(uid, -1) },
+                androidx.compose.ui.semantics.CustomAccessibilityAction(down) { step(uid, 1) },
+            )
+        }.pointerInput(this, uid) {
+            try {
+                detectDragGestures(
+                    onDragStart = { begin(uid) },
+                    onDragEnd = { end() },
+                    onDragCancel = { cancel() },
+                ) { change, amount -> change.consume(); offset += amount.y; follow() }
+            } finally { if (dragged == uid) cancel() }
+        }
     }
 
     /** Near the top or bottom edge, the list scrolls by itself while a row is held. */

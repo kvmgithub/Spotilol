@@ -1043,7 +1043,8 @@ class Api constructor(
         fun publish(done: Boolean): Response<ContextPageModel> {
             SongPlayer.registerContext(songs.map { it.url }, uri)
             // Kept before the emit: a collector that stops at the complete page ends the flow there.
-            if (done && !failed) PlaylistFresh.put(uri, songs.toList())
+            // Only what came from Spotify: a copy served from here keeps its age (it renewed itself).
+            if (done && !failed && firstPage != null) PlaylistFresh.put(uri, songs.toList())
             val total = songs.sumOf { it.durationMs.toLong() }
             // The song count rides along with the duration ("1 h 2 min / 12 songs") so the two
             // numbers that grow together as pages arrive stay next to each other.
@@ -1054,7 +1055,7 @@ class Api constructor(
             val meta = listOf(saves, durationAndCount).filter { it.isNotBlank() }.joinToString(" • ")
             // A playlist without a cover of its own shows the mosaic of its songs' albums, as in the official app.
             val cover = header.coverUri.ifBlank { com.music.spotui.ui.components.mosaicCoverFor(songs.take(200).map { it.coverUri }) }
-            return Response.Success(header.copy(coverUri = cover, metaLine = meta, tracks = songs.toList(), complete = done))
+            return Response.Success(header.copy(coverUri = cover, metaLine = meta, tracks = songs.toList(), complete = done, partial = failed))
         }
         if (firstPage == null) {
             songs += fresh!!
@@ -1081,7 +1082,8 @@ class Api constructor(
                         }
                     }
                 }
-                // A page that failed: what came before it stays, marked complete so nothing waits.
+                // A page that failed: what came before it stays, marked complete so nothing waits,
+                // and partial, so nothing takes it for the whole list (a move by hand, a copy kept).
                 if (failed && songs.isNotEmpty()) emit(publish(done = true))
             }
         }

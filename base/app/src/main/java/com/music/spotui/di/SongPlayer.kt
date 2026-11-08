@@ -995,6 +995,7 @@ object SongPlayer {
         }
         LocalPlayer.stop()
         cancelBurst()
+        if (_activeDevice.value == null) PlaybackService.prepare(Graph.app)
         val episodeId = song.removePrefix("episode:").takeIf { song.startsWith("episode:") }
         val trackId = episodeId ?: spotifyTrackIdForPlayback(song) ?: return
         val itemUri = if (episodeId != null) "spotify:episode:$episodeId" else SPOTIFY_TRACK_PREFIX + trackId
@@ -1028,6 +1029,8 @@ object SongPlayer {
         // Myspoti's shuffle turned on or off while paused: the song goes on in the list's new order.
         if (AppShuffle.resume()) { Haptics.click(); return }
         Haptics.click(); intendPlaying(); playing = true; positionAt = SystemClock.elapsedRealtime()
+        // In the foreground before the page answers (from a tap on the app's screen, where it may start).
+        if (_activeDevice.value == null) PlaybackService.prepare(Graph.app)
         // Loading until the page plays: the clock ran from the tap before, over silence when the
         // resume came late or never (reported on a slow network).
         if (api.player.state.value?.isPaused != false) bufferingState.value = true
@@ -1667,13 +1670,18 @@ object SongPlayer {
         return LibraryCheck(out + saved, unknown.toSet(), false)
     }
 
-    /** [uris] in one request; two callers asking the same list share that one request. */
+    /**
+     * [uris] in one request; two callers asking the same list share that one request. It goes in
+     * sorted order whoever asks first, and each caller gets the answer back in its own order
+     * ([A, B] and [B, A] share one request, and each answer is positional).
+     */
     private suspend fun savedFlags(uris: List<String>): List<Boolean>? {
-        val key = uris.sorted().joinToString("\n")
+        val sorted = uris.sorted()
+        val key = sorted.joinToString("\n")
         val flight = savedFlightLock.withLock {
             savedFlights[key] ?: scope.async {
                 try {
-                    api.library.contains(uris)
+                    api.library.contains(sorted)
                 } catch (e: kotlinx.coroutines.CancellationException) {
                     throw e
                 } catch (e: Exception) {
@@ -1685,13 +1693,15 @@ object SongPlayer {
                 d.invokeOnCompletion { savedFlights.remove(key, d) }
             }
         }
-        return try {
+        val flags = try {
             flight.await()
         } catch (e: kotlinx.coroutines.CancellationException) {
             throw e
         } catch (e: Exception) {
             null
-        }
+        } ?: return null
+        val byUri = sorted.zip(flags).toMap()
+        return uris.map { byUri[it] == true }
     }
 
     /** Bumped at every like / unlike of a track Spotify took: the Liked Songs page refreshes its top. */

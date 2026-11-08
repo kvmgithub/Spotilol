@@ -126,18 +126,25 @@ fun PlaylistOptionsSheet(
     }
 
     // Taps are sent one at a time, in order (SpotifySync); a refused one puts back what Spotify really has.
-    fun restore() = scope.launch {
-        access = runCatching { MyspotiRuntime.api.playlists.access(page.uri) }.getOrNull()
-        published = runCatching { MyspotiRuntime.api.playlists.published(page.uri) }.getOrNull()
-        android.widget.Toast.makeText(context, R.string.playlist_change_refused, android.widget.Toast.LENGTH_SHORT).show()
+    // Said with the app's context: the menu may be closed by the time Spotify answers.
+    val app = context.applicationContext
+    fun restore() {
+        android.widget.Toast.makeText(app, R.string.playlist_change_refused, android.widget.Toast.LENGTH_SHORT).show()
+        scope.launch {
+            access = runCatching { MyspotiRuntime.api.playlists.access(page.uri) }.getOrNull()
+            published = runCatching { MyspotiRuntime.api.playlists.published(page.uri) }.getOrNull()
+        }
     }
 
-    fun setAccess(target: PlaylistAccess) {
+    /** [said]: what is confirmed once Spotify took it (never before: a refusal would have said the opposite). */
+    fun setAccess(target: PlaylistAccess, said: Int) {
         if (access == target) return
         access = target
         // Made private, it leaves the profile too (as in the official apps).
         if (target == PlaylistAccess.PRIVATE) published = false
-        com.music.spotui.data.api.SpotifySync.setPlaylistAccess(page.uri, target) { ok -> if (!ok) restore() }
+        com.music.spotui.data.api.SpotifySync.setPlaylistAccess(page.uri, target) { ok ->
+            if (ok) android.widget.Toast.makeText(app, said, android.widget.Toast.LENGTH_SHORT).show() else restore()
+        }
     }
 
     fun setPublished(on: Boolean) {
@@ -173,10 +180,7 @@ fun PlaylistOptionsSheet(
                 OptionRow(Icons.Outlined.QrCode2, stringResource(R.string.context_menu_share), onClick = share)
                 // Who sees it: one action naming what it does next (not three choices to read).
                 val a = access
-                fun change(target: PlaylistAccess, said: Int) {
-                    setAccess(target)
-                    android.widget.Toast.makeText(context, said, android.widget.Toast.LENGTH_SHORT).show()
-                }
+                fun change(target: PlaylistAccess, said: Int) = setAccess(target, said)
                 when (a) {
                     null -> OptionRow(Icons.Outlined.Lock, stringResource(R.string.playlist_access_title), enabled = false) {}
                     PlaylistAccess.PRIVATE -> OptionRow(Icons.Outlined.Public, stringResource(R.string.playlist_make_public)) { change(PlaylistAccess.PUBLIC, R.string.playlist_now_public) }

@@ -505,6 +505,8 @@
     <string name="playlist_leave_button">Leave</string>
     <string name="playlist_make_public">Make public</string>
     <string name="playlist_make_private">Make private</string>
+    <string name="playlist_row_move_up">Move up</string>
+    <string name="playlist_row_move_down">Move down</string>
     <string name="playlist_stop_collab">Stop collaborating</string>
     <string name="playlist_add_profile">Add to profile</string>
     <string name="playlist_remove_profile">Remove from profile</string>

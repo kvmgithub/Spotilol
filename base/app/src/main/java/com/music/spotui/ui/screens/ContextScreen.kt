@@ -407,8 +407,8 @@ class ContextViewModel(
                 // The songs kept for this playlist (same count, so reused as they were) are read again,
                 // and its copies on storage take the new order.
                 Api.invalidatePlaylist(id)
-                val now = (_page.value as? Response.Success)?.data?.takeIf { it.uri == current.uri } ?: return@withContext
-                com.music.spotui.data.api.PagePrefetch.refreshed(id, now)
+                // The order this move made, not the screen's: a later move still on its way is not on Spotify yet.
+                com.music.spotui.data.api.PagePrefetch.refreshed(id, updated.data)
             } else if (_page.value === updated) {
                 _page.value = Response.Success(current)
                 recent[k] = Response.Success(current)
@@ -603,7 +603,7 @@ private fun ContextContent(navController: NavController, vm: ContextViewModel, p
     // "Move" is on (asked on Discord).
     var moving by remember(p.uri) { mutableStateOf(false) }
     val canMove = remember(p, vm.editableContext.value, sort, find) {
-        PlaylistReorder.allowed(p.type, vm.editableContext.value, p.isBlend, sort.isCustom, p.complete, find, p.tracks.map { it.rowUid })
+        PlaylistReorder.allowed(p.type, vm.editableContext.value, p.isBlend, sort.isCustom, p.complete && !p.partial, find, p.tracks.map { it.rowUid })
     }
     val reordering = moving && canMove
     // Unique and stable for a given list: a playlist can hold the same song twice (the id alone

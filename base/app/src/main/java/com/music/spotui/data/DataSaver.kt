@@ -4,6 +4,7 @@ import android.content.Context
 import android.net.ConnectivityManager
 import android.net.Network
 import android.net.NetworkCapabilities
+import app.myspoti.spotify.security.BoundedHttp
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -50,7 +51,7 @@ object DataSaver {
         if (context != null) return
         val app = c.applicationContext
         context = app
-        app.myspoti.spotify.security.BoundedHttp.refuse = { active }
+        BoundedHttp.refuse = { active }
         enabled = app.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean(KEY, false)
         val cm = app.getSystemService(ConnectivityManager::class.java) ?: return
         metered = cm.isActiveNetworkMetered

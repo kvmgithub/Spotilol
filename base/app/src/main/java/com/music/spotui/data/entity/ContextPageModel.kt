@@ -15,6 +15,8 @@ data class ContextPageModel(
     val explicit: Boolean = false,
     val tracks: List<SongsModel> = emptyList(),
     val complete: Boolean = true,
+    /** Loading ended with a page missing: [tracks] is the start of the list, not all of it. */
+    val partial: Boolean = false,
     /** A Spotify Blend: its page shows the members and the taste match. */
     val isBlend: Boolean = false,
     /** A member who is not the owner and may leave (`canCancelMembership`). */

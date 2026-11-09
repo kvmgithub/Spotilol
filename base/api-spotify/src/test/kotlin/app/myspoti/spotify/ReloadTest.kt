@@ -40,6 +40,8 @@ class ReloadTest {
     private lateinit var player: SpotifyPlayer
     /** When the reloaded page said ready (0: not yet). */
     @Volatile private var newPageAt = 0L
+    /** When the reload was asked for (0: not yet). */
+    @Volatile private var reloadAt = 0L
 
     @BeforeEach fun up() {
         AdBlock.ahead.value = null
@@ -50,6 +52,7 @@ class ReloadTest {
         // The new page starts loading only [SLOW_START_MS] after the reload (as the host does,
         // the old page is gone at that moment), then says ready.
         player.reloadHost = {
+            reloadAt = System.currentTimeMillis()
             scope.launch {
                 delay(SLOW_START_MS)
                 bridge.pageGone()
@@ -105,6 +108,22 @@ class ReloadTest {
         val playAt = host.calls.first { it.first == "player.play" }.second
         assertTrue(newPageAt > 0 && playAt >= newPageAt,
             "play sent ${if (newPageAt == 0L) "before the new page started" else "${newPageAt - playAt} ms before the new page was ready"}")
+    }
+
+    @Test fun `a pause while the page reloads is not undone by the play on`() = runBlocking {
+        host.post("""{"type":"ready"}""")
+        waitFor("old page ready") { bridge.ready.value }
+        host.post(state(track("A"), track("B")))
+        host.post(state(ad, buffering = true))
+        waitFor("ad flag") { player.adPlaying.value }
+        waitFor("reload asked", ms = 20_000) { reloadAt > 0 }
+        // Paused while the new page is still loading (it has no song yet to be paused).
+        player.pause()
+        waitFor("new page ready", ms = 20_000) { newPageAt > 0 }
+        // Past the wait for the new page to settle and for its device.
+        delay(8_000)
+        assertTrue(host.calls.none { it.first == "player.play" && it.second >= newPageAt },
+            "played on after the pause: ${host.calls.map { it.first }}")
     }
 
     private companion object {

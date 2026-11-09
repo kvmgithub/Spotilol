@@ -98,9 +98,14 @@ object AppShuffle {
         val sent = SongPlayer.transportCount
         val local = LocalPlayer.active.value
         MyspotiRuntime.scope.launch {
-            val all = load(p.uri)?.takeIf { l -> l.any { it.spotifyTrackId == song.spotifyTrackId } } ?: p.tracks
+            val all = load(p.uri)?.takeIf { l -> l.any { it.spotifyTrackId == song.spotifyTrackId } }
             main.post {
-                if (g == gen.get() && sent == SongPlayer.transportCount && (local || !LocalPlayer.active.value)) start(p.uri, all, first, plain)
+                if (g != gen.get() || sent != SongPlayer.transportCount || (!local && LocalPlayer.active.value)) return@post
+                if (all != null) { start(p.uri, all, first, plain); return@post }
+                // The list could not be read to its end: not dealt from the part that came (it would
+                // be sent as the whole list's order), Spotify plays it in its own shuffle instead.
+                app.myspoti.host.android.Logbook.log("shuffle: ${p.uri} not read in full, Spotify's shuffle instead")
+                SongPlayer.playSong(song.url, contextUri = p.uri)
             }
         }
         return true

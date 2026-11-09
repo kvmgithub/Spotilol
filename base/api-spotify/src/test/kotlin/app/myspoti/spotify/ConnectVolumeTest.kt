@@ -28,6 +28,8 @@ class ConnectVolumeTest {
         /** The page player's volume: the active device's. */
         @Volatile var playerVolume = 0.0
         val sets = java.util.concurrent.CopyOnWriteArrayList<String>()
+        /** The fresh device read fails (the cached answer in media.state still says active). */
+        @Volatile var activeNowFails = false
         @Volatile var time = 10.0
         override suspend fun evaluate(script: String) {
             val m = Regex("""Myspoti\.call\((\d+), "([^"]+)", (.*)\)\.catch""", RegexOption.DOT_MATCHES_ALL).find(script) ?: return
@@ -38,6 +40,8 @@ class ConnectVolumeTest {
                     """{"paused":false,"muted":false,"volume":1,"level":1,"own":1,"time":$time,"readyState":4,"ended":false,"playerVolume":$playerVolume,"active":$active}"""
                 }
                 "volume.get" -> "$playerVolume"
+                // The page's device list asked again right before a write.
+                "device.activeNow" -> if (activeNowFails) "null" else "$active"
                 "volume.set" -> { sets += m.groupValues[3]; "null" }
                 else -> "null"
             }
@@ -85,6 +89,14 @@ class ConnectVolumeTest {
     @Test fun `a speaker at 0 that plays is never set to full volume by the page`() = runBlocking {
         playing()
         // Past the page back and two volume checks of the watcher.
+        delay(14_000)
+        assertEquals(emptyList<String>(), host.sets.toList())
+    }
+
+    @Test fun `a cached active answer is not enough when the fresh read fails`() = runBlocking {
+        host.active = true
+        host.activeNowFails = true
+        playing()
         delay(14_000)
         assertEquals(emptyList<String>(), host.sets.toList())
     }

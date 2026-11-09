@@ -290,18 +290,24 @@
   // The limiter works while the boost or a song's gain raises the level, and on after either
   // drops for as long as what was raised still sounds: it sits behind the crossfade's delay
   // (the reserve, and the old path while two songs overlap), and was written at the old gain.
+  // Counted on the audio clock (heldUntil is a context time): a pause suspends the context, and
+  // with it the delay, so the hold waits with them. The time to hear what is in the delay is the
+  // reserve (song seconds, each heard in one second), not the delay's length, which a reserve
+  // written faster than 1 makes shorter.
   const setLimiter = () => {
-    const level = Math.max(boost.level, nz.gain);
+    const level = Math.max(boost.level, nz.gain), t = boost.ctx.currentTime;
+    const holding = nz.held > 1 && t < nz.heldUntil;
     if (level < nz.level) {
-      const t = boost.ctx.currentTime;
-      const left = Math.max(dAt(boost.paths[xf.cur], t), (xf.overlapUntil - performance.now()) / 1000, 0) + 0.2;
-      nz.held = nz.level;
-      nz.heldUntil = performance.now() + left * 1000;
-      clearTimeout(nz.timer);
-      nz.timer = setTimeout(setLimiter, left * 1000 + 50);
+      const left = Math.max(heardLag(), (xf.overlapUntil - performance.now()) / 1000, 0) + 0.2;
+      nz.held = Math.max(nz.level, holding ? nz.held : 1);
+      nz.heldUntil = Math.max(holding ? nz.heldUntil : 0, t + left);
     }
     nz.level = level;
-    const hot = level > 1 || (nz.held > 1 && performance.now() < nz.heldUntil);
+    const held = nz.held > 1 && t < nz.heldUntil;
+    // Looked at again once the audio clock may have got there (and again while it stands, paused).
+    clearTimeout(nz.timer);
+    if (held) nz.timer = setTimeout(setLimiter, Math.max(250, (nz.heldUntil - t) * 1000 + 50));
+    const hot = level > 1 || held;
     boost.limiter.threshold.value = hot ? -1 : 0;
     boost.limiter.ratio.value = hot ? 20 : 1;
   };
@@ -897,6 +903,16 @@
     } catch (e) { /* unknown: the caller keeps the last answer */ }
     return activeValue;
   };
+  // The same question asked now, past the cache, for a write that depends on it (the volume set
+  // through Connect): true or false as the page's device list has it, null when it could not be read.
+  const activeNow = async () => {
+    try {
+      const me = (await need().resolve('ConnectDevicesAPI').getDevices()).find(d => d.isLocal);
+      activeValue = !!(me && me.isActive);
+      activeAt = Date.now();
+      return activeValue;
+    } catch (e) { return null; }
+  };
 
   // The element volume the page player itself sets for its volume (cubic curve or not).
   const ownLevel = player => {
@@ -1199,6 +1215,7 @@
 
     'volume.get': () => need().playback.getVolume(),
     'volume.set': a => need().playback.setVolume(a.level),
+    'device.activeNow': () => activeNow(),
 
     'library.contains': a => need().library.contains(...a.uris),
     'library.add': a => need().library.add({ uris: a.uris }),

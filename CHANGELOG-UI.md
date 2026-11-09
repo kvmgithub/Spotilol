@@ -6,6 +6,24 @@ Each version section is the text of the GitHub release tagged `ui-v<version>` (p
 
 ## [Unreleased]
 
+## [1.3.3] - 2026-11-09
+
+Fixes from the reviewer's check of 1.3.2.
+
+### Fixed
+- A skip made while the page was loaded again is played once the new page is up (1.3.2 dropped it together with the play it was newer than). A pause made at any time during the reload, not only while the new page's device joins, keeps the song from being played on; so does a pause while a skip past an ad is being tried. The queue is counted as played from only when a song was really played on.
+- The volume is put back through Spotify Connect only when the page says right before the write, past its cache of a few seconds, that this phone is the active device and no other device plays; an answer that could not be read is no. The guard during a song also keeps a volume set while it was reading.
+- The limiter's hold after the boost or the volume evening-out is lowered counts on the audio clock: a pause no longer runs it out while the raised audio still waits in the delay, and it lasts as long as that audio takes to be heard (longer than the delay itself while a reserve is being built).
+- Shuffle on a list that could not be read to its end plays in Spotify's own shuffle instead of sending the part that loaded as the whole list's order. A list already on screen is kept whenever a newer reading of it is incomplete, also when it was opened from the app's memory.
+- A move made after a refused one: the page is read again once it is in, so the screen and the copy on the phone show it.
+- New-release notifications: the app's own switch turned off while the feed is read announces nothing either.
+- "Added to your profile" and "Removed from your profile" are said once Spotify has taken it, and a refusal puts it back.
+
+### Security
+- Requests made by a page's service worker (they reach no page handler) follow the same rules: nothing with the data saver on, ads refused, telemetry answered empty.
+- Spotify limiting audio licences is only recognised on the audio licence route itself.
+- A request of the account before is checked against the session once more right where it is sent.
+
 ## [1.3.2] - 2026-11-08
 
 Fixes from a second code review (of 1.3.1).

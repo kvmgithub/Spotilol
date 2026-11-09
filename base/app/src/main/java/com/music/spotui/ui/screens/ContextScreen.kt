@@ -307,10 +307,10 @@ class ContextViewModel(
                 if (r is Response.Loading && _page.value is Response.Success) return@collect
                 // Offline or refused: the page already on screen stays rather than an error.
                 if (r is Response.Error && fromDisk && _page.value is Response.Success) return@collect
-                // A refresh keeps the full list on screen until the new one is complete: the first
-                // page alone would cut a long playlist short and lose the place in it. So would a
-                // list that ended with a page missing.
-                if ((refreshing.value || fromDisk) && r is Response.Success && !r.data.whole &&
+                // A list on screen (refreshed, from storage, or kept from a moment ago) stays until the
+                // new one is complete: the first page alone would cut a long playlist short and lose the
+                // place in it. So would a list that ended with a page missing.
+                if (r is Response.Success && !r.data.whole &&
                     (_page.value as? Response.Success)?.data?.let { it.uri == r.data.uri && it.tracks.size > r.data.tracks.size } == true) return@collect
                 _page.value = r
                 if (r is Response.Success) {
@@ -413,8 +413,10 @@ class ContextViewModel(
                 Api.invalidatePlaylist(id)
                 // The order this move made, not the screen's: a later move still on its way is not on
                 // Spotify yet. Not when one made before it was refused: this order still has that one in
-                // it; the page read again after the refusal holds Spotify's own.
+                // it. The page is read again instead, now that this move is in (the read the refusal
+                // asked for may have come before it).
                 if (movesRefused == refusedBefore) com.music.spotui.data.api.PagePrefetch.refreshed(id, updated.data)
+                else withContext(Dispatchers.Main) { reload() }
             } else if (_page.value === updated) {
                 movesRefused++
                 _page.value = Response.Success(current)

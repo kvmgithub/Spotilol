@@ -187,7 +187,11 @@ class SpotifyHttp(
         // which some Spotify endpoints reject with 400).
         builder.method(method, body?.toByteArray()?.toRequestBody(contentType.toMediaType()) ?: if (method == "GET" || method == "DELETE") null else ByteArray(0).toRequestBody(null))
         val client = if (retry) http else once
-        val result = withContext(Dispatchers.IO) { client.newCall(builder.build()).execute().use { it.code to app.myspoti.spotify.security.BoundedHttp.text(it.body) } }
+        val result = withContext(Dispatchers.IO) {
+            // Once more right at the send, after the switch to the IO thread.
+            if (session != started) throw SessionChanged()
+            client.newCall(builder.build()).execute().use { it.code to app.myspoti.spotify.security.BoundedHttp.text(it.body) }
+        }
         if (session != started) throw SessionChanged()
         if (result.first == 401) lock.withLock { web = null }
         return result

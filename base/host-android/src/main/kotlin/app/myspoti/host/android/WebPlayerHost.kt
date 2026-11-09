@@ -115,6 +115,21 @@ class WebPlayerHost(private val context: Context) : BridgeHost {
     val userAgent: String get() = fingerprint.userAgent
 
     init {
+        // Requests a page's service worker makes reach no WebViewClient: the same data saver, ad and
+        // telemetry rules for them, for every WebView of the app (one client per process).
+        runCatching {
+            android.webkit.ServiceWorkerController.getInstance().setServiceWorkerClient(object : android.webkit.ServiceWorkerClient() {
+                override fun shouldInterceptRequest(request: WebResourceRequest): WebResourceResponse? {
+                    val url = request.url.toString()
+                    return when {
+                        app.myspoti.spotify.security.BoundedHttp.refuse() -> refused(503, "Data saver")
+                        AdBlock.isTelemetry(url) -> emptySuccess(request)
+                        AdBlock.isAd(url) -> refused(403, "Blocked")
+                        else -> null
+                    }
+                }
+            })
+        }
         check(androidx.webkit.WebViewFeature.isFeatureSupported(androidx.webkit.WebViewFeature.WEB_MESSAGE_LISTENER) &&
             androidx.webkit.WebViewFeature.isFeatureSupported(androidx.webkit.WebViewFeature.DOCUMENT_START_SCRIPT)) {
             "Update Android System WebView: secure bridge features are required"
@@ -322,7 +337,7 @@ class WebPlayerHost(private val context: Context) : BridgeHost {
                     loginFailed("http ${response.statusCode}")
                 // Audio licences only (POST): not the GET of the Widevine certificate under the same route.
                 if (response.statusCode == 429 && request.method == "POST" && WebPolicy.isSpotifyApi(request.url.toString()) &&
-                    request.url.path?.contains("widevine-license") == true) onLicenseLimited()
+                    LICENSE_PATH in request.url.toString()) onLicenseLimited()
             }
 
             override fun onPageFinished(view: WebView, url: String) {

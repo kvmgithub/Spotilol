@@ -147,10 +147,13 @@ fun PlaylistOptionsSheet(
         }
     }
 
-    fun setPublished(on: Boolean) {
+    /** [said] once Spotify took it, as for the access (see [setAccess]). */
+    fun setPublished(on: Boolean, said: Int) {
         if (published == on) return
         published = on
-        com.music.spotui.data.api.SpotifySync.setPlaylistPublished(page.uri, on) { ok -> if (!ok) restore() }
+        com.music.spotui.data.api.SpotifySync.setPlaylistPublished(page.uri, on) { ok ->
+            if (ok) android.widget.Toast.makeText(app, said, android.widget.Toast.LENGTH_SHORT).show() else restore()
+        }
     }
 
     com.music.spotui.ui.components.LookSheet(onDismissRequest = onDismiss, containerColor = tone(0xFF282828)) {
@@ -191,8 +194,7 @@ fun PlaylistOptionsSheet(
                     val on = published == true
                     OptionRow(if (on) Icons.Outlined.PersonRemove else Icons.Outlined.Person,
                         stringResource(if (on) R.string.playlist_remove_profile else R.string.playlist_add_profile)) {
-                        setPublished(!on)
-                        android.widget.Toast.makeText(context, if (on) R.string.playlist_now_off_profile else R.string.playlist_now_on_profile, android.widget.Toast.LENGTH_SHORT).show()
+                        setPublished(!on, if (on) R.string.playlist_now_off_profile else R.string.playlist_now_on_profile)
                     }
                 }
                 OptionRow(Icons.Outlined.Delete, stringResource(R.string.local_delete_playlist)) { deleting = true }

@@ -105,9 +105,10 @@ object NewReleaseNotifier {
         if (!deliverable(context)) return
         val asked = forgotten
         val feed = MyspotiRuntime.api.home.whatsNewFeed(0, 30).items
-        // Checked again with the answer in hand: notifications turned off meanwhile announce nothing,
+        // Checked again with the answer in hand: notifications turned off meanwhile (in Android or with
+        // the app's own switch) announce nothing,
         // so nothing counts as announced; a sign-out meanwhile leaves the feed of the next account alone.
-        if (asked != forgotten || !deliverable(context)) return
+        if (asked != forgotten || !on || !deliverable(context)) return
         val seen = prefs.getString(KEY_SEEN, null)?.split('\n')?.filter { it.isNotBlank() }
         val fresh = if (seen == null) emptyList() else feed.filter { it.uri !in seen }
         prefs.edit()

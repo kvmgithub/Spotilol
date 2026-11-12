@@ -6,6 +6,32 @@ Each version section is the text of the GitHub release tagged `ui-v<version>` (p
 
 ## [Unreleased]
 
+## [1.4.0] - 2026-11-12
+
+Taken from Orpheon 1.0.0-beta.1, the name Myspoti continues under. Myspoti 2.4.1 and 2.4.2-beta.1 only offer to install Orpheon and bring nothing here. Not taken: Orpheon's ad handling (it leaves the ads on the phone's own player and acts on Spotify Connect devices only; MySpotilol keeps its own), the native playback engine, the choice of a music account (YouTube Music or none) and the catalogue providers behind it, the sign-in of a computer by QR code, the Wear OS app, the token kept on storage between launches, the volume of another Connect device, the page throttled while idle, and as before AutoMix, extensions, the Immersive look, tablet and TV layouts and the updater.
+
+### Added
+- Your Library: a row's menu takes someone else's playlist, an album, an artist or a show out of the library, without opening it.
+
+### Changed
+- Larger touch targets: the player's close, menu, +, shuffle, previous, next, repeat, share and queue buttons, the mini player's buttons, the ⋮ of song and library rows and the sort button answer in squares of 44 to 48 dp around their glyphs. Nothing moves on screen.
+- The lyrics keep the screen on for 10 minutes after the last touch, without limit while the phone charges, instead of for as long as the song plays: a phone left with the lyrics open stayed lit until its battery ran out.
+- The Canvas clip gives its video decoder back while the app is in the background, plays at 720p at most (the energy saver's limit below that) and loads no audio track.
+
+### Fixed
+- The app closed when the X of a "Find in…" field was tapped while the field folded away. The field stays while it is being typed in.
+- The player's controls stay where they are whether the song has lyrics or not (they moved down on songs without lyrics), and the player no longer shakes under a held swipe on such songs.
+- A player opened again before its pull-down had finished closing sat too low and could not be pulled again.
+- The search field's cursor handle no longer shows over the player, and the search hint starts after the magnifier, on one line.
+- An artist line too long for its row scrolls as one tap target: a tap on one name opened another artist.
+- Queue: dragging a song is smoother, and a swipe takes a song out only past 40 % of the row (a slanted scroll removed songs).
+- Podcast player: a tap on the show's name opens the show also when the episode was not played from the show's page.
+- Older playlists whose address still names their owner (`spotify:user:…:playlist:…`, some of Spotify's own among them) were left out of the library and the playlist pickers.
+- Your Library, Artists: "Recently added" sorts by the date an artist was followed.
+- Artist page: releases newest first also where Spotify gives only the year of some.
+- "Add to playlist" says so when there is no playlist to add to.
+- Closing the app with "Keep playing after closing the app" off also pauses a player that is silent at that moment (between two songs, held by a call); it started again by itself once the app was gone.
+
 ## [1.3.3] - 2026-11-09
 
 Fixes from the reviewer's check of 1.3.2.

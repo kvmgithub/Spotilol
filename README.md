@@ -24,7 +24,7 @@ MySpotilol is the main app of this repository since 1.0.0. Spotilol Lite, the ap
 
 Both are signed with the same fork key but have different packages: MySpotilol installs next to Lite, not over it, and needs its own sign-in. Lite's update check does not offer MySpotilol releases.
 
-Base: [kota-zo/myspoti](https://github.com/kota-zo/myspoti) 2.0.2-beta.2 (`37dd1ee`, GPL-3.0), merged from the vendor branch `myspoti-upstream`, with selected fixes and features of 2.1.0 (`320ba2a`), 2.2.0 (`d990372`), 2.3.0 (`a1be680`) and 2.4.0 (`95a24e7`) ported by hand (its extensions and Immersive look are left out).
+Base: [kota-zo/myspoti](https://github.com/kota-zo/myspoti) 2.0.2-beta.2 (`37dd1ee`, GPL-3.0), merged from the vendor branch `myspoti-upstream`, with selected fixes and features of 2.1.0 (`320ba2a`), 2.2.0 (`d990372`), 2.3.0 (`a1be680`) and 2.4.0 (`95a24e7`) ported by hand (its extensions and Immersive look are left out). Myspoti continues as [Orpheon](https://github.com/kota-zo/orpheon) from 1.0.0 on; fixes of its 1.0.0-beta.1 (`3e15fc8`) are ported the same way.
 
 ## Install
 
@@ -61,6 +61,8 @@ Kept from Myspoti: native screens, library tools, Spotify Connect, local Recap, 
 
 From beta.9: the page's ad managers switched off at runtime (the device registration is no longer altered), X-Requested-With suppressed, renderer-crash recovery, per-install browser identity that follows the WebView version, a kept client device id, relayed requests with the page's own browser headers, login that waits for a real token, crossfade, Recents, show/episode pages and the podcast player, playlist add/remove, and the UI fixes.
 
+From Orpheon 1.0.0-beta.1: larger touch targets around the player's and the lists' small buttons, controls that stay in place on songs without lyrics, a Canvas clip that gives its decoder back in the background, lyrics that keep the screen on for ten minutes after the last touch, older playlist addresses read as playlists, Remove from Your Library in a library row's menu, artists sorted by the date they were followed. Not from Orpheon: its ad handling, which leaves the ads on the phone's own player; MySpotilol keeps its own.
+
 From 2.0.0: ads left out of Spotify's track-playback queue in the relay before the page sees them, and the next song played just before an ad that cannot be left out; a player page Chromium never throttles; failed page loads retried; licence rate limits held; add songs, Spotify Codes; per-network streaming quality; the new welcome screen, player and page animations.
 
 From 2.1.0: ads marked only by their metadata left out, a reload past a stuck ad that stays muted until a song plays, licence holds that pause instead of skipping, the page always visible to itself, no idle copy of the phone left among the Connect devices, 15 s headphone skips on podcasts, adding a playlist or album to a playlist, library filter chips, listening stats, likes made offline sent later, page caches, Polish, Russian and Chinese.
@@ -85,7 +87,7 @@ Policy, redaction, blocking and profile regressions run as JVM tests in CI.
 
 ## Credits and lineage
 
-- [Myspoti](https://github.com/kota-zo/myspoti) by kota-zo: the native interface, with UI derived from [Spotui](https://github.com/Spotui/Spotui) and [Metrolist](https://github.com/MetrolistGroup/Metrolist).
+- [Myspoti](https://github.com/kota-zo/myspoti) by kota-zo, continued as Orpheon: the native interface, with UI derived from [Spotui](https://github.com/Spotui/Spotui) and [Metrolist](https://github.com/MetrolistGroup/Metrolist).
 - Spotilol by lyssadev, after deviato's Spotifuck; security rules, blocking and encrypted profiles from this repository's Spotilol fork (branch [`main`](https://github.com/kvmgithub/Spotilol/tree/main)).
 - [Spotilol Lite](https://github.com/AdNenio/Spotilol-Lite) by AdNenio: the lean feature scope.
 

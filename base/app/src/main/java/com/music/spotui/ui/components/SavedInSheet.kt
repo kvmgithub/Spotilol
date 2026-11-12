@@ -214,6 +214,9 @@ fun SavedInSheet(
 
             when (val list = playlists) {
                 null -> Text(stringResource(R.string.loading_playlists), color = Color.Gray, fontSize = 14.sp, modifier = Modifier.padding(20.dp, 12.dp))
+                // Said, rather than Liked Songs alone looking like all there is (reported in the Immersive look).
+                emptyList<com.music.spotui.data.api.EditablePlaylist>() -> if (folder == null) Text(stringResource(R.string.add_to_playlist_empty),
+                    color = Color.Gray, fontSize = 14.sp, modifier = Modifier.padding(20.dp, 12.dp))
                 else -> LazyColumn(modifier = Modifier.heightIn(max = 420.dp)) {
                     items(list.size) { i ->
                         val pl = list[i]

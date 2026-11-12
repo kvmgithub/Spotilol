@@ -73,8 +73,12 @@ fun PlayerOverlay(navController: NavController) {
     val progress = remember { Animatable(0f) }
     var shown by remember { mutableStateOf(false) }
     val settled = remember { mutableStateOf(false) }
+    // The page under the player gives up the keyboard's focus: a search field kept it, and its
+    // cursor handle, drawn by the system in a window of its own, stayed over the player.
+    val focusManager = androidx.compose.ui.platform.LocalFocusManager.current
     LaunchedEffect(open) {
         if (open) {
+            focusManager.clearFocus(force = true)
             shown = true
             settled.value = false
             // Two frames for the player's first composition and layout before the clock runs.

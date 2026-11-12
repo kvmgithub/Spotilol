@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
@@ -163,6 +164,9 @@ private fun SkeletonRows(tile: Color, line: Color, count: Int) {
     }
 }
 
+/** The mini player's buttons' touch squares: Material allows 44 dp where 48 does not fit. */
+private val MINI_TOUCH = 44.dp
+
 @OptIn(ExperimentalGlideComposeApi::class)
 @Composable
 fun MiniPlayer(navController: NavHostController) {
@@ -266,7 +270,7 @@ fun MiniPlayer(navController: NavHostController) {
             modifier = Modifier
                 .fillMaxWidth()
                 .height(54.dp)
-                .padding(start = 8.dp, end = 12.dp)
+                .padding(start = 8.dp, end = 3.dp)
         ) {
             androidx.compose.foundation.pager.HorizontalPager(
                 state = pager,
@@ -357,7 +361,11 @@ fun MiniPlayer(navController: NavHostController) {
             Icon(
                 painter = painterResource(R.drawable.spotilol_ic_crossfade),
                 tint = if (crossfade > 0) com.music.spotui.ui.theme.AppAccent else Color.White.copy(alpha = 0.8f),
-                modifier = Modifier.pressable(0.96f) {
+                // The crossfade switch, devices, the + and play / pause answer in squares around their
+                // glyphs (22, 22, 24 and 26 dp were the whole target): 44 dp, Material's size where 48
+                // does not fit, and 36 dp for the switch next to devices. The gaps and the end padding
+                // give back the difference: the glyphs stay put (Myspoti, after 2.4.0).
+                modifier = Modifier.size(36.dp).pressable(0.96f) {
                     com.music.spotui.data.preferences.CrossfadePref.toggle(context)
                     val now = com.music.spotui.data.preferences.CrossfadePref.seconds
                     android.widget.Toast.makeText(
@@ -365,26 +373,25 @@ fun MiniPlayer(navController: NavHostController) {
                         if (now > 0) context.getString(R.string.spotilol_crossfade_on, now) else context.getString(R.string.spotilol_crossfade_off),
                         android.widget.Toast.LENGTH_SHORT,
                     ).show()
-                }.size(22.dp),
+                }.wrapContentSize().size(22.dp),
                 contentDescription = stringResource(R.string.spotilol_crossfade_switch),
             )
-            Spacer(modifier = Modifier.width(18.dp))
             Icon(
                 painter = painterResource(id = if (SongPlayer.activeDevice.value != null) R.drawable.ic_devices else R.drawable.ic_devices),
                 tint = if (SongPlayer.activeDevice.value != null) com.music.spotui.ui.theme.AppAccent else Color.White.copy(alpha = 0.8f),
-                modifier = Modifier.pressable(0.96f) { showDevices = true }
+                modifier = Modifier.size(MINI_TOUCH).pressable(0.96f) { showDevices = true }
+                    .wrapContentSize()
                     .size(22.dp)
                     ,
                 contentDescription = stringResource(R.string.mr_user_route_category_name),
             )
-            Spacer(modifier = Modifier.width(20.dp))
-            if (!com.music.spotui.di.LocalPlayer.active.value) com.music.spotui.ui.screens.AddButton(song = { com.music.spotui.ui.screens.nowPlayingSong(vm) }, liked = liked, size = 24.dp) { vm.updateLikeState(true) }
-            Spacer(modifier = Modifier.width(20.dp))
+            if (!com.music.spotui.di.LocalPlayer.active.value) com.music.spotui.ui.screens.AddButton(song = { com.music.spotui.ui.screens.nowPlayingSong(vm) }, liked = liked, size = 24.dp, touch = MINI_TOUCH) { vm.updateLikeState(true) }
+            Spacer(modifier = Modifier.width(1.dp))
             com.music.spotui.ui.components.PlayPauseIcon(
                 playing = songPlayingState,
                 contentDescription = if (songPlayingState) stringResource(R.string.content_description_pause_button) else stringResource(R.string.content_description_play_button),
                 tint = Color.White,
-                modifier = Modifier.pressable(0.96f) {
+                modifier = Modifier.size(MINI_TOUCH).pressable(0.96f) {
                         if (songPlayingState) {
                             SongPlayer.pause()
                             vm.updateSongState(songCoverUri, songTitle, songSinger, false, songId, vm.currentSongIndex.value, vm.currentSongAlbum.value)
@@ -393,6 +400,7 @@ fun MiniPlayer(navController: NavHostController) {
                             vm.updateSongState(songCoverUri, songTitle, songSinger, true, songId, vm.currentSongIndex.value, vm.currentSongAlbum.value)
                         }
                     }
+                    .wrapContentSize()
                     .size(26.dp)
                     
             )

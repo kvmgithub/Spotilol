@@ -1,6 +1,7 @@
 package app.myspoti.spotify
 
 import app.myspoti.api.Album
+import app.myspoti.api.canonicalUri
 import app.myspoti.api.AlbumRef
 import app.myspoti.api.Artist
 import app.myspoti.api.ArtistRef
@@ -183,7 +184,7 @@ internal fun queue(q: JsonElement?): Queue? {
 /** Any `*ResponseWrapper` (or its `data`) -> a card for shelves and search tabs. */
 internal fun card(wrapper: JsonElement?): app.myspoti.api.MediaCard? {
     val d = wrapper.obj("data") ?: wrapper
-    val uri = d.str("uri") ?: wrapper.str("_uri") ?: wrapper.str("uri") ?: return null
+    val uri = (d.str("uri") ?: wrapper.str("_uri") ?: wrapper.str("uri"))?.let(::canonicalUri) ?: return null
     val type = d.typename()
     var kind = app.myspoti.api.MediaKind.of(uri)
     if (type == "Audiobook") kind = app.myspoti.api.MediaKind.AUDIOBOOK

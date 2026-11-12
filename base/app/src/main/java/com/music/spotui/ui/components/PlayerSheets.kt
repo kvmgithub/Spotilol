@@ -66,6 +66,7 @@ import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -74,6 +75,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.Color
@@ -525,20 +527,40 @@ private fun QueueList(
     var lastSlot by remember { mutableStateOf(-1) }
     var autoScrollJob by remember { mutableStateOf<Job?>(null) }
 
-    val entries = buildList {
-        if (queued.isNotEmpty()) add(QEntry.Header(true))
-        queued.forEach { add(QEntry.Row(it, true)) }
-        if (nextUp.isNotEmpty()) add(QEntry.Header(false))
-        nextUp.forEach { add(QEntry.Row(it, false)) }
+    // Kept while the drag moves: dragOffset recomposes this on every pointer move.
+    val entries = remember(queued, nextUp) {
+        buildList {
+            if (queued.isNotEmpty()) add(QEntry.Header(true))
+            queued.forEach { add(QEntry.Row(it, true)) }
+            if (nextUp.isNotEmpty()) add(QEntry.Header(false))
+            nextUp.forEach { add(QEntry.Row(it, false)) }
+        }
     }
     fun height(e: QEntry) = if (e is QEntry.Header) headerPx else rowPx
-    fun topOf(index: Int) = entries.take(index).sumOf { height(it).toDouble() }.toFloat()
+    // Prefix sums: the drag indicator asks for a row's top on every draw frame, and taking and
+    // summing the rows before it each time allocated and walked the list.
+    val tops = remember(entries, rowPx, headerPx) {
+        FloatArray(entries.size + 1).also { tops ->
+            var acc = 0f
+            entries.forEachIndexed { index, e ->
+                tops[index] = acc
+                acc += height(e)
+            }
+            tops[entries.size] = acc
+        }
+    }
+    fun topOf(index: Int) = tops[index.coerceIn(0, entries.size)]
 
-    /** Entry under a y position (list coordinates). */
+    /** Entry under a y position (list coordinates), found in [tops]. */
     fun entryAt(y: Float): Int {
-        var acc = 0f
-        entries.forEachIndexed { i, e -> acc += height(e); if (y < acc) return i }
-        return entries.lastIndex
+        if (entries.isEmpty()) return -1
+        var low = 0
+        var high = entries.lastIndex
+        while (low < high) {
+            val mid = (low + high + 1) / 2
+            if (tops[mid] <= y) low = mid else high = mid - 1
+        }
+        return low
     }
 
     /**
@@ -753,11 +775,17 @@ private fun QueueList(
 private fun SwipeLeftToRemove(enabled: Boolean, onRemove: () -> Unit, content: @Composable () -> Unit) {
     val haptic = androidx.compose.ui.platform.LocalHapticFeedback.current
     val scope = androidx.compose.runtime.rememberCoroutineScope()
-    val threshold = with(androidx.compose.ui.platform.LocalDensity.current) { 110.dp.toPx() }
+    // 40 % of the row (at least 110 dp): a slanted scroll of the sheet took songs out of the queue.
+    var rowWidth by remember { androidx.compose.runtime.mutableFloatStateOf(0f) }
+    val minimum = with(androidx.compose.ui.platform.LocalDensity.current) { 110.dp.toPx() }
+    val threshold = maxOf(minimum, rowWidth * 0.4f)
     val offset = remember { androidx.compose.animation.core.Animatable(0f) }
     var armed by remember { mutableStateOf(false) }
-    Box(modifier = Modifier.fillMaxWidth()) {
-        if (offset.value < 0f) Box(
+    // The offset moves every drag and spring frame: read it through derived state so only the
+    // strip appearing, not the whole row, recomposes.
+    val revealed by remember(offset) { derivedStateOf { offset.value < 0f } }
+    Box(modifier = Modifier.fillMaxWidth().onSizeChanged { rowWidth = it.width.toFloat() }) {
+        if (revealed) Box(
             contentAlignment = Alignment.CenterEnd,
             modifier = Modifier.matchParentSize().background(if (armed) Color(0xFFE22134) else Color(0xFF7A1F1F)),
         ) {

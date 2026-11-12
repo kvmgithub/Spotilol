@@ -167,10 +167,18 @@ class MainActivity : AppCompatActivity() {
     }
 
     // Background lookups (lyrics prefetch) only while the app is on screen.
+    /** Every finger down on the window: the lyrics keep the screen on for a while after the last one. */
+    override fun dispatchTouchEvent(ev: android.view.MotionEvent): Boolean {
+        if (ev.actionMasked == android.view.MotionEvent.ACTION_DOWN) com.music.spotui.ui.components.UserTouch.touched()
+        return super.dispatchTouchEvent(ev)
+    }
+
+    // The clip player follows the app on screen: its decoder is given back in the background.
     override fun onStart() {
         app.myspoti.host.android.MainThreadWatch.start()
         super.onStart()
         com.music.spotui.di.SongPlayer.inForeground = true
+        com.music.spotui.ui.components.CanvasPlayer.onForeground()
         // The song shown may have been liked or unliked in another app meanwhile.
         com.music.spotui.di.SongPlayer.refreshLikedIfStale()
         // Asked for over adb (TestControlReceiver's "screenon"): One UI ignores the huge
@@ -184,7 +192,10 @@ class MainActivity : AppCompatActivity() {
         // The sign-in is only in memory until the WebView saves it: leaving the app (and being swiped away) must not lose it.
         MyspotiRuntime.host.flushCookies()
         app.myspoti.host.android.MainThreadWatch.stop()
-        if (!isChangingConfigurations) com.music.spotui.di.SongPlayer.inForeground = false
+        if (!isChangingConfigurations) {
+            com.music.spotui.di.SongPlayer.inForeground = false
+            com.music.spotui.ui.components.CanvasPlayer.onBackground()
+        }
     }
 
     override fun onDestroy() {

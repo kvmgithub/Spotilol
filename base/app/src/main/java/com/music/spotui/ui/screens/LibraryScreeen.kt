@@ -526,6 +526,7 @@ fun SumUpLibraryScreen(
             val key = LibraryOrder.key(entry)
             val dragged = dragKey == key
             val movable = reorderLevel != null && index >= pinned
+            val hasMenu = entry.uri.isNotBlank() && !LibraryEdits.isPending(entry.spotifyId)
             Row(
                 horizontalArrangement = Arrangement.Start,
                 verticalAlignment = Alignment.CenterVertically,
@@ -557,7 +558,9 @@ fun SumUpLibraryScreen(
                         ) } finally { if (dragKey == key) finish() }
                     })
                     .fillMaxWidth()
-                    .padding(20.dp, 6.dp)
+                    // The ⋮'s 48 dp touch square reaches 6 dp further than its old 36 dp circle:
+                    // the end padding gives them back, the glyph stays 26 dp from the edge.
+                    .padding(start = 20.dp, end = if (hasMenu) 14.dp else 20.dp, top = 6.dp, bottom = 6.dp)
             ) {
                 LibraryEntryCover(entry, Modifier
                     .size(55.dp)
@@ -571,8 +574,8 @@ fun SumUpLibraryScreen(
                         Text(text = entry.subtitle, color = AppMuted, fontSize = 12.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     }
                 }
-                if (entry.uri.isNotBlank() && !LibraryEdits.isPending(entry.spotifyId)) Icon(Icons.Default.MoreVert, stringResource(R.string.content_description_context_menu),
-                    tint = AppMuted, modifier = Modifier.size(36.dp).clip(CircleShape).clickable { itemMenu = entry }.padding(6.dp))
+                if (hasMenu) Icon(Icons.Default.MoreVert, stringResource(R.string.content_description_context_menu),
+                    tint = AppMuted, modifier = Modifier.size(com.music.spotui.ui.components.MinTouch).clip(CircleShape).clickable { itemMenu = entry }.padding(12.dp))
             }
         }
         // ── Artists the user follows on Spotify ──

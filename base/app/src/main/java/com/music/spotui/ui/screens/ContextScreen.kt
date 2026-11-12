@@ -35,6 +35,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
@@ -860,12 +861,15 @@ private fun ContextContent(navController: NavController, vm: ContextViewModel, p
         }
         // Liked Songs: a track unliked anywhere leaves the list right away.
         if (findable && all.isNotEmpty()) item(key = "find") {
-            androidx.compose.animation.AnimatedVisibility(extrasShown || find.isNotBlank(), enter = UnfoldIn, exit = FoldOut) {
+            // Kept while it is being typed in: cleared with its X, it folded away under the user's finger.
+            var findFocused by remember { mutableStateOf(false) }
+            androidx.compose.animation.AnimatedVisibility(extrasShown || find.isNotBlank() || findFocused, enter = UnfoldIn, exit = FoldOut) {
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 8.dp)) {
                 com.music.spotui.ui.components.FindInListField(
                     find, { find = it },
                     stringResource(if (p.type == "liked") R.string.find_in_context_edit_text_liked_songs_hint else R.string.find_in_context_edit_text_playlist_hint),
                     Modifier.weight(1f),
+                    onFocused = { findFocused = it },
                 )
             }
             }
@@ -1089,7 +1093,10 @@ private fun TrackRow(
                     }
                 }
             }
-            .padding(horizontal = 16.dp, vertical = 8.dp)
+            // The 8 dp above and below are the cover's and the words' own, not the row's: the ⋮
+            // answers in a 48 dp square (its 24 dp glyph was the whole target) and would make the
+            // row taller. The end padding gives back the square's 12 dp beside the glyph.
+            .padding(start = 16.dp, end = if (handle == null) 4.dp else 16.dp)
     ) {
         if (showCover) {
             GlideImage(
@@ -1097,11 +1104,11 @@ private fun TrackRow(
                 model = song.coverUri,
                 contentDescription = "",
                 contentScale = ContentScale.Crop,
-                modifier = Modifier.size(48.dp),
+                modifier = Modifier.padding(vertical = 8.dp).size(48.dp),
             )
             Spacer(Modifier.width(12.dp))
         }
-        Column(modifier = Modifier.weight(1f)) {
+        Column(modifier = Modifier.weight(1f).padding(vertical = 8.dp)) {
             Text(
                 song.title,
                 color = if (isCurrent) SpotifyGreen else AppText,
@@ -1135,18 +1142,18 @@ private fun TrackRow(
                     Icon(Icons.Default.Check, contentDescription = stringResource(R.string.liked_song), tint = Color.Black, modifier = Modifier.size(14.dp))
                 }
             }
-            Spacer(Modifier.width(6.dp))
+            // No gap: the ⋮'s touch square starts 12 dp before its glyph.
         }
         Icon(
             Icons.Default.MoreVert,
             contentDescription = stringResource(R.string.content_description_context_menu),
             tint = AppText.copy(alpha = 0.7f),
-            modifier = Modifier.pressable(0.96f) { onMore() }
+            modifier = Modifier.size(com.music.spotui.ui.components.MinTouch).pressable(0.96f) { onMore() }
+                .wrapContentSize()
                 .size(24.dp)
                 ,
         )
         handle?.let { h ->
-            Spacer(Modifier.width(12.dp))
             Icon(
                 Icons.Default.DragHandle,
                 contentDescription = stringResource(R.string.edit_playlist_items_move_chip),
@@ -1330,7 +1337,7 @@ private fun TrackSortButton(sort: TrackOrder, onSort: (TrackOrder) -> Unit) {
         Icon(androidx.compose.material.icons.Icons.Default.SwapVert,
             contentDescription = stringResource(R.string.filter_and_sort_sort_section_title),
             tint = if (sort.isCustom) AppText.copy(alpha = 0.8f) else SpotifyGreen,
-            modifier = Modifier.size(26.dp).pressable(0.9f) { open = true })
+            modifier = Modifier.size(com.music.spotui.ui.components.MinTouch).pressable(0.9f) { open = true }.wrapContentSize().size(26.dp))
         androidx.compose.material3.DropdownMenu(expanded = open, onDismissRequest = { open = false }, containerColor = tone(0xFF282828)) {
             Text(stringResource(R.string.filter_and_sort_sort_section_title), color = AppMuted, fontSize = 13.sp,
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp))

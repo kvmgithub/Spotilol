@@ -908,12 +908,16 @@ fun SearchStickyBar(
             singleLine = true,
             onValueChange = onTextChange,
             placeholder = {
+                // At the field's start, after the magnifier, where the typed text goes, and on
+                // one line: a hint longer than the field is cut short, never wrapped onto two
+                // lines centred in the bar.
                 Text(
-                    textAlign = TextAlign.Center,
+                    textAlign = TextAlign.Start,
                     color = AppMuted,
                     fontWeight = FontWeight.Bold,
-                    text = stringResource(R.string.search_header_field_hint)
-
+                    maxLines = 1,
+                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                    text = stringResource(R.string.search_header_field_hint),
                 )
             },
             trailingIcon = if (text.isEmpty()) null else {

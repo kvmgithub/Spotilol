@@ -176,17 +176,22 @@ class PlaybackService : MediaBrowserServiceCompat() {
      * notification goes with the service.
      */
     override fun onTaskRemoved(rootIntent: Intent?) {
-        // An ad or a song loading counts as playing: closing the app then stopped the service under it.
-        if (current?.makesSound == true && !playingRemote && !keepsPlayingOnClose(this)) {
-            controls?.pause()
-            handler.postDelayed({
-                ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
-                foreground = false
-                stopSelf()
-            }, CLOSE_STOP_MS)
+        if (playingRemote || keepsPlayingOnClose(this)) {
+            if (current?.makesSound != true) stopSelf()
             return
         }
-        if (current?.makesSound != true) stopSelf()
+        // An ad or a song loading counts as playing: closing the app then stopped the service under it.
+        val sounding = current?.makesSound == true
+        // Paused even when it is silent right now (reported: the music went on after the close,
+        // the setting off): between two songs, or held by a call or another app's sound, the
+        // player started again on its own once the service had gone.
+        if (current != null) controls?.pause()
+        if (!sounding) { stopSelf(); return }
+        handler.postDelayed({
+            ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
+            foreground = false
+            stopSelf()
+        }, CLOSE_STOP_MS)
     }
 
     /** A Spotify Connect device plays (the session's volume is that device's). */

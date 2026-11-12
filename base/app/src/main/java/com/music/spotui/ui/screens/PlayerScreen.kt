@@ -47,6 +47,8 @@ import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.wrapContentSize
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
@@ -337,7 +339,7 @@ fun PlayerScreen(navController: NavController) {
     // No music videos in MySpotilol (the YouTube clips are removed).
     val videoOn = false
     // Pulled down from the top, the player closes, like the back button (issue #4).
-    val pullToClose = com.music.spotui.ui.components.rememberPullToDismiss { com.music.spotui.ui.navigation.PlayerSheet.close() }
+    val pullToClose = com.music.spotui.ui.components.rememberPullToDismiss(com.music.spotui.ui.navigation.PlayerSheet.open.value) { com.music.spotui.ui.navigation.PlayerSheet.close() }
     pullToClose.enabled = !showLyrics
     androidx.compose.foundation.layout.BoxWithConstraints(
         modifier = Modifier
@@ -361,11 +363,15 @@ fun PlayerScreen(navController: NavController) {
         // bar's, to size the page item itself: a LazyColumn item cannot ask for "parent minus x".
         val pageHeight = maxHeight
         val statusTop = androidx.compose.foundation.layout.WindowInsets.Companion.statusBars.asPaddingValues().calculateTopPadding()
-        // The lyrics card peeks in under the buttons only where it will show (it stays hidden for an
-        // ad and for a song without lyrics): otherwise that strip is empty space below the controls.
+        // The strip the lyrics card peeks into under the buttons is kept whether the song has lyrics
+        // or not, an ad plays or the words are still loading: the controls never move with them
+        // (reported: the controls sometimes at the bottom, on songs without lyrics; the page grew by
+        // the strip when the lyrics were not found, late or not, and shrank again for the next song).
+        // Without lyrics the strip stays empty (it was taken away for #85: their place came first).
+        // Only the setting that hides the card gives the strip to the page.
         // The state is read here too, as the card sits below the page and is not composed to load it.
         val lyricsState = rememberLyricsState(viewModel<com.music.spotui.ui.viewmodel.LyricsViewModel>(), songTitle, songSinger)
-        val lyricsPeek = if (adPlaying || !com.music.spotui.data.preferences.PlayerLyricsCardPref.on || lyricsState is com.music.spotui.ui.viewmodel.LyricsViewModel.State.NotFound) 0 else PLAYER_PEEK_DP
+        val lyricsPeek = if (!com.music.spotui.data.preferences.PlayerLyricsCardPref.on) 0 else PLAYER_PEEK_DP
         if (canvasUrl != null && !videoOn) {
             CanvasVideo(
                 url = canvasUrl,
@@ -623,17 +629,21 @@ fun PlayerScreen(navController: NavController) {
                     onDevices = { showDevices = true },
                     onQueue = { showQueue = true },
                 )
-                // 8dp card margin + this = the official 37dp from the buttons' centre to the card.
-                Spacer(modifier = Modifier.height(12.dp))
+                // 8dp card margin + the Connect row's lower half (24 dp) + this = the official 37dp
+                // from the row's centre to the card.
+                Spacer(modifier = Modifier.height(4.dp))
             }
         }
         }
         }
         // The lyrics card belongs to the scrolled layout; in immersive mode the list holds the
         // artwork only, so a swipe there cannot pull a card up under the compact strip.
-        if (!immersive) item {
-            // T4: no lyrics card during an ad break — the song it belongs to is not what plays.
-            if (!audioBuffering && !adPlaying && com.music.spotui.data.preferences.PlayerLyricsCardPref.on) InlineLyrics(
+        // T4: no lyrics card during an ad break — the song it belongs to is not what plays. No item
+        // at all without lyrics: an empty one at the very foot of a page as tall as the window was
+        // laid out again at each frame of a held swipe, and the player shook (#192).
+        if (!immersive && lyricsState is com.music.spotui.ui.viewmodel.LyricsViewModel.State.Loaded &&
+            !audioBuffering && !adPlaying && com.music.spotui.data.preferences.PlayerLyricsCardPref.on) item {
+            InlineLyrics(
                 title = songTitle,
                 artist = songSinger,
                 album = playerViewModel.currentSongAlbum.value,
@@ -824,19 +834,23 @@ fun PlayerTopBar(
 ) {
     val (line1, line2) = playingFromLabels(np, fallbackName)
     val route = contextRoute(np)
+    // Close and More answer in 48 dp squares around their glyphs (26 and 24 dp were hard to hit);
+    // the paddings give back the difference, so the glyphs sit where they did (20 dp from the edges).
     Row(verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 20.dp, vertical = 9.dp)
+            .padding(start = 9.dp, end = 8.dp, top = 2.5.dp, bottom = 2.5.dp)
     ) {
         Icon(modifier = Modifier
-            .size(26.dp)
+            .size(com.music.spotui.ui.components.MinTouch)
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null
             ) {
                        com.music.spotui.ui.navigation.PlayerSheet.close()
-            },
+            }
+            .wrapContentSize()
+            .size(26.dp),
             // Official chevron: wide and thin (the old drawable was a short, heavy one).
             imageVector = PlayerIcons.chevronDown,
             tint = Color.White,
@@ -846,7 +860,7 @@ fun PlayerTopBar(
             horizontalAlignment = Alignment.CenterHorizontally,
             modifier = Modifier
                 .weight(1f)
-                .padding(horizontal = 12.dp)
+                .padding(start = 1.dp)
                 .clickable(
                     enabled = route != null,
                     interactionSource = remember { MutableInteractionSource() },
@@ -876,11 +890,13 @@ fun PlayerTopBar(
             imageVector = Icons.Default.MoreVert,
             tint = Color.White,
             modifier = Modifier
-                .size(24.dp)
+                .size(com.music.spotui.ui.components.MinTouch)
                 .clickable(
                     interactionSource = remember { MutableInteractionSource() },
                     indication = null
-                ) { onMenuClick() },
+                ) { onMenuClick() }
+                .wrapContentSize()
+                .size(24.dp),
             contentDescription = stringResource(R.string.content_description_context_menu))
     }
 }
@@ -913,9 +929,12 @@ fun ExplicitBadge(modifier: Modifier = Modifier) {
     }
 }
 
-/** Liked = green disc with a check; not liked = outlined plus (official app). */
+/**
+ * Liked = green disc with a check; not liked = outlined plus (official app). [touch]: the square
+ * that answers the finger, the glyph centred in it at [size] (a 28 dp target was hard to hit).
+ */
 @Composable
-fun LikeButton(liked: Boolean, size: androidx.compose.ui.unit.Dp = 28.dp, onClick: () -> Unit) {
+fun LikeButton(liked: Boolean, size: androidx.compose.ui.unit.Dp = 28.dp, touch: androidx.compose.ui.unit.Dp = size, onClick: () -> Unit) {
     // Pop on change (tap or sync), as the official heart/check: shrink, then spring back.
     // Nothing runs on first display, so long lists do not animate while scrolling.
     val scale = remember { androidx.compose.animation.core.Animatable(1f) }
@@ -926,12 +945,14 @@ fun LikeButton(liked: Boolean, size: androidx.compose.ui.unit.Dp = 28.dp, onClic
         scale.animateTo(1f, androidx.compose.animation.core.spring(dampingRatio = 0.4f, stiffness = 600f))
     }
     val mod = Modifier
-        .size(size)
+        .size(maxOf(size, touch))
         .graphicsLayer { scaleX = scale.value; scaleY = scale.value }
         .clickable(
             interactionSource = remember { MutableInteractionSource() },
             indication = null,
         ) { onClick() }
+        .wrapContentSize()
+        .size(size)
     if (liked) {
         Box(contentAlignment = Alignment.Center, modifier = mod.clip(CircleShape).background(com.music.spotui.ui.theme.AppAccent)) {
             // The official check is bolder, with round ends.
@@ -959,11 +980,12 @@ fun PlayerInfo(
     /** T4: an ad break is on: what the caller passes is the song from before it, not what plays. */
     adPlaying: Boolean = false,
 ) {
+    // The + answers in a 48 dp square around its 28 dp glyph: the end paddings give back the 10 dp.
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 24.dp)
+            .padding(start = 24.dp, end = 14.dp)
     ) {
         // A new song's title and artist fade in (over 0.2 s) instead of replacing the old ones
         // in one frame, while its cover slides in above them.
@@ -975,7 +997,7 @@ fun PlayerInfo(
             textAlpha.snapTo(0f)
             textAlpha.animateTo(1f, androidx.compose.animation.core.tween(200))
         }
-        Column(modifier = Modifier.weight(1f).padding(end = 16.dp).graphicsLayer { alpha = textAlpha.value }) {
+        Column(modifier = Modifier.weight(1f).padding(end = 6.dp).graphicsLayer { alpha = textAlpha.value }) {
             Text(
                 modifier = Modifier
                     // Nothing to open during an ad: the title would lead to the previous song.
@@ -1001,24 +1023,30 @@ fun PlayerInfo(
                     ExplicitBadge()
                     Spacer(modifier = Modifier.width(6.dp))
                 }
+                // A line too long for its row scrolls, and a scrolling text draws its names away from
+                // where their taps land (reported: a tap on one artist opened another, or only a tap
+                // beside the name worked). So the names are tap targets only while the line holds
+                // still; a line that scrolls is one target, which opens the choice of its artists.
+                val scrolls = com.music.spotui.ui.components.rememberArtistLineScrolls(songSinger)
                 Text(
-                    text = artistCredit ?: androidx.compose.ui.text.AnnotatedString(songSinger),
+                    text = artistCredit?.takeIf { !scrolls.value } ?: androidx.compose.ui.text.AnnotatedString(songSinger),
                     color = Color.White.copy(alpha = 0.7f),
                     fontSize = 16.sp,
                     maxLines = 1,
                     overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                    onTextLayout = { if (it.hasVisualOverflow) scrolls.value = true },
                     modifier = (if (onArtistClick != null) Modifier.clickable(
                         interactionSource = remember { MutableInteractionSource() },
                         indication = null,
-                    ) { onArtistClick() } else Modifier).titleMarquee(iterations = 3),
+                    ) { onArtistClick() } else Modifier).titleMarquee(enabled = scrolls.value, iterations = 3),
                 )
             }
         }
         // No like for a local file (not in the Spotify library), and none during an ad break:
         // the + would save the song from before the break.
         if (!adPlaying && !com.music.spotui.di.LocalPlayer.active.value) {
-            if (likeSong != null) AddButton(song = likeSong, liked = liked, onLike = onLikeClick)
-            else LikeButton(liked = liked, onClick = onLikeClick)
+            if (likeSong != null) AddButton(song = likeSong, liked = liked, touch = com.music.spotui.ui.components.MinTouch, onLike = onLikeClick)
+            else LikeButton(liked = liked, touch = com.music.spotui.ui.components.MinTouch, onClick = onLikeClick)
         }
     }
 }
@@ -1146,18 +1174,15 @@ fun PlayerFull(
         modifier = Modifier
             .fillMaxWidth()
             // Official spacing: the icons' centres sit 36dp from the edges, the row 57dp under
-            // the time labels and 74dp above the device row.
-            .padding(start = 22.dp, end = 22.dp, top = 18.dp, bottom = 26.dp)
+            // the time labels and 74dp above the device row's centre (the row is 48 dp tall now).
+            // Each glyph answers in a 48 dp square (shuffle and repeat were 28 dp, previous and
+            // next 40): the side paddings give back the difference, the centres stay put.
+            .padding(start = 12.dp, end = 12.dp, top = 18.dp, bottom = 18.dp)
             .height(64.dp)
     ) {
         Icon(
             modifier = Modifier
-                .size(28.dp)
-                .drawWithContent {
-                    drawContent()
-                    if (shuffle || smartOn) drawCircle(com.music.spotui.ui.theme.AppAccent, radius = 2.dp.toPx(),
-                        center = androidx.compose.ui.geometry.Offset(size.width / 2, size.height + 7.dp.toPx()))
-                }
+                .size(com.music.spotui.ui.components.MinTouch)
                 .pressable {
                     // As in Spotify: off → shuffle → smart shuffle (playlists, Liked Songs) → off.
                     val ctx = SongPlayer.nowPlaying.value.contextUri
@@ -1176,6 +1201,13 @@ fun PlayerFull(
                         else -> playerViewModel.updateShuffleState(!shuffle)
                     }
                 }
+                .wrapContentSize()
+                .size(28.dp)
+                .drawWithContent {
+                    drawContent()
+                    if (shuffle || smartOn) drawCircle(com.music.spotui.ui.theme.AppAccent, radius = 2.dp.toPx(),
+                        center = androidx.compose.ui.geometry.Offset(size.width / 2, size.height + 7.dp.toPx()))
+                }
             ,
             tint = if (shuffle || smartOn){
                 com.music.spotui.ui.theme.AppAccent
@@ -1189,12 +1221,14 @@ fun PlayerFull(
         
         Icon(
             modifier = Modifier
-                .size(40.dp)
+                .size(com.music.spotui.ui.components.MinTouch)
                 .pressable {
                     // The queue itself is already in shuffled order when shuffle
                     // is on (reordered once at toggle) — never re-shuffle per tap.
                     playerViewModel.playPreviousSong(queueSongs, context)
                 }
+                .wrapContentSize()
+                .size(40.dp)
             ,
             tint = Color.White,
             painter = painterResource(id = R.drawable.ic_player_back),
@@ -1243,23 +1277,27 @@ fun PlayerFull(
 
         Icon(
             modifier = Modifier
-                .size(40.dp)
+                .size(com.music.spotui.ui.components.MinTouch)
                 .pressable {
 
                     playerViewModel.playNextSongs(queueSongs, context)
                 }
+                .wrapContentSize()
+                .size(40.dp)
             ,
             tint = Color.White,
             painter = painterResource(id = R.drawable.ic_player_skip),
             contentDescription = stringResource(R.string.np_content_desc_next))
         Icon(
             modifier = Modifier
-                .size(28.dp)
+                .size(com.music.spotui.ui.components.MinTouch)
                 .pressable {
                     SongPlayer.cycleRepeat()
 
 
                 }
+                .wrapContentSize()
+                .size(28.dp)
             ,
             tint = if (repeat){
                 com.music.spotui.ui.theme.AppAccent
@@ -1282,17 +1320,20 @@ fun PlayerConnectRow(
     onDevices: () -> Unit,
     onQueue: () -> Unit,
 ) {
+    // 48 dp tall, Share and Queue in 48 dp squares (their glyphs were the whole 24 dp target);
+    // the end padding and the gap between them give back the difference, so the glyphs stay put.
     Row(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween,
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 20.dp, vertical = 4.dp),
+            .heightIn(min = com.music.spotui.ui.components.MinTouch)
+            .padding(start = 20.dp, end = 8.dp),
     ) {
         // Spotify Connect: current device, opens the device picker.
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.clickable(
+            modifier = Modifier.heightIn(min = com.music.spotui.ui.components.MinTouch).clickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,
             ) { onDevices() },
@@ -1323,11 +1364,13 @@ fun PlayerConnectRow(
                     painter = painterResource(id = R.drawable.ic_share),
                     tint = Color.White,
                     modifier = Modifier
-                        .size(24.dp)
+                        .size(com.music.spotui.ui.components.MinTouch)
                         .clickable(
                             interactionSource = remember { MutableInteractionSource() },
                             indication = null,
-                        ) { shareMenu = true },
+                        ) { shareMenu = true }
+                        .wrapContentSize()
+                        .size(24.dp),
                     contentDescription = stringResource(R.string.action_share_label),
                 )
                 androidx.compose.material3.DropdownMenu(expanded = shareMenu, onDismissRequest = { shareMenu = false }) {
@@ -1357,17 +1400,19 @@ fun PlayerConnectRow(
                     )
                 }
             }
-            Spacer(modifier = Modifier.width(28.dp))
+            Spacer(modifier = Modifier.width(4.dp))
             Icon(
                 // Official queue glyph: a short line over stacked wide ones.
                 imageVector = PlayerIcons.queue,
                 tint = Color.White,
                 modifier = Modifier
-                    .size(24.dp)
+                    .size(com.music.spotui.ui.components.MinTouch)
                     .clickable(
                         interactionSource = remember { MutableInteractionSource() },
                         indication = null,
-                    ) { onQueue() },
+                    ) { onQueue() }
+                    .wrapContentSize()
+                    .size(24.dp),
                 contentDescription = stringResource(R.string.action_queue_label),
             )
         }
@@ -1418,7 +1463,7 @@ fun nowPlayingSong(playerViewModel: PlayerViewModel): SongsModel {
  * saved (green check), a tap opens "Saved in" to add it to playlists or remove it.
  */
 @Composable
-fun AddButton(song: () -> SongsModel, liked: Boolean, size: androidx.compose.ui.unit.Dp = 28.dp, onLike: () -> Unit) {
+fun AddButton(song: () -> SongsModel, liked: Boolean, size: androidx.compose.ui.unit.Dp = 28.dp, touch: androidx.compose.ui.unit.Dp = size, onLike: () -> Unit) {
     val context = androidx.compose.ui.platform.LocalContext.current
     var savedIn by remember { mutableStateOf<SongsModel?>(null) }
     savedIn?.let { s ->
@@ -1448,11 +1493,13 @@ fun AddButton(song: () -> SongsModel, liked: Boolean, size: androidx.compose.ui.
             Icons.Outlined.AddCircleOutline,
             contentDescription = stringResource(R.string.smart_shuffle_add),
             tint = Color.White,
-            modifier = Modifier.size(size).clip(CircleShape).clickable { SmartShuffle.keep(context, current) },
+            modifier = Modifier.size(maxOf(size, touch)).clickable(
+                interactionSource = remember { MutableInteractionSource() }, indication = null,
+            ) { SmartShuffle.keep(context, current) }.wrapContentSize().size(size).clip(CircleShape),
         )
         return
     }
-    LikeButton(liked = saved, size = size) {
+    LikeButton(liked = saved, size = size, touch = touch) {
         if (saved) savedIn = song() else {
             onLike()
             android.widget.Toast.makeText(context, context.getString(R.string.snackbar_added_to_liked_songs), android.widget.Toast.LENGTH_SHORT).show()
@@ -1506,7 +1553,8 @@ fun PlayerMenuRow(
  *
  * Loops are served from the media cache: without it every loop re-downloaded the
  * clip, and since ExoPlayer ignores the activity lifecycle it kept doing so in the
- * background (#87, gigabytes per hour). It also pauses while the app is not visible.
+ * background (#87, gigabytes per hour). It also pauses while the app is not visible, and
+ * its decoder is given back then (CanvasPlayer.onBackground).
  */
 @androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
 @Composable
@@ -1520,7 +1568,9 @@ private fun CanvasVideo(url: String, playing: Boolean, onFirstFrame: () -> Unit,
         exo.playWhenReady = playing && lifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.STARTED)
     }
     androidx.compose.runtime.DisposableEffect(exo, lifecycle) {
-        val observer = androidx.lifecycle.LifecycleEventObserver { _, _ ->
+        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+            // Back on screen: the clip given back in the background (CanvasPlayer.onBackground) is loaded again.
+            if (event == androidx.lifecycle.Lifecycle.Event.ON_START) com.music.spotui.ui.components.CanvasPlayer.get(context, url)
             exo.playWhenReady = requested && lifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.STARTED)
         }
         lifecycle.addObserver(observer)

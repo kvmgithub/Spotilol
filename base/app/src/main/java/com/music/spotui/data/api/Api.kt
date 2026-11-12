@@ -304,7 +304,7 @@ class Api constructor(
         var offset = 0
         while (true) {
             val page = runCatching { api.library.items(filter = LibraryFilter.ARTISTS, offset = offset, limit = 50) }.getOrNull() ?: break
-            page.items.filter { it.kind == MediaKind.ARTIST }.forEach { out += ArtistsModel(it.name, cover(it.images), it.uri.substringAfterLast(':')) }
+            page.items.filter { it.kind == MediaKind.ARTIST }.forEach { out += ArtistsModel(it.name, cover(it.images), it.uri.substringAfterLast(':'), it.addedAt.orEmpty()) }
             offset = page.nextOffset ?: break
         }
         return out
@@ -744,8 +744,8 @@ class Api constructor(
             headerImage = big(page.headerImages).ifBlank { avatar },
             avatarImage = avatar,
             topTracks = top.map { (song, plays) -> ArtistTrackUi(song, plays) },
-            // Newest first by full date (the sort is stable: same-day releases keep Spotify's order).
-            popularReleases = page.popularReleases.sortedByDescending { it.releaseDate.orEmpty().take(10) }.map(::albumOf),
+            // Newest first, by year at this point (a popular release may carry its year alone).
+            popularReleases = app.myspoti.api.Releases.newestFirst(page.popularReleases, emptyList()).map(::albumOf),
             appearsOn = page.appearsOn.map(::albumOf),
             relatedArtists = page.related.map(::artistOf),
             featuring = page.featuring.map(::playlistEntry),
@@ -768,10 +768,10 @@ class Api constructor(
             }
             out
         }.getOrNull().orEmpty()
-        val known = page.popularReleases.map { it.uri }.toSet()
-        if (all.any { it.uri !in known }) {
-            val merged = (page.popularReleases + all).distinctBy { it.uri }.sortedByDescending { it.releaseDate.orEmpty().take(10) }
-            val full = model.copy(popularReleases = merged.map(::albumOf))
+        // Shown again when the discography adds releases or puts them in their real order (its dates are full ones).
+        val merged = app.myspoti.api.Releases.newestFirst(page.popularReleases, all).map(::albumOf)
+        if (merged != model.popularReleases) {
+            val full = model.copy(popularReleases = merged)
             ArtistCache.map[uri] = System.currentTimeMillis() to full
             emit(Response.Success(full))
         }

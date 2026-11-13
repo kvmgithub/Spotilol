@@ -5,6 +5,8 @@
 # Up to 0.13.1 these were pre-releases next to Spotilol Lite; from 1.0.0 on MySpotilol is the main app.
 # Spotilol Lite's update check (releases/latest) reads the tag "ui-v..." as no newer version.
 # The notes job keeps the text of every published release in step with its section.
+# A run dispatched on a work branch builds and checks the same way and never publishes: its APK,
+# checksum, test reports and, on failure, its log are kept as artifacts of the run instead.
 name: MySpotilol
 on:
   push:
@@ -73,13 +75,21 @@ jobs:
           with open(os.environ['GITHUB_ENV'], 'a') as out:
               out.write(f'APK_KEYSTORE={key}\nAPK_KEY_PASSWORD={password}\nAPK_KEY_ALIAS=release\n')
           PY
+      - name: Bridge tests (Node, no browser, no account)
+        run: |
+          set -o pipefail
+          mkdir -p build/bridge-tests
+          node --version
+          node --test api-spotify/bridge-tests/gain-diagnostics.test.mjs 2>&1 | tee build/bridge-tests/gain-diagnostics.tap | tee -a "$RUNNER_TEMP/build.log"
       - name: Unit tests and signed release
+        # Also after failed bridge tests: one run reports both.
+        if: ${{ !cancelled() }}
         run: |
           set -o pipefail
           ./gradlew testDebugUnitTest :api:test :api-spotify:test :app:assembleRelease \
             --no-daemon --console=plain -Pkotlin.incremental=false \
             -PappVersionCode="$APK_VERSION_CODE" -PappVersionName="$APK_VERSION_NAME" \
-            2>&1 | tee "$RUNNER_TEMP/build.log"
+            2>&1 | tee -a "$RUNNER_TEMP/build.log"
       - name: Verify and name APK
         env:
           UI_STRICT_REMOVALS: '1'
@@ -120,6 +130,31 @@ jobs:
               assert not found, found
           PY
           (cd release-assets && sha256sum *.apk > SHA256SUMS.txt && cat SHA256SUMS.txt)
+      - name: Collect the build for review (work branches)
+        if: success() && github.ref != 'refs/heads/myspoti-ui'
+        run: |
+          out="$RUNNER_TEMP/review"; mkdir -p "$out"
+          cp release-assets/*.apk release-assets/SHA256SUMS.txt "$RUNNER_TEMP/signers.txt" "$RUNNER_TEMP/apk-metadata.txt" "$out/"
+          echo "commit=$GITHUB_SHA run=$GITHUB_RUN_ID attempt=$GITHUB_RUN_ATTEMPT ref=$GITHUB_REF" > "$out/build-info.txt"
+      - name: Upload the build (work branches)
+        if: success() && github.ref != 'refs/heads/myspoti-ui'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: apk-${{ github.sha }}
+          path: ${{ runner.temp }}/review
+          if-no-files-found: error
+          retention-days: 14
+      - name: Upload test reports (work branches)
+        if: ${{ !cancelled() && github.ref != 'refs/heads/myspoti-ui' }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: test-reports-${{ github.sha }}
+          path: |
+            base/*/build/test-results/
+            base/*/build/reports/tests/
+            base/build/bridge-tests/
+          if-no-files-found: warn
+          retention-days: 14
       - name: Publish release
         # From myspoti-ui only: a dispatch on a work branch with a new version builds, never publishes.
         if: steps.mode.outputs.publish == 'true' && github.ref == 'refs/heads/myspoti-ui'
@@ -128,10 +163,8 @@ jobs:
         run: |
           gh release create "ui-v${APK_VERSION_NAME}" release-assets/* --target "$GITHUB_SHA" --title "MySpotilol ${APK_VERSION_NAME}" \
             --notes-file "$RUNNER_TEMP/notes.md" --latest
-      - name: Publish failure log
+      - name: Collect failure log
         if: failure()
-        env:
-          GH_TOKEN: ${{ github.token }}
         run: |
           out="$RUNNER_TEMP/ci-log"; mkdir -p "$out"
           log="$RUNNER_TEMP/build.log"; touch "$log"
@@ -147,7 +180,21 @@ jobs:
           Path(sys.argv[2], 'tail.txt').write_text('\n'.join(lines[-1500:]) + '\n')
           Path(sys.argv[2], 'run.txt').write_text(f"run={os.environ['GITHUB_RUN_NUMBER']} sha={os.environ['GITHUB_SHA']}\n")
           PY
-          cd "$out"
+      - name: Upload failure log (work branches)
+        if: failure() && github.ref != 'refs/heads/myspoti-ui'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: failure-log-${{ github.sha }}
+          path: ${{ runner.temp }}/ci-log
+          if-no-files-found: warn
+          retention-days: 14
+      - name: Publish failure log
+        # The ui-ci-logs branch belongs to myspoti-ui's builds; a work branch's log stays an artifact.
+        if: failure() && github.ref == 'refs/heads/myspoti-ui'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cd "$RUNNER_TEMP/ci-log"
           git init -q -b ui-ci-logs
           git add -A
           git -c user.name=ci -c user.email=ci@localhost commit -qm "MySpotilol run $GITHUB_RUN_NUMBER failed"

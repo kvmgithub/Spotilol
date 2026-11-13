@@ -30,6 +30,9 @@ class Bridge(private val host: BridgeHost, scope: CoroutineScope) {
 
     /** Diagnostics: receives one line per call, result and page message. */
     @Volatile var logger: ((String) -> Unit)? = null
+
+    /** The gain diagnostics' page messages (type "diag"). Not wired yet. */
+    @Volatile var diag: ((JsonObject) -> Unit)? = null
     private val pending = ConcurrentHashMap<Int, CompletableDeferred<JsonElement>>()
 
     private val _ready = MutableStateFlow(false)

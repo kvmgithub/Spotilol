@@ -1,17 +1,24 @@
 package app.myspoti.spotify.bridge
 
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
+import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertThrows
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
+import java.util.concurrent.CopyOnWriteArrayList
 
 /** Messages the bridge did not write must be dropped, never end the message loop. */
 class BridgeMessagesTest {
@@ -97,5 +104,38 @@ class BridgeMessagesTest {
         runCatching { bridge.call("bridge.version", timeoutMs = 50) }
         assertEquals(true, host.scripts.first().startsWith("window.__mspPage = 1;"))
         assertEquals(true, "window.__mspPage === 1)" in host.scripts.last())
+    }
+
+    /** The gain diagnostics' page messages: read by their owner field by field, never logged raw. */
+    private suspend fun diagRun(reader: (JsonObject) -> Unit, events: MutableList<String>): Pair<Bridge, List<String>> {
+        val host = FakeHost { id -> """{"type":"result","id":$id,"ok":true,"value":1}""" }
+        val bridge = Bridge(host, scope)
+        val logged = CopyOnWriteArrayList<String>()
+        bridge.logger = { logged += it }
+        bridge.diag = reader
+        scope.launch(start = CoroutineStart.UNDISPATCHED) { bridge.events.collect { events += it.first } }
+        host.messages.subscriptionCount.first { it > 0 }
+        host.messages.emit("""{"type":"diag","ev":"track","uri":"spotify:track:URISECRET","token":"TOKEN_SECRET"}""")
+        host.messages.emit("""{"type":"diag","ev":{"odd":"SHAPESECRET"}}""")
+        host.messages.emit("""{"type":"jserror","error":"after the diag messages"}""")
+        host.messages.emit("""{"type":"queue","queue":null}""")
+        withTimeout(2_000) { while (logged.none { "after the diag messages" in it } || "queue" !in events) delay(10) }
+        return bridge to logged
+    }
+
+    @Test fun `a diag message goes to its reader, never into the log nor the player's events`() = runBlocking {
+        val read = CopyOnWriteArrayList<JsonObject>()
+        val events = CopyOnWriteArrayList<String>()
+        val (bridge, logged) = diagRun({ read += it }, events)
+        assertEquals(2, read.size, "both handed over as they came: $read")
+        assertTrue(logged.none { "SECRET" in it }, "$logged")
+        assertEquals(listOf("queue"), events.toList())
+        assertEquals(JsonPrimitive(1), bridge.call("bridge.version", timeoutMs = 2_000))
+    }
+
+    @Test fun `a diag reader that fails ends nothing and logs none of the message`() = runBlocking {
+        val (bridge, logged) = diagRun({ throw IllegalStateException("broken reader with SECRET inside") }, CopyOnWriteArrayList())
+        assertTrue(logged.none { "SECRET" in it }, "$logged")
+        assertEquals(JsonPrimitive(1), bridge.call("bridge.version", timeoutMs = 2_000))
     }
 }

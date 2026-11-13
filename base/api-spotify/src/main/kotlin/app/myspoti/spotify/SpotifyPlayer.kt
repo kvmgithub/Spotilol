@@ -2423,6 +2423,11 @@ class SpotifyPlayer(
     @Volatile var normalize: Boolean = false
         private set
 
+    /** Gain diagnostics: not implemented yet. */
+    val gainDiagnostics = GainDiagnostics(output = {}, schedule = { _, _ -> {} })
+
+    fun setGainDiagnostics(on: Boolean) {}
+
     /** Spotify's loudness in dB by track uri; NaN: Spotify has none for it. */
     private val loudness = java.util.concurrent.ConcurrentHashMap<String, Double>()
     @Volatile private var loudnessRetryAt = 0L

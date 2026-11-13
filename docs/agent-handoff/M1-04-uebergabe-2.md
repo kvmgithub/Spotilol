@@ -2,7 +2,7 @@
 
 Stand: 13. November 2026. Antwort auf „MySpotilol – unabhängiges Review von M1“ (`M1-03-review-1.md`). Rollen unverändert: Claude implementiert, ChatGPT/Codex prüft lesend, HK testet am Gerät und entscheidet.
 
-**Ergebnis:** R1 bis R5 und die nachrangigen Punkte sind behoben, R6 ist bis auf einen Teil behoben (Relay-Vergleich an/aus auf Android-Ebene, siehe 2.6). Alle Prüfungen der CI sind auf dem Ergebniscommit grün, die APK ist signiert. Offen bleiben dieser Relay-Teil und HKs Gerätetest. Nichts wurde gemergt oder veröffentlicht, `myspoti-ui` ist unberührt.
+**Ergebnis:** R1 bis R5 und die nachrangigen Punkte sind behoben, R6 ist bis auf einen Teil behoben (Relay-Vergleich an/aus auf Android-Ebene, siehe 2.6). Node-Tests, Release-Notes-Prüfung und der vollständige CI-Lauf mit allen Unit-Tests sind auf dem Ergebniscommit grün, die APK ist mit dem vorgesehenen Schlüssel signiert. Offen bleiben dieser Relay-Teil und HKs Gerätetest. Nichts wurde gemergt oder veröffentlicht, `myspoti-ui` ist unberührt.
 
 Ab dieser Runde liegen Auftrag, Übergaben und Review im Repository unter `docs/agent-handoff/` (HKs Freigabe vom 13.11.: „Ab jetzt dürfen KI-Artefakte in diesem Repo sein.“). Commits tragen deshalb jetzt die Trailer `Co-Authored-By: Claude Opus 5.5` und `Claude-Session`.
 
@@ -12,10 +12,10 @@ Ab dieser Runde liegen Auftrag, Übergaben und Review im Repository unter `docs/
 | --- | --- |
 | Basis | `64f97bb9ffe517b2f40ded45b7e934e23ec6a11a` (`myspoti-ui`, MySpotilol 1.4.0) |
 | Reviewstand | `82efcaa3eb1de21be85fc7dd8b6016a8eff260cd`; der Arbeitszweig stand beim Beginn dieser Runde unverändert dort, es gab keine zwischenzeitliche Arbeit |
-| Ergebnis (Code) | `@@RESULT@@` |
-| Dokumentcommit | Der Commit, der diese Datei enthält; er ändert nur `docs/agent-handoff/` und läuft nicht durch die CI. |
-| Diff gegen Reviewstand | https://github.com/kvmgithub/Spotilol/compare/82efcaa3eb1de21be85fc7dd8b6016a8eff260cd...@@RESULT@@ |
-| Diff gegen Basis | https://github.com/kvmgithub/Spotilol/compare/64f97bb9ffe517b2f40ded45b7e934e23ec6a11a...@@RESULT@@ |
+| Ergebnis (Code) | `2329f0f9a73b88db142d2fff2f29c333fa1f1bdb` |
+| Dokumentcommits | `ddf6f00` (Entwurf) und der Commit mit dieser Fassung. Sie ändern nur `docs/agent-handoff/`; auf diesem Zweig startet die CI nur per Hand, der Code-Stand der APK ist `2329f0f`. |
+| Diff gegen Reviewstand | https://github.com/kvmgithub/Spotilol/compare/82efcaa3eb1de21be85fc7dd8b6016a8eff260cd...2329f0f9a73b88db142d2fff2f29c333fa1f1bdb |
+| Diff gegen Basis | https://github.com/kvmgithub/Spotilol/compare/64f97bb9ffe517b2f40ded45b7e934e23ec6a11a...2329f0f9a73b88db142d2fff2f29c333fa1f1bdb |
 | Produktbranch | `myspoti-ui` steht inzwischen auf `63bff95` („Update README.md“, nur `README.md`). Keine Überschneidung mit den Dateien dieses Zweigs; nicht eingearbeitet, da kein Merge beauftragt ist. |
 
 Commits dieser Runde:
@@ -123,14 +123,14 @@ Unverändert: `candidate` statt `selected`, keine Gain-Anwendung, keine Spotify-
 
 | | |
 | --- | --- |
-| Lauf | @@RUN@@ (`workflow_dispatch` auf `work/gain-diagnostics`, Commit `@@RESULT@@`) |
-| Ergebnis | @@CI@@ |
-| JUnit | @@JUNIT@@ |
-| Node in der CI | @@NODE@@ |
-| APK-Artefakt | @@APKART@@ |
-| APK SHA-256 | `@@APKSHA@@` |
-| Signierer SHA-256 | `@@SIGNER@@` |
-| Testberichte | @@REPORTS@@ |
+| Lauf | [43388148077](https://github.com/kvmgithub/Spotilol/actions/runs/43388148077) (`workflow_dispatch` auf `work/gain-diagnostics`, Commit `2329f0f9a73b88db142d2fff2f29c333fa1f1bdb`) |
+| Ergebnis | erfolgreich (Job `build`: success; Release-Notes übersprungen, keine Veröffentlichung). Vorlauf [43387905777](https://github.com/kvmgithub/Spotilol/actions/runs/43387905777) auf `aa4ab33` scheiterte beim Kompilieren der Tests am Testnamen mit `:` |
+| JUnit | Gradle-Schritt „Unit tests and signed release“ mit allen Unit-Tests: `BUILD SUCCESSFUL in 4m 43s`, ein fehlgeschlagener Test hätte den Lauf abgebrochen. Die Fallzahlen stehen nur in den Testberichten (Artefakt unten), nicht im Job-Log; erwartet sind 31 Fälle `GainDiagnosticsTest` |
+| Node in der CI | eigener Schritt vor Gradle: 19 Tests, 19 bestanden, 0 fehlgeschlagen |
+| APK-Artefakt | [apk-2329f0f9a73b88db142d2fff2f29c333fa1f1bdb](https://github.com/kvmgithub/Spotilol/actions/runs/43388148077/artifacts/14020101100), enthält APK, `SHA256SUMS.txt`, `signers.txt`, `apk-metadata.txt`, `build-info.txt`. CI-Prüfungen bestanden: genau ein Signierer, `aapt`: Label MySpotilol, nicht debuggable, Version 1.4.0 / 1004000 |
+| APK SHA-256 | `6a534b87bb161eeb473af5df7bad540b0850b8a3f7b40518196ffdc5e96caf7c` |
+| Signierer SHA-256 | `73cf309a74b1a107a1e1cbb9453806f7b0d8e803957ecd371cb51cfed0b21e9a` |
+| Testberichte | [test-reports-2329f0f9a73b88db142d2fff2f29c333fa1f1bdb](https://github.com/kvmgithub/Spotilol/actions/runs/43388148077/artifacts/14019731741), JUnit-XML und Node-TAP |
 
 Die Artefakte kann ich in dieser Sitzung nicht herunterladen (Blob-Zugriff gesperrt); Prüfsumme, Signierer und Testzahlen stammen aus dem Job-Log desselben Laufs.
 

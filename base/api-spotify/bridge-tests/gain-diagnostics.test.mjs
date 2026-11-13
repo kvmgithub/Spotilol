@@ -56,7 +56,9 @@ class FakeMedia extends EventTarget {
 const settle = async () => { for (let i = 0; i < 20; i++) await new Promise(r => setImmediate(r)); };
 
 /** A page with the bridge in it; the player plays [state] on element A. */
-const page = async ({ playerVolume = 0.8 } = {}) => {
+const page = async (opts = {}) => {
+  // An explicit undefined means a player without the field.
+  const playerVolume = 'playerVolume' in opts ? opts.playerVolume : 0.8;
   const clock = new Clock();
   const posted = [];
   const listeners = {};

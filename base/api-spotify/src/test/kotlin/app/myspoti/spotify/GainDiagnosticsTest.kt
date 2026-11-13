@@ -320,7 +320,7 @@ class GainDiagnosticsTest {
         assertEquals(0, time.pending)
     }
 
-    @Test fun `answers and page events wait apart: a flood of one never hides the other`() {
+    @Test fun `answers and page events wait apart, a flood of one never hides the other`() {
         val run = on()
         repeat(50) { diag.onPage(page("volume", uA)) }
         diag.onRelayAnswer(run, path, answer(track(uA, mp4 = listOf(file(fA1, "10", "-5.0")))))

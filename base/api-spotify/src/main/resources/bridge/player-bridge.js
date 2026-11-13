@@ -262,37 +262,59 @@
   // What sets the level of the element this phone plays: the page player's own volume read raw
   // (_playerVolume and _cubicVolume: ownLevel() makes a missing one 1, which proves nothing), the
   // element's volume and mute, and the last level this bridge wrote on it itself (gdWrote, at the
-  // places that write one). Told on 'diag.gain' {on: true}, at a change of song or of element, and
-  // at the element's own volumechange; at most GD_PER_S messages a second, those in between told
-  // after as one (the newest reading) with how many it stands for. Nothing here sets a level,
-  // routes an element, polls, or asks Spotify anything; off, it holds no listener and no timer.
+  // places that write one). Armed by the host with 'diag.gain' {on, tag}: every message carries that
+  // tag, and the host keeps only the tag it armed last (its run, this page). Told when armed, at a
+  // change of song, context, player or element, and at the element's own volumechange; at most
+  // GD_PER_S messages a second, those in between told after as one (the newest reading) with how
+  // many it stands for.
+  //
+  // Observation only, and never in the way: the player is followed through the promise the page's
+  // SDK holds, read at each state push (no polling); a promise the SDK no longer holds, or one from
+  // before the last arming, never binds. Every step runs in gdTry, which turns a failure into a fixed
+  // code (GD_FAULTS) and nothing else: the state push, the levels and the page's own handling go on
+  // as they would without it. Nothing here sets a level, routes an element, starts a timer while
+  // off, or asks Spotify anything.
   const GD_PER_S = 2;
-  const gd = { on: false, player: null, el: null, uri: null, ctx: null, ids: new WeakMap(), count: 0, wrote: null, sent: [], waiting: null, merged: 0, timer: 0 };
-  const gdWrote = (el, kind) => { if (gd.on) gd.wrote = { el, kind, value: el.volume, at: performance.now() }; };
+  const GD_FAULTS = ['state', 'read', 'locate', 'flush', 'write', 'command', 'follow'];
+  const gd = { on: false, tag: 0, gen: 0, promise: null, player: null, el: null, uri: null, ctx: null,
+    els: new WeakMap(), players: new WeakMap(), elCount: 0, plCount: 0, wrote: null,
+    sent: [], waiting: null, merged: 0, timer: 0, faults: 0, fault: null };
+  const gdFault = code => { gd.faults++; gd.fault = GD_FAULTS.includes(code) ? code : 'state'; };
+  const gdTry = (code, fn, fallback) => { try { return fn(); } catch (e) { gdFault(code); return fallback; } };
+  // A field of the page's own objects (private, free to change): its value, or GD_BAD when reading it failed.
+  const GD_BAD = {};
+  const gdGet = fn => { try { return fn(); } catch (e) { gdFault('read'); return GD_BAD; } };
+  const gdWrote = (el, kind) => gdTry('write', () => { if (gd.on) gd.wrote = { el, kind, value: el.volume, at: performance.now() }; });
   const gdNum = v => typeof v === 'number' && Number.isFinite(v) ? v : null;
   // The kind of a context uri (spotify:<kind>:..., a user's collection as "collection"), never its id.
   const gdCtx = uri => {
-    const m = /^spotify:(?:user:[^:]+:)?([a-z]+)/.exec(uri || '');
+    const m = /^spotify:(?:user:[^:]+:)?([a-z]+)/.exec(typeof uri === 'string' ? uri : '');
     return m ? m[1] : null;
   };
+  // Small numbers for the page's player and element objects, so a line says when either changed.
+  const gdId = (map, o, key) => { if (!map.has(o)) map.set(o, ++gd[key]); return map.get(o); };
   const gdRead = ev => {
     const el = gd.el, p = gd.player;
-    const raw = p ? p._playerVolume : undefined;
+    const raw = p ? gdGet(() => p._playerVolume) : undefined;
+    const cubic = p ? gdGet(() => p._cubicVolume) : undefined;
+    const field = fn => { if (!el) return null; const v = gdGet(fn); return v === GD_BAD ? null : v; };
+    const vol = field(() => gdNum(el.volume));
     const w = gd.wrote && gd.wrote.el === el ? gd.wrote : null;
     return {
-      type: 'diag', v: 1, ev, uri: gd.uri, ctx: gd.ctx,
-      el: el ? gd.ids.get(el) || 0 : 0,
-      pv: gdNum(raw), pvSt: raw === undefined ? 'absent' : gdNum(raw) === null ? 'invalid' : 'ok',
-      cubic: p && typeof p._cubicVolume === 'boolean' ? p._cubicVolume : null,
-      vol: el ? el.volume : null, muted: el ? el.muted : null, paused: el ? el.paused : null,
-      level: el ? levelOf(el) : null, routed: el ? boosted(el) : null,
+      type: 'diag', v: 2, tag: gd.tag, ev, uri: gd.uri, ctx: gd.ctx,
+      pl: p ? gdId(gd.players, p, 'plCount') : 0,
+      el: el ? gdId(gd.els, el, 'elCount') : 0,
+      pv: gdNum(raw), pvSt: raw === GD_BAD ? 'error' : raw === undefined ? 'absent' : gdNum(raw) === null ? 'invalid' : 'ok',
+      cubic: typeof cubic === 'boolean' ? cubic : null,
+      vol, muted: field(() => el.muted === true), paused: field(() => el.paused === true),
+      level: field(() => gdNum(levelOf(el))), routed: field(() => boosted(el)),
       adMute: !!window.__mspMuted,
       wrote: w ? w.kind : null, wroteMs: w ? Math.round(performance.now() - w.at) : null,
-      wroteMatch: w ? el.volume === w.value : null,
-      merged: 0,
+      wroteMatch: w && vol !== null ? vol === w.value : null,
+      merged: 0, faults: gd.faults, fault: gd.fault,
     };
   };
-  const gdFlush = () => {
+  const gdFlush = () => gdTry('flush', () => {
     gd.timer = 0;
     if (!gd.on || gd.waiting === null) return;
     const now = performance.now();
@@ -304,50 +326,79 @@
     gd.merged = 0;
     gd.sent.push(now);
     post(msg);
-  };
-  const gdSend = ev => {
+  });
+  const gdSend = ev => gdTry('flush', () => {
     if (!gd.on) return;
     const now = performance.now();
     gd.sent = gd.sent.filter(t => now - t < 1000);
     if (gd.waiting === null && gd.sent.length < GD_PER_S) { gd.sent.push(now); post(gdRead(ev)); return; }
     if (gd.waiting !== null) gd.merged++;
     gd.waiting = ev;
-    if (!gd.timer) gd.timer = setTimeout(gdFlush, Math.max(0, 1000 - (now - gd.sent[0])));
-  };
+    if (!gd.timer) gd.timer = setTimeout(gdFlush, gd.sent.length ? Math.max(0, 1000 - (now - gd.sent[0])) : 0);
+  });
   const gdVolume = () => gdSend('volume');
-  // Listens on the element the player plays now, and on no other one. -> whether it changed.
-  const gdFollow = el => {
+  // Listens on the element the player plays now (none: on none). -> whether it changed.
+  const gdFollow = el => gdTry('follow', () => {
     if (el === gd.el) return false;
-    if (gd.el) gd.el.removeEventListener('volumechange', gdVolume);
+    const old = gd.el;
     gd.el = el;
-    if (el) {
-      if (!gd.ids.has(el)) gd.ids.set(el, ++gd.count);
-      el.addEventListener('volumechange', gdVolume);
-    }
+    if (old) old.removeEventListener('volumechange', gdVolume);
+    if (el) el.addEventListener('volumechange', gdVolume);
     return true;
+  }, false);
+  // The promise of the page's SDK player now (null: none). Not finding the service is no fault.
+  const gdPromise = () => {
+    try {
+      const sdk = services && services.resolve('PlayerSDK');
+      const streamer = sdk && sdk.harmony && sdk.harmony._streamer;
+      return (streamer && streamer._playerPromise) || null;
+    } catch (e) { return null; }
   };
-  const gdLocate = async () => {
-    const p = await localPlayer().catch(() => null);
-    if (!gd.on) return;
-    gd.player = p;
-    gdFollow(p && p._player instanceof HTMLMediaElement ? p._player : null);
+  const gdElement = p => { const v = p ? gdGet(() => p._player instanceof HTMLMediaElement ? p._player : null) : null; return v === GD_BAD ? null : v; };
+  // Binds the player [promise] gives, unless the SDK moved on to another promise or the host armed
+  // again meanwhile: a late answer of an earlier search never binds. Then tells [ev].
+  const gdLocate = (promise, ev) => {
+    const gen = gd.gen;
+    try {
+      Promise.resolve(promise).then(p => gdTry('locate', () => {
+        if (!gd.on || gen !== gd.gen || promise !== gd.promise) return;
+        gd.player = p || null;
+        gdFollow(gdElement(gd.player));
+        gdSend(ev);
+      }), () => gdFault('locate'));
+    } catch (e) { gdFault('locate'); }
   };
-  // From pushState, while on: a new song is told, so is a new element under the same one.
+  // The player and its element as the page has them now. A new SDK promise is a new player (told
+  // once it resolves); a new, missing or unreadable element is a change too. -> 'player' | 'element' | null
+  const gdTrack = () => {
+    const promise = gdPromise();
+    if (promise !== gd.promise) {
+      gd.promise = promise;
+      gd.player = null;
+      gdFollow(null);
+      if (promise) gdLocate(promise, 'player');
+      return 'player';
+    }
+    return gd.player && gdFollow(gdElement(gd.player)) ? 'element' : null;
+  };
+  // From pushState, while on (inside gdTry there).
   const gdState = state => {
-    const p = gd.player;
-    const moved = !!p && p._player instanceof HTMLMediaElement && gdFollow(p._player);
+    const changed = gdTrack();
     const uri = state && state.track ? state.track.uri : null;
-    if (uri !== gd.uri) {
-      gd.uri = uri;
-      gd.ctx = gdCtx(state && state.contextUri);
-      if (!p) gdLocate().then(() => gdSend('track')); else gdSend('track');
-    } else if (moved) gdSend('element');
+    const ctx = gdCtx(state && state.contextUri);
+    if (uri !== gd.uri) { gd.uri = uri; gd.ctx = ctx; gdSend('track'); }
+    else if (ctx !== gd.ctx) { gd.ctx = ctx; gdSend('context'); }
+    else if (changed === 'element') gdSend('element');
+    // A player that went away is told now; a new one when its promise resolves (gdLocate).
+    else if (changed === 'player' && !gd.promise) gdSend('player');
   };
   const gdOff = () => {
     gd.on = false;
-    if (gd.el) gd.el.removeEventListener('volumechange', gdVolume);
+    gd.gen++;
+    gdFollow(null);
     clearTimeout(gd.timer);
-    Object.assign(gd, { player: null, el: null, uri: null, ctx: null, wrote: null, sent: [], waiting: null, merged: 0, timer: 0 });
+    Object.assign(gd, { tag: 0, promise: null, player: null, el: null, uri: null, ctx: null, wrote: null,
+      sent: [], waiting: null, merged: 0, timer: 0, faults: 0, fault: null });
   };
 
   // --- audio graph: volume boost and crossfade -------------------------------
@@ -1308,22 +1359,29 @@
       return { seconds: xf.seconds, routed: boost.count, state: boost.ctx.state };
     },
 
-    // The gain diagnostics (see "gain diagnostics"): {on} -> {on, el}. Turned on again, the listener
-    // stays the one it was and nothing is told twice (a page resumed, the host's switch set again).
+    // The gain diagnostics (see "gain diagnostics"): {on, tag} -> {on, tag?, fault?}. Never fails:
+    // a fault is a fixed code. Armed again with the same tag (a resume), nothing is told twice and
+    // the listener stays the one it was; a new tag (another run, another arming) starts afresh,
+    // and whatever waited for the old one is dropped.
     'diag.gain': async a => {
-      if (!a.on) { gdOff(); return { on: false }; }
-      const first = !gd.on;
-      gd.on = true;
-      await gdLocate();
-      if (!gd.on) return { on: false };
-      if (first) {
+      try {
+        const tag = a && Number.isSafeInteger(a.tag) && a.tag > 0 ? a.tag : 0;
+        if (!a || a.on !== true || !tag) { gdOff(); return { on: false }; }
+        if (gd.on && gd.tag === tag) return { on: true, tag };
+        gdOff();
+        gd.on = true;
+        gd.tag = tag;
         let s = null;
         try { s = lastState ? JSON.parse(lastState) : null; } catch (e) { /* none */ }
-        gd.uri = s && s.track ? s.track.uri : null;
+        gd.uri = s && s.track && typeof s.track.uri === 'string' ? s.track.uri : null;
         gd.ctx = gdCtx(s && s.contextUri);
-        gdSend('enable');
+        gd.promise = gdPromise();
+        if (gd.promise) gdLocate(gd.promise, 'enable'); else gdSend('enable');
+        return { on: true, tag };
+      } catch (e) {
+        gdFault('command');
+        return { on: gd.on, fault: 'command' };
       }
-      return { on: true, el: gd.el ? gd.ids.get(gd.el) : 0 };
     },
 
     'volume.get': () => need().playback.getVolume(),
@@ -1416,8 +1474,9 @@
     const state = mapState(services.player.getState());
     // The song's gain from its first moment (see "normalization").
     nzTrack(state && state.track ? state.track.uri : null);
-    // The gain diagnostics, while on: a change of song or of element (read-only).
-    if (gd.on) gdState(state);
+    // The gain diagnostics, while on: a change of song, context, player or element (read-only;
+    // a fault there is a code, never a missed state push).
+    if (gd.on) gdTry('state', () => gdState(state));
     // An ad is on: the page's ad managers are turned off again (it re-arms them per break).
     if (state && state.track && state.track.kind === 'ad') { try { adsOff(); } catch (e) { /* no service */ } }
     const json = JSON.stringify(state);

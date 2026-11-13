@@ -16,7 +16,7 @@
     <string name="spotilol_profile_delete_title">Delete profile %1$s?</string>
     <string name="spotilol_profile_save_button">Save</string>
     <string name="spotilol_diagnostics_title">Diagnostic logs</string>
-    <string name="spotilol_diagnostics_detail">Shows the log entry below. Logs are redacted and leave the phone only when you copy or share them.</string>
+    <string name="spotilol_diagnostics_detail">Shows the log entry below and also notes the playback\'s volume values in the log (observation only, the sound is unchanged). Logs are redacted and leave the phone only when you copy or share them.</string>
     <string name="spotilol_about_body">Myspoti\'s native interface with the privacy and security scope of Spotilol and Spotilol Lite. Free software under the GPL-3.0, not affiliated with Spotify.</string>
     <string name="spotilol_about_source">Source code</string>
     <string name="spotilol_about_source_detail">kvmgithub/Spotilol, branch myspoti-ui</string>

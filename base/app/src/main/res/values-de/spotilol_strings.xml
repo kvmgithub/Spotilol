@@ -16,7 +16,7 @@
     <string name="spotilol_profile_delete_title">Profil %1$s löschen?</string>
     <string name="spotilol_profile_save_button">Speichern</string>
     <string name="spotilol_diagnostics_title">Diagnoseprotokoll</string>
-    <string name="spotilol_diagnostics_detail">Blendet darunter den Protokolleintrag ein. Protokolle sind geschwärzt und verlassen das Gerät nur, wenn du sie kopierst oder teilst.</string>
+    <string name="spotilol_diagnostics_detail">Blendet darunter den Protokolleintrag ein und notiert zusätzlich Lautstärkewerte der Wiedergabe im Protokoll (nur Beobachtung, der Klang bleibt unverändert). Protokolle sind geschwärzt und verlassen das Gerät nur, wenn du sie kopierst oder teilst.</string>
     <string name="spotilol_about_body">Die native Oberfläche von Myspoti mit dem Datenschutz- und Sicherheitsumfang von Spotilol und Spotilol Lite. Freie Software unter der GPL-3.0, nicht mit Spotify verbunden.</string>
     <string name="spotilol_about_source">Quellcode</string>
     <string name="spotilol_about_source_detail">kvmgithub/Spotilol, Branch myspoti-ui</string>

@@ -158,8 +158,9 @@ internal class ControlRelay(private val view: WebView, private val fingerprint: 
                 ?.takeIf { DEVICE_ID.matches(it) }
                 ?.let { mine -> devices.registering(mine)?.let { (old, seq) -> sayGoodbye(request, old, seq) } }
         } else if (request.method != "DELETE") devices.sent(request.url.toString(), body)
-        // The gain diagnostics' run this request belongs to (null while they are off: nothing is read).
-        val gainRun = MyspotiRuntime.gainDiagnostics?.runToken()
+        // The gain diagnostics' ticket for this request: its page and order (null while they are off
+        // or no page is armed: nothing is read).
+        val gainTicket = MyspotiRuntime.gainDiagnostics?.relayTicket()
         http.newCall(request).enqueue(object : Callback {
             override fun onFailure(call: Call, e: IOException) {
                 MyspotiRuntime.network.failed()
@@ -223,7 +224,7 @@ internal class ControlRelay(private val view: WebView, private val fingerprint: 
                     answer(reply, id, it.code, out.toString(), sent)
                     // Gain diagnostics: what the page got, read after it got it; nothing of theirs
                     // reaches the answer or this relay.
-                    if (gainRun != null && playback && it.code in 200..299) runCatching { MyspotiRuntime.gainDiagnostics?.onRelayAnswer(gainRun, path, sent) }
+                    if (gainTicket != null && playback && it.code in 200..299) runCatching { MyspotiRuntime.gainDiagnostics?.onRelayAnswer(gainTicket, path, sent) }
                 }
             }
         })

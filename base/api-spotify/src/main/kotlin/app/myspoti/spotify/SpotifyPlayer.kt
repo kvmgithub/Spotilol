@@ -304,15 +304,27 @@ class SpotifyPlayer(
     /** The diagnostics switch, for the gain diagnostics: on or off here, and in the page when it is up. */
     fun setGainDiagnostics(on: Boolean) {
         gainDiagnostics.setEnabled(on)
-        if (bridge.ready.value) scope.launch { sendGainDiagnostics() }
+        if (bridge.ready.value) scope.launch { armGainPage() }
     }
 
-    /** The page's side of the gain diagnostics as the switch is now (its listener on or off). */
-    private suspend fun sendGainDiagnostics() {
-        val on = gainDiagnostics.enabled
-        runCatching { bridge.call("diag.gain", buildJsonObject { put("on", on) }, quiet = true) }
-            .onSuccess { gainPageOn = on }
-            .onFailure { bridge.logger?.invoke("gain diagnostics not set in the page: ${it.message}") }
+    /**
+     * The account may change (see [app.myspoti.spotify.SpotifyApi.newSession]): a new run of the gain
+     * diagnostics. The page up now belongs to the old one and is told to stop; the next page that
+     * comes up is armed (see the ready collector).
+     */
+    fun newGainRun() {
+        gainDiagnostics.newRun()
+        if (bridge.ready.value && gainPageOn) scope.launch { sendGainPage(null) }
+    }
+
+    /** The page's side of the gain diagnostics as the switch is now: armed with a new tag, or off. */
+    private suspend fun armGainPage() = sendGainPage(gainDiagnostics.armPage())
+
+    private suspend fun sendGainPage(tag: Long?) {
+        runCatching { bridge.call("diag.gain", buildJsonObject { put("on", tag != null); if (tag != null) put("tag", tag) }, quiet = true) }
+            .onSuccess { gainPageOn = tag != null }
+            // A fixed text: what a failure says may come from the page.
+            .onFailure { bridge.logger?.invoke("gain diagnostics: the page was not told") }
     }
 
     init {
@@ -339,6 +351,8 @@ class SpotifyPlayer(
         scope.launch {
             bridge.ready.collect {
                 if (!it) {
+                    // The gain diagnostics accept nothing more from the page that went (nor answers to its requests).
+                    gainDiagnostics.pageGone()
                     // The ad ahead belonged to the page that went: the new one registers a new
                     // device, which that ad does not follow (seen: a play "before the ad" sent to a
                     // page still reloading, and refused).
@@ -373,8 +387,8 @@ class SpotifyPlayer(
                 if (boost > 1.0) applyBoost()
                 if (crossfadeSeconds > 0) applyCrossfade()
                 if (normalize) { normalizedFor = null; normalizeSoon() }
-                // A new page starts without the gain diagnostics' listener: on again while the switch is.
-                if (gainDiagnostics.enabled || gainPageOn) scope.launch { sendGainDiagnostics() }
+                // A new page starts without the gain diagnostics: armed with its own tag while the switch is on.
+                if (gainDiagnostics.enabled || gainPageOn) scope.launch { armGainPage() }
                 // The page keeps its volume: an app closed during a muted ad must not stay silent.
                 // Only when this page is Connect's active device: the volume is that device's otherwise, and a
                 // speaker at 0 went to 100 % (Myspoti 2.4.0, #159).

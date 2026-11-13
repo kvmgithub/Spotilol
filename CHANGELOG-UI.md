@@ -7,7 +7,7 @@ Each version section is the text of the GitHub release tagged `ui-v<version>` (p
 ## [Unreleased]
 
 ### Diagnostics
-- With diagnostics on (Settings), the app's log notes the volume gain (`gain_db`) Spotify's playback answers carry for each song and file, and the page player's volume at each change of song: a measurement for a later check of the volume normalization. Nothing about playback, volume or requests changes; with diagnostics off nothing is read or written.
+- With diagnostics on (Settings), the app's log notes the volume gain (`gain_db`) Spotify's playback answers offer for each song and file candidate, with the answer and context it came from, and the page player's volume settings at each change of song, context, player, element or volume: a measurement for a later check of the volume normalization. Nothing about playback, volume or requests changes; with diagnostics off nothing is read or written.
 
 ## [1.4.0] - 2026-11-12
 

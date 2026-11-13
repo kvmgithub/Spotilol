@@ -55,7 +55,7 @@ class SpotifyApi(
     /** The account may change from here on (see [SpotifyHttp.newSession]); the gain diagnostics start a new run. */
     fun newSession() {
         http.newSession()
-        player.gainDiagnostics.newRun()
+        player.newGainRun()
     }
 
     override val ready: StateFlow<Boolean> = bridge.ready

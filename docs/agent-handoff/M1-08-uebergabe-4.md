@@ -2,18 +2,18 @@
 
 Stand: 13. November 2026. Antwort auf „MySpotilol – M1, unabhängiges Review 3“ (`M1-07-review-3.md`). Auftrag dieser Runde: R7 samt Regressionstest und die Dokumentberichtigung aus Abschnitt 4. Rollen unverändert.
 
-**Ergebnis:** R7 ist behoben: höchstens vier wartende Zeilen insgesamt, Verdrängung nach fester Regel, Verlust gezählt. @@CIRESULT@@ Offen bleibt HKs Gerätetest. Nichts gemergt, nichts veröffentlicht, `myspoti-ui` unberührt.
+**Ergebnis:** R7 ist behoben: höchstens vier wartende Zeilen insgesamt, Verdrängung nach fester Regel, Verlust gezählt. Node-Tests, Release-Notes-Prüfung und der vollständige CI-Lauf sind auf dem Code-Ergebnis grün, die APK ist mit dem vorgesehenen Schlüssel signiert. Offen bleibt HKs Gerätetest. Nichts gemergt, nichts veröffentlicht, `myspoti-ui` unberührt.
 
 ## 1. Stände
 
 | | |
 | --- | --- |
 | Ausgangspunkt | Spitze `4238b13` (Code `5071fce`, Dokumentcommits `de64662`, `4238b13`); unverändert seit Review 3 |
-| **Code-Ergebnis** | **`@@RESULT@@`** („Gain diagnostics: at most four lines wait, the rest counted (review 3, R7)“) |
+| **Code-Ergebnis** | **`18c323fa7efd2d422f07c1bfd1f3fcb9f2b64dac`** („Gain diagnostics: at most four lines wait, the rest counted (review 3, R7)“) |
 | Geänderte Dateien | `GainDiagnostics.kt`, `GainDiagnosticsTest.kt`; sonst nichts (keine Änderung an Bridge, Relay, Player) |
-| Dokumentcommits danach | `@@DOCS@@`: nur `docs/agent-handoff/` (Review 3 abgelegt, diese Übergabe) |
-| Diff R7 | https://github.com/kvmgithub/Spotilol/compare/5071fce001759dc6e712cf2a74d8e60fd5b1940e...@@RESULT@@ |
-| Diff gegen Basis | https://github.com/kvmgithub/Spotilol/compare/64f97bb9ffe517b2f40ded45b7e934e23ec6a11a...@@RESULT@@ |
+| Dokumentcommits danach | ``cd0b5e7` (Review 3, Entwurf) und der Commit mit dieser Fassung`: nur `docs/agent-handoff/` (Review 3 abgelegt, diese Übergabe) |
+| Diff R7 | https://github.com/kvmgithub/Spotilol/compare/5071fce001759dc6e712cf2a74d8e60fd5b1940e...18c323fa7efd2d422f07c1bfd1f3fcb9f2b64dac |
+| Diff gegen Basis | https://github.com/kvmgithub/Spotilol/compare/64f97bb9ffe517b2f40ded45b7e934e23ec6a11a...18c323fa7efd2d422f07c1bfd1f3fcb9f2b64dac |
 | Produktbranch | `myspoti-ui` weiter `63bff95`, keine Überschneidung |
 
 ## 2. R7 – begrenzter Ausgabepuffer
@@ -53,19 +53,19 @@ Diese Fassung ersetzt die Aussagen in Übergabe 3, Abschnitte 2.2 und 5:
 
 | CI | |
 | --- | --- |
-| Lauf | @@RUN@@ |
-| Ergebnis | @@CI@@ |
-| Node | @@NODE@@ |
-| APK | @@APKART@@ |
-| APK SHA-256 | `@@APKSHA@@` |
-| Signierer | `@@SIGNER@@` |
-| Testberichte | @@REPORTS@@ |
+| Lauf | [43486444478](https://github.com/kvmgithub/Spotilol/actions/runs/43486444478), `workflow_dispatch` auf `work/gain-diagnostics`, Commit `18c323f` |
+| Ergebnis | erfolgreich (Job `build`: success, `BUILD SUCCESSFUL in 4m 32s`, darin `:api-spotify:test` und `:host-android:testDebugUnitTest`; Release-Notes übersprungen, keine Veröffentlichung) |
+| Node | eigener Schritt vor Gradle: 23 Tests, 23 bestanden |
+| APK | [apk-18c323fa7efd2d422f07c1bfd1f3fcb9f2b64dac](https://github.com/kvmgithub/Spotilol/actions/runs/43486444478/artifacts/14067103966) mit `SHA256SUMS.txt`, `signers.txt`, `apk-metadata.txt`, `build-info.txt`; CI-Prüfungen (ein Signierer, Label, nicht debuggable, Version 1.4.0 / 1004000) bestanden |
+| APK SHA-256 | `9a1c1b7536d61070772a80073fd41f248e8988451a4884b2ae2eb54c4a7b9bab` |
+| Signierer | `73cf309a74b1a107a1e1cbb9453806f7b0d8e803957ecd371cb51cfed0b21e9a` |
+| Testberichte | [test-reports-18c323fa7efd2d422f07c1bfd1f3fcb9f2b64dac](https://github.com/kvmgithub/Spotilol/actions/runs/43486444478/artifacts/14068450731), JUnit-XML und Node-TAP |
 
 Erwartete JUnit-Fallzahlen: `GainDiagnosticsTest` 34 (einer mehr als in Runde 3), `RelayAnswersTest` 6. Die Zahlen stehen nur in den Testberichten; Artefakte kann ich in dieser Sitzung nicht herunterladen.
 
 ## 5. Gerätetest (HK)
 
-Den installierten Stand über Commit `@@RESULTSHORT@@` und die SHA-256 aus Abschnitt 4 festhalten; die Anzeige 1.4.0 unterscheidet die Arbeitszweig-Builds nicht.
+Den installierten Stand über Commit `18c323f` und die SHA-256 aus Abschnitt 4 festhalten; die Anzeige 1.4.0 unterscheidet die Arbeitszweig-Builds nicht.
 
 1. Diagnose aus, dann an: Titelwechsel, Lautstärke, Pause/Fortsetzen, Hintergrund und Sperrbildschirm, Rückkehr. Wiedergabe und Lautstärke gleich.
 2. Gleichen Titel aus Playlist und aus Album starten: `ctx=` der Seitenzeile, `ctx=` und `here=` der Kandidaten.

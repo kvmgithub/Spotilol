@@ -263,7 +263,10 @@
   // (_playerVolume and _cubicVolume: ownLevel() makes a missing one 1, which proves nothing), the
   // element's volume and mute, and the last level this bridge wrote on it itself (gdWrote, at the
   // places that write one). Armed by the host with 'diag.gain' {on, tag}: every message carries that
-  // tag, and the host keeps only the tag it armed last (its run, this page). Told when armed, at a
+  // tag, and the host keeps only the tag it armed last (its run, this page). The tag is also left on
+  // window.__mspGainTag (0: not armed), where the relay's fetch wrapper reads it into each request it
+  // hands the host: an answer is then read for the page that asked, not for whichever page is armed
+  // when it arrives. Told when armed, at a
   // change of song, context, player or element, and at the element's own volumechange; at most
   // GD_PER_S messages a second, those in between told after as one (the newest reading) with how
   // many it stands for.
@@ -286,6 +289,7 @@
   const gdGet = fn => { try { return fn(); } catch (e) { gdFault('read'); return GD_BAD; } };
   const gdWrote = (el, kind) => gdTry('write', () => { if (gd.on) gd.wrote = { el, kind, value: el.volume, at: performance.now() }; });
   const gdNum = v => typeof v === 'number' && Number.isFinite(v) ? v : null;
+  const gdMark = tag => { try { window.__mspGainTag = tag; } catch (e) { gdFault('command'); } };
   // The kind of a context uri (spotify:<kind>:..., a user's collection as "collection"), never its id.
   const gdCtx = uri => {
     const m = /^spotify:(?:user:[^:]+:)?([a-z]+)/.exec(typeof uri === 'string' ? uri : '');
@@ -355,18 +359,24 @@
     } catch (e) { return null; }
   };
   const gdElement = p => { const v = p ? gdGet(() => p._player instanceof HTMLMediaElement ? p._player : null) : null; return v === GD_BAD ? null : v; };
-  // Binds the player [promise] gives, unless the SDK moved on to another promise or the host armed
-  // again meanwhile: a late answer of an earlier search never binds. Then tells [ev].
+  // Binds the player [promise] gives, then tells [ev]. Its answer counts only for the arming it was
+  // made in and while it is the search the bridge waits for; an earlier arming's answer, failed or
+  // not, changes nothing. If the SDK holds another promise by then (replaced with no state in
+  // between), that one is looked for instead: a replaced player never comes back as the source.
   const gdLocate = (promise, ev) => {
     const gen = gd.gen;
+    const settled = (ok, p) => gdTry('locate', () => {
+      if (!gd.on || gen !== gd.gen || promise !== gd.promise) return;
+      const now = gdPromise();
+      if (now !== promise) { gd.promise = now; if (now) gdLocate(now, ev); else gdSend(ev); return; }
+      if (!ok) { gdFault('locate'); return; }
+      gd.player = p || null;
+      gdFollow(gdElement(gd.player));
+      gdSend(ev);
+    });
     try {
-      Promise.resolve(promise).then(p => gdTry('locate', () => {
-        if (!gd.on || gen !== gd.gen || promise !== gd.promise) return;
-        gd.player = p || null;
-        gdFollow(gdElement(gd.player));
-        gdSend(ev);
-      }), () => gdFault('locate'));
-    } catch (e) { gdFault('locate'); }
+      Promise.resolve(promise).then(p => settled(true, p), () => settled(false));
+    } catch (e) { if (gd.on && gen === gd.gen) gdFault('locate'); }
   };
   // The player and its element as the page has them now. A new SDK promise is a new player (told
   // once it resolves); a new, missing or unreadable element is a change too. -> 'player' | 'element' | null
@@ -399,6 +409,7 @@
     clearTimeout(gd.timer);
     Object.assign(gd, { tag: 0, promise: null, player: null, el: null, uri: null, ctx: null, wrote: null,
       sent: [], waiting: null, merged: 0, timer: 0, faults: 0, fault: null });
+    gdMark(0);
   };
 
   // --- audio graph: volume boost and crossfade -------------------------------
@@ -1371,6 +1382,7 @@
         gdOff();
         gd.on = true;
         gd.tag = tag;
+        gdMark(tag);
         let s = null;
         try { s = lastState ? JSON.parse(lastState) : null; } catch (e) { /* none */ }
         gd.uri = s && s.track && typeof s.track.uri === 'string' ? s.track.uri : null;

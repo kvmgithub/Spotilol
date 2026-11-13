@@ -21,17 +21,27 @@ import java.util.Locale
  *
  * Runs and pages: a run starts when the switch goes on and at every possible change of account
  * ([newRun]). Within a run, each page is armed with its own tag ([armPage], sent to the bridge with
- * 'diag.gain'); only the tag armed last is accepted, from the page's messages and from the relay's
- * answers ([relayTicket] is taken when a request is sent, and carries the tag). A page going away
- * ([pageGone]) and a new run leave nothing armed until a new page is: whatever the old page or the
- * old run still sends is dropped and counted ("late").
+ * 'diag.gain'; tags are never reused while the app runs). Only the tag armed last is accepted: from
+ * the page's messages, which carry it, and from the relay, whose requests carry the tag of the page
+ * that sent them ([relayTicket], at the relay's entry). A page going away ([pageGone]) and a new run
+ * leave nothing armed until a new page is: whatever the old page or the old run still sends is
+ * dropped and counted ("late"). Every line written for a page or an answer names its page
+ * ("page=", the tag), fixed when the line is taken, not when it is written: a line held back by the
+ * rate limit keeps the page it came from, and the bridge's own numbers (pl, el), which start again
+ * at 1 on a new page, are read with it.
  *
  * Provenance: every file candidate keeps up to [MAX_SEEN] observations, each with the answer's
- * request order ("ans", the order the relay sent the requests in, not proof of what is newer on
- * Spotify's side), the song's place in that answer (current or queue), its context there and the
- * Connect device as the player knew it then. A page line shows the latest by request order and
- * the others that differ from it, and whether a candidate's context is the page's. A song is the
- * page's song only when the page says so: the state an answer points at is that answer's.
+ * request order ("ans", the order the relay took the requests in, not proof of what is newer on
+ * Spotify's side), its page, the song's place in that answer (current or queue), the kind of its
+ * context there, and the Connect device as the host's cache had it when the answer arrived
+ * ("rxDev": a snapshot at receipt, not the device the request was made for, nor proof the cache was
+ * fresh). A page line shows the latest by request order and the others that differ from it, and
+ * whether a candidate's context kind is the page's ("here": same kind, e.g. both playlists, not
+ * necessarily the same playlist). A song is the page's song only when the page says so: the state
+ * an answer points at is that answer's.
+ *
+ * What is not seen proves nothing: an assignment pushed out ("evicted"), files past the bound of an
+ * answer ("capped") or "gain=none" are limits of this observation, not Spotify sending no gain.
  *
  * Bounds: [MAX_ENTRIES] song/file assignments (the least recently seen goes), [MAX_PER_ANSWER] file
  * observations read from one answer, [LINES_PER_S] lines a second (one waiting line per kind, the
@@ -81,7 +91,7 @@ class GainDiagnostics(
     }
 
     /** What one answer said about one file of one song, and where that answer came from. */
-    private class Seen(val gain: Reading, val context: String, val role: String, val order: Long, val device: String)
+    private class Seen(val gain: Reading, val context: String, val role: String, val order: Long, val page: Long, val device: String)
 
     /** A file candidate of a song. Raw ids stay here, never in a line. */
     private class Candidate(val uri: String, val fileId: String?, val format: String, val list: String) {
@@ -125,7 +135,7 @@ class GainDiagnostics(
 
     /** When the last lines went out (at most [LINES_PER_S] within [WINDOW_MS]). */
     private val written = ArrayDeque<Long>()
-    /** One waiting line per kind, oldest kind first, with how many earlier ones it replaced. */
+    /** One waiting line per key (see [emit]), oldest first, with how many earlier ones it replaced. */
     private val waiting = LinkedHashMap<String, Pair<String, Int>>()
     private var cancelFlush: (() -> Unit)? = null
 
@@ -159,9 +169,15 @@ class GainDiagnostics(
     /** The page went away: nothing it still sends is accepted, nor any answer to its requests. */
     @Synchronized fun pageGone() { armed = 0L }
 
-    /** Taken when a relay request is sent: its armed page and its order. Null (nothing read later) while off or no page is armed. */
-    @Synchronized fun relayTicket(): Long? {
-        if (!on || armed == 0L) return null
+    /**
+     * Taken at the relay's entry for a request of the page with [pageTag] (the tag the page was
+     * armed with, 0: not armed): that page and the request's order. Null (its answer is never read)
+     * while off, for a page not armed, and for a page other than the one armed now (counted "late":
+     * a request an earlier page sent, delivered after a new one was armed).
+     */
+    @Synchronized fun relayTicket(pageTag: Long): Long? {
+        if (!on || pageTag <= 0L) return null
+        if (armed == 0L || pageTag != armed) { late++; return null }
         requests++
         return (armed shl 32) or (requests and ORDER_MASK)
     }
@@ -183,7 +199,7 @@ class GainDiagnostics(
             if (!on) return
             if (armed == 0L || ticket ushr 32 != armed) { late++; return }
             if (answer == null) return
-            runCatching { record(ticket and ORDER_MASK, path, answer, dev) }.onFailure { bad++ }
+            runCatching { record(ticket and ORDER_MASK, armed, path, answer, dev) }.onFailure { bad++ }
         }
     }
 
@@ -195,18 +211,18 @@ class GainDiagnostics(
 
     // --- reading -----------------------------------------------------------------------------------
 
-    private fun record(order: Long, path: String, a: Answer, dev: String) {
+    private fun record(order: Long, page: Long, path: String, a: Answer, dev: String) {
         val shown = ArrayList<String>()
         var more = 0
         for (t in a.tracks) for (f in t.files) {
             val key = "${t.uri}|${f.fileId ?: "${f.list}#${f.index}"}"
             val c = entries[key] ?: Candidate(t.uri, f.fileId, f.format, f.list).also { pin(it); entries[key] = it }
-            c.seen += Seen(f.gain, t.context, t.role, order, dev)
+            c.seen += Seen(f.gain, t.context, t.role, order, page, dev)
             if (c.seen.size > MAX_SEEN) c.seen.remove(c.seen.minBy { it.order })
             if (shown.size < MAX_SHOWN) shown += "${trackId(t.uri)}/${t.role}/${t.context}:${fileLabel(c)}=${f.gain.shown}" else more++
         }
         val current = when { a.currentUri != null -> trackId(a.currentUri); a.currentAd -> "ad"; else -> "unknown" }
-        emit(KIND_ANSWER, "ev=answer src=${source(path)} ans=$order answerCurrent=$current ctx=${a.currentContext} device=$dev " +
+        emit("$KIND_ANSWER:$page", "ev=answer page=$page src=${source(path)} ans=$order answerCurrent=$current ctx=${a.currentContext} rxDevice=$dev " +
             "tracks=${a.tracks.size} ads=${a.ads} entries=${shown.joinToString(",").ifEmpty { "none" }} more=$more " +
             "otherLists=${a.otherLists} capped=${a.capped}")
     }
@@ -254,7 +270,7 @@ class GainDiagnostics(
         }
         val l = if (uri == null) null else runCatching { loudness(uri) }.getOrNull()
         val loudSt = when { uri == null -> "unknown"; l == null -> "not-read"; l.isNaN() -> "unusable"; else -> "cached" }
-        emit(KIND_PAGE, "ev=$ev track=${uri?.let(::trackId) ?: "unknown"} kind=$kind ctx=$ctx pl=${count("pl")} el=${count("el")} " +
+        emit("$KIND_PAGE:$tag", "ev=$ev page=$tag track=${uri?.let(::trackId) ?: "unknown"} kind=$kind ctx=$ctx pl=${count("pl")} el=${count("el")} " +
             "device=${deviceWord()} pv=${if (pv.status == Status.OK) num(pv.value) else "unknown"} pvSt=${pv.status.label} " +
             "cubic=${flag(bool("cubic"))} vol=${num(vol)} muted=${flag(bool("muted"))} paused=${flag(bool("paused"))} " +
             "level=${num(level)} routed=${flag(bool("routed"))} pageAdMute=${flag(bool("adMute"))} wrote=$wrote " +
@@ -273,7 +289,7 @@ class GainDiagnostics(
         val latest = c.seen.maxByOrNull { it.order } ?: return "${fileLabel(c)}=none"
         fun from(s: Seen): String {
             val here = when { s.context == "unknown" || pageCtx == "unknown" -> "unknown"; s.context == pageCtx -> "same"; else -> "other" }
-            return "${s.gain.shown}(ans=${s.order};role=${s.role};ctx=${s.context};dev=${s.device};here=$here)"
+            return "${s.gain.shown}(ans=${s.order};page=${s.page};role=${s.role};ctx=${s.context};rxDev=${s.device};here=$here)"
         }
         val alts = c.seen.filter { it !== latest && (it.gain.shown != latest.gain.shown || it.context != latest.context) }
             .sortedByDescending { it.order }
@@ -286,7 +302,7 @@ class GainDiagnostics(
         runNo++
         runStart = clock()
         seq = 0
-        emit(KIND_META, "ev=start reason=$reason v=2 max=$MAX_ENTRIES perS=$LINES_PER_S ${settings()}")
+        emit(KIND_META, "ev=start reason=$reason v=3 max=$MAX_ENTRIES perS=$LINES_PER_S ${settings()}")
     }
 
     private fun stop() {
@@ -315,8 +331,12 @@ class GainDiagnostics(
 
     private fun deviceWord(): String = when (runCatching { device() }.getOrNull()) { true -> "local"; false -> "remote"; null -> "unknown" }
 
-    /** A line now if this second has room, else it waits as its kind's one line (the newest). */
-    private fun emit(kind: String, body: String) {
+    /**
+     * A line now if this second has room, else it waits as the one line of its [key] (the newest):
+     * its kind and, for a page's line or an answer's, its page, so lines of two pages never merge.
+     * ponytail: a waiting line per kind and page; pages come seconds apart, so a few at most.
+     */
+    private fun emit(key: String, body: String) {
         val now = clock()
         val line = "run=$runNo seq=${seq++} ms=${now - runStart} $body"
         flushReady(now)
@@ -324,8 +344,8 @@ class GainDiagnostics(
             write(now, line, 0)
             return
         }
-        val held = waiting.remove(kind)
-        waiting[kind] = line to (held?.let { it.second + 1 } ?: 0)
+        val held = waiting.remove(key)
+        waiting[key] = line to (held?.let { it.second + 1 } ?: 0)
         scheduleFlush(now)
     }
 

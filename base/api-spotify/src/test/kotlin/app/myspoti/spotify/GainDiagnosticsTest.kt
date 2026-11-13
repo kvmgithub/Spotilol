@@ -86,7 +86,8 @@ class GainDiagnosticsTest {
         tag = diag.armPage()!!
     }
 
-    private fun ticket(): Long = diag.relayTicket()!!
+    /** A relay request of the page armed now, as the relay takes it. */
+    private fun ticket(): Long = diag.relayTicket(tag)!!
 
     /** A second of time: room for two more lines. */
     private fun later() = time.advance(1_000)
@@ -147,7 +148,7 @@ class GainDiagnosticsTest {
 
     @Test fun `off by default it reads nothing, writes nothing and sets no timer`() {
         assertFalse(diag.enabled)
-        assertNull(diag.relayTicket())
+        assertNull(diag.relayTicket(1))
         assertNull(diag.armPage())
         diag.onRelayAnswer((1L shl 32) or 1L, path, answer(track(uA, mp4 = listOf(file(fA1, "10", "-5.1")))))
         diag.onPage(page("track", uA, tag = 1))
@@ -189,7 +190,7 @@ class GainDiagnosticsTest {
         diag.onPage(page("track", uA))
         val p = lines("track").single()
         assertEquals("t1", p["track"])
-        assertEquals("f1@10/mp4:candidate=-5.1000(ans=1;role=queue;ctx=playlist;dev=local;here=same)|n=1", p["gain"])
+        assertEquals("f1@10/mp4:candidate=-5.1000(ans=1;page=1;role=queue;ctx=playlist;rxDev=local;here=same)|n=1", p["gain"])
     }
 
     @Test fun `gain null, absent, invalid and zero stay apart`() {
@@ -275,18 +276,21 @@ class GainDiagnosticsTest {
         assertEquals(1, diag.assignments)
         diag.newRun()
         assertEquals(0, diag.assignments, "a new account starts from nothing")
-        // The old page is still up while it navigates away: its requests are not read, its messages not taken.
-        assertNull(diag.relayTicket(), "no page armed in the new run yet")
+        // The old page is still up while it navigates away: its requests get no ticket, the answers to
+        // its earlier ones and its messages are not taken.
+        assertNull(diag.relayTicket(oldTag), "no page armed in the new run yet")
         relay(answer(track(uB, mp4 = listOf(file(fB1, "10", "-6.0")))), oldTicket)
         diag.onPage(page("track", uA, tag = oldTag))
         assertEquals(0, diag.assignments)
-        // The new page comes up and is armed.
+        // The new page comes up and is armed; a request the old page sent, delivered only now, is still the old page's.
         tag = diag.armPage()!!
         assertTrue(tag != oldTag)
+        assertNull(diag.relayTicket(oldTag))
+        assertNull(diag.relayTicket(0), "a page not armed: not read, not counted")
         later()
         diag.onPage(page("track", uB))
         val p = lines("track").single()
-        assertEquals(listOf("2", "2", "none", "t1"), listOf(p["run"], p["late"], p["gain"], p["track"]))
+        assertEquals(listOf("2", "4", "none", "t1", "$tag"), listOf(p["run"], p["late"], p["gain"], p["track"], p["page"]))
     }
 
     @Test fun `a message buffered under the old arming is dropped after off and on`() {
@@ -307,14 +311,14 @@ class GainDiagnosticsTest {
         val asked = ticket()
         val oldTag = tag
         diag.pageGone()
-        assertNull(diag.relayTicket(), "a request made while no page is armed is never read")
+        assertNull(diag.relayTicket(oldTag), "a request made while no page is armed is never read")
         relay(answer(track(uA, mp4 = listOf(file(fA1, "10", "-5.0")))), asked)
         diag.onPage(page("track", uA, tag = oldTag))
         assertEquals(0, diag.assignments)
         tag = diag.armPage()!!
         later()
         diag.onPage(page("track", uA))
-        assertEquals("2", lines("track").single()["late"])
+        assertEquals("3", lines("track").single()["late"])
     }
 
     @Test fun `another device playing is said, on the page line and with each answer's own`() {
@@ -327,12 +331,40 @@ class GainDiagnosticsTest {
         diag.onPage(page("track", uA))
         val p = lines("track").single()
         assertEquals("remote", p["device"])
-        assertEquals("f1@10/mp4:candidate=-6.0000(ans=2;role=cur;ctx=playlist;dev=remote;here=same)" +
-            "|alt=-5.0000(ans=1;role=cur;ctx=playlist;dev=local;here=same)|n=2", p["gain"])
+        assertEquals("f1@10/mp4:candidate=-6.0000(ans=2;page=1;role=cur;ctx=playlist;rxDev=remote;here=same)" +
+            "|alt=-5.0000(ans=1;page=1;role=cur;ctx=playlist;rxDev=local;here=same)|n=2", p["gain"])
         active = null
         later()
         diag.onPage(page("volume", uA))
         assertEquals("unknown", lines("volume").single()["device"])
+    }
+
+    @Test fun `the device of an answer is the host's cache when it arrives, also for one asked before a switch`() {
+        on()
+        val early = ticket()                                    // asked while this phone plays
+        active = false                                          // another device takes over
+        relay(answer(track(uA, mp4 = listOf(file(fA1, "10", "-6.0")))))
+        relay(answer(track(uA, mp4 = listOf(file(fA1, "10", "-5.0")))), early)   // the early one arrives last
+        later()
+        // Both "remote": a snapshot at receipt, not the device the early request was made for.
+        assertEquals(listOf("2" to "remote", "1" to "remote"), lines("answer").map { it["ans"] to it["rxDevice"] })
+        diag.onPage(page("track", uA))
+        assertEquals("f1@10/mp4:candidate=-6.0000(ans=2;page=1;role=cur;ctx=playlist;rxDev=remote;here=same)" +
+            "|alt=-5.0000(ans=1;page=1;role=cur;ctx=playlist;rxDev=remote;here=same)|n=2", lines("track").single()["gain"])
+    }
+
+    @Test fun `a line held back over a reload keeps the page it came from, apart from the new page's`() {
+        on()                                                    // page 1; the start line
+        diag.onPage(page("track", uA))                          // the second line of this second
+        diag.onPage(page("volume", uA, pv = "0.5"))             // page 1's, held back
+        diag.pageGone()
+        tag = diag.armPage()!!                                  // page 2: the bridge's pl and el start at 1 again
+        diag.onPage(page("track", uA, pv = "0.9"))              // page 2's, held back apart
+        later()
+        later()
+        val told = lines("track", "volume")
+        assertEquals(listOf("1:track:0.8000", "1:volume:0.5000", "2:track:0.9000"), told.map { "${it["page"]}:${it["ev"]}:${it["pv"]}" })
+        assertTrue(told.all { it["pl"] == "1" && it["el"] == "1" && it["merged"] == "0" }, "$told")
     }
 
     // --- provenance ---------------------------------------------------------------------------------
@@ -344,7 +376,7 @@ class GainDiagnosticsTest {
         diag.onPage(page("context", uA, ctx = "album"))
         val p = lines("context").single()
         assertEquals("album", p["ctx"])
-        assertEquals("f1@10/mp4:candidate=-5.0000(ans=1;role=cur;ctx=playlist;dev=local;here=other)|n=1", p["gain"])
+        assertEquals("f1@10/mp4:candidate=-5.0000(ans=1;page=1;role=cur;ctx=playlist;rxDev=local;here=other)|n=1", p["gain"])
     }
 
     @Test fun `an answer's current song without a context says unknown, never another song's`() {
@@ -365,13 +397,13 @@ class GainDiagnosticsTest {
         relay(answer(track(uB), track(uA, mp4 = listOf(file(fA1, "10", "-7.0")))), first)
         later()
         diag.onPage(page("track", uA, ctx = "album"))
-        assertEquals("f1@10/mp4:candidate=-4.0000(ans=2;role=cur;ctx=album;dev=local;here=same)" +
-            "|alt=-7.0000(ans=1;role=queue;ctx=playlist;dev=local;here=other)|n=2", lines("track").single()["gain"])
+        assertEquals("f1@10/mp4:candidate=-4.0000(ans=2;page=1;role=cur;ctx=album;rxDev=local;here=same)" +
+            "|alt=-7.0000(ans=1;page=1;role=queue;ctx=playlist;rxDev=local;here=other)|n=2", lines("track").single()["gain"])
         // Asked last, from the playlist: the newest by request order, and marked as another context's.
         relay(answer(track(uB), track(uA, mp4 = listOf(file(fA1, "10", "-7.0")))))
         later()
         diag.onPage(page("volume", uA, ctx = "album"))
-        assertTrue(lines("volume").single()["gain"]!!.startsWith("f1@10/mp4:candidate=-7.0000(ans=3;role=queue;ctx=playlist;dev=local;here=other)|alt=-4.0000"),
+        assertTrue(lines("volume").single()["gain"]!!.startsWith("f1@10/mp4:candidate=-7.0000(ans=3;page=1;role=queue;ctx=playlist;rxDev=local;here=other)|alt=-4.0000"),
             "${lines("volume")}")
     }
 
@@ -496,7 +528,7 @@ class GainDiagnosticsTest {
             loudness = { error("cache gone") }, app = { error("settings gone") }, device = { error("no media") })
         failing.setEnabled(true)
         val t = failing.armPage()!!
-        failing.onRelayAnswer(failing.relayTicket()!!, path, answer(track(uA, mp4 = listOf(file(fA1, "10", "-5.0")))))
+        failing.onRelayAnswer(failing.relayTicket(t)!!, path, answer(track(uA, mp4 = listOf(file(fA1, "10", "-5.0")))))
         failing.onPage(page("track", uA, tag = t))
         assertEquals(1, failing.assignments)
     }

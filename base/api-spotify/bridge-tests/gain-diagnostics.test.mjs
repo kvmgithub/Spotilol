@@ -123,7 +123,7 @@ const song = (uri, ctx = 'spotify:album:X') => ({ item: { type: 'track', uri, na
 const arm = (p, tag = 1) => p.call('diag.gain', { on: true, tag });
 const playerOf = (el, volume, cubic) => ({ _player: el, _playerVolume: volume, _cubicVolume: cubic });
 /** A promise the test resolves when it wants (an SDK search that answers late). */
-const deferred = () => { let resolve; const promise = new Promise(r => { resolve = r; }); return { promise, resolve }; };
+const deferred = () => { let resolve, reject; const promise = new Promise((r, j) => { resolve = r; reject = j; }); return { promise, resolve, reject }; };
 /** Every message the page posted, as text: what could reach the host's log by any path. */
 const everything = p => JSON.stringify(p.posted);
 
@@ -157,6 +157,17 @@ test('armed: one message with the tag, the raw player volume and the element, on
   assert.equal(m.muted, false);
   assert.equal(m.faults, 0);
   assert.equal(p.elA.count('volumechange'), 1);
+});
+
+test('the tag is left where the relay reads it into each request: set when armed, 0 when off', async () => {
+  const p = await page();
+  assert.equal(p.window.__mspGainTag, undefined, 'nothing while never armed');
+  await arm(p, 3);
+  assert.equal(p.window.__mspGainTag, 3);
+  await arm(p, 4);
+  assert.equal(p.window.__mspGainTag, 4);
+  await p.call('diag.gain', { on: false });
+  assert.equal(p.window.__mspGainTag, 0);
 });
 
 test('without a tag the page is not armed', async () => {
@@ -313,6 +324,54 @@ test('a search from before a new arming never binds', async () => {
   assert.ok(p.diag().filter(m => m.tag === 2).every(m => m.el === 0), JSON.stringify(p.diag()));
 });
 
+test('a search the SDK replaced before any state never binds; the player it holds now is looked for instead', async () => {
+  const p = await page({ noPlayer: true });
+  const slow = deferred();
+  p.streamer._playerPromise = slow.promise;
+  await arm(p);                                           // looks for A
+  const elB = new FakeMedia('B');
+  elB.volume = 0.25;
+  p.streamer._playerPromise = Promise.resolve(playerOf(elB, 0.3, false));   // replaced, no state in between
+  slow.resolve(p.player);                                 // A's search answers now
+  await settle();
+  assert.equal(p.elA.count('volumechange'), 0, 'A is not bound');
+  assert.equal(elB.count('volumechange'), 1);
+  const m = p.diag().at(-1);
+  assert.deepEqual([m.ev, m.pv, m.vol, m.cubic, m.faults], ['enable', 0.3, 0.25, false, 0]);
+  assert.ok(p.diag().every(x => x.pv !== 0.8), JSON.stringify(p.diag()));
+  p.clock.advance(1000);
+  await p.update();                                       // the next state changes nothing
+  assert.equal(elB.count('volumechange'), 1);
+  assert.equal(p.diag().at(-1), m);
+});
+
+test('a failed search of an earlier arming counts nothing under the new tag; a failed current one is a fault code', async () => {
+  const p = await page({ noPlayer: true });
+  const old = deferred();
+  p.streamer._playerPromise = old.promise;
+  await arm(p, 1);                                        // looks under tag 1
+  await p.call('diag.gain', { on: false });
+  p.streamer._playerPromise = Promise.resolve(p.player);
+  await arm(p, 2);                                        // a healthy player under tag 2
+  old.reject(new Error('spotify:track:RAWMARKER'));
+  p.clock.advance(1000);
+  p.elA.volume = 0.5;
+  await settle();
+  const m = p.diag().filter(x => x.tag === 2).at(-1);
+  assert.deepEqual([m.ev, m.faults, m.fault], ['volume', 0, null], JSON.stringify(m));
+  const failing = deferred();
+  p.streamer._playerPromise = failing.promise;
+  p.clock.advance(1000);
+  await p.update(song('spotify:track:B'));               // looks for the new player
+  failing.reject(new Error('spotify:track:RAWMARKER'));
+  await settle();
+  p.clock.advance(1000);
+  await p.update(song('spotify:track:C'));
+  const n = p.diag().at(-1);
+  assert.deepEqual([n.tag, n.ev, n.faults, n.fault], [2, 'track', 1, 'locate'], JSON.stringify(n));
+  assert.ok(!everything(p).includes('RAWMARKER'));
+});
+
 test('a failing diagnostic read never costs a state message; the next good reading comes through', async () => {
   const run = async on => {
     const p = await page();
@@ -404,4 +463,49 @@ test('on or off, the page gets the same state messages and the same levels', asy
     return { other: JSON.stringify(p.posted.filter(m => m.type !== 'diag' && m.type !== 'result')), volume: p.elA.volume, muted: p.elA.muted };
   };
   assert.deepEqual(await run(true), await run(false));
+});
+
+// The relay's fetch wrapper (ControlRelay.SCRIPT, run at document start), as the Kotlin source has it:
+// it reads the bridge's tag into each request it hands the host, so the host knows the asking page.
+const RELAY = (() => {
+  const kt = readFileSync(new URL('../../host-android/src/main/kotlin/app/myspoti/host/android/ControlRelay.kt', import.meta.url), 'utf8');
+  const m = /private val SCRIPT = """([\s\S]*?)"""\.trimIndent\(\)/.exec(kt);
+  assert.ok(m, 'the relay script in ControlRelay.kt');
+  assert.ok(!/\$[A-Za-z_{]/.test(m[1]), 'a plain raw string, nothing filled in by Kotlin');
+  return m[1];
+})();
+
+const relayPage = () => {
+  const handed = [];
+  const handlers = [];
+  const window = {
+    MyspotiNet: { postMessage: s => handed.push(JSON.parse(s)), addEventListener: (type, fn) => handlers.push(fn) },
+    navigator: { userAgent: 'test', languages: ['de'] },
+    HTMLMediaElement: class { play() {} },
+    fetch: () => { throw new Error('not relayed'); },
+    Headers, Response, URL, setTimeout, clearTimeout,
+  };
+  window.window = window;
+  vm.createContext(window);
+  vm.runInContext(RELAY, window);
+  const answer = (id, status, body) => handlers.forEach(h => h({ data: JSON.stringify({ id, status, headers: '{"content-type":"application/json"}', body }) }));
+  return { window, requests: () => handed.filter(m => m.id), answer };
+};
+
+test('the relay hands the host each request with the tag of the page that sent it, and the answer back unchanged', async () => {
+  const r = relayPage();
+  const url = 'https://gew4-spclient.spotify.com/track-playback/v1/devices/DEVICE/state';
+  r.window.fetch(url, { method: 'PUT', body: '{"n":1}' });               // not armed
+  r.window.__mspGainTag = 5;
+  const armed = r.window.fetch(url, { method: 'PUT', body: '{"n":2}' });
+  r.window.__mspGainTag = 'x';
+  r.window.fetch(url, { method: 'PUT', body: '{"n":3}' });               // not a tag
+  Object.defineProperty(r.window, '__mspGainTag', { configurable: true, get() { throw new Error('spotify:track:RAWMARKER'); } });
+  r.window.fetch(url, { method: 'PUT', body: '{"n":4}' });               // unreadable: the request still goes
+  assert.deepEqual(r.requests().map(m => [JSON.parse(m.body).n, m.gain]), [[1, 0], [2, 5], [3, 0], [4, 0]]);
+  assert.ok(!JSON.stringify(r.requests()).includes('RAWMARKER'));
+  r.answer(r.requests()[1].id, 200, '{"state_machine":{"tracks":[]}}');
+  const res = await armed;
+  assert.equal(res.status, 200);
+  assert.equal(await res.text(), '{"state_machine":{"tracks":[]}}');
 });

@@ -84,7 +84,7 @@ internal class ControlRelay(private val view: WebView, private val fingerprint: 
             Logbook.log("relay #$id rejected: ${it.message}")
             return answer(reply, id, 0, "{}", "")
         }
-        send(id, request, if (m.isNull("body")) null else m.optString("body"), reply)
+        send(id, request, if (m.isNull("body")) null else m.optString("body"), reply, answers.ticket(m))
     }
 
     /** The page's identity, bounded and limited to printable header-safe values. */
@@ -147,7 +147,8 @@ internal class ControlRelay(private val view: WebView, private val fingerprint: 
             .also { require(WebPolicy.isRelayTarget(it.url.toString()) && !AdBlock.isBlocked(it.url.toString())) { "untrusted target" } }
     }
 
-    private fun send(id: Int, request: Request, body: String?, reply: JavaScriptReplyProxy) {
+    /** [gainTicket]: the gain diagnostics' ticket taken at the relay's entry (see [RelayAnswers.ticket]). */
+    private fun send(id: Int, request: Request, body: String?, reply: JavaScriptReplyProxy, gainTicket: Long?) {
         val asked = android.os.SystemClock.uptimeMillis()
         val label = "${request.method} ${shortPath(request.url.toString())}"
         // The device the previous page left (app swiped away or killed before its unload handler
@@ -158,9 +159,6 @@ internal class ControlRelay(private val view: WebView, private val fingerprint: 
                 ?.takeIf { DEVICE_ID.matches(it) }
                 ?.let { mine -> devices.registering(mine)?.let { (old, seq) -> sayGoodbye(request, old, seq) } }
         } else if (request.method != "DELETE") devices.sent(request.url.toString(), body)
-        // The gain diagnostics' ticket for this request: its page and order (null while they are off
-        // or no page is armed: nothing is read).
-        val gainTicket = MyspotiRuntime.gainDiagnostics?.relayTicket()
         http.newCall(request).enqueue(object : Callback {
             override fun onFailure(call: Call, e: IOException) {
                 MyspotiRuntime.network.failed()
@@ -178,10 +176,6 @@ internal class ControlRelay(private val view: WebView, private val fingerprint: 
                     val text = runCatching { BoundedHttp.text(it.body, MAX_RESPONSE_BYTES) }.getOrElse { e ->
                         Logbook.log("relay $label response rejected: ${e.message}")
                         return answer(reply, id, 0, "{}", "")
-                    }
-                    val out = JSONObject()
-                    it.headers.names().forEach { name ->
-                        if (!name.equals("Set-Cookie", true) && !name.equals("Set-Cookie2", true)) out.put(name, it.header(name))
                     }
                     val net = android.os.SystemClock.uptimeMillis() - asked
                     Logbook.log("relay $label -> ${it.code} in $net ms")
@@ -207,24 +201,8 @@ internal class ControlRelay(private val view: WebView, private val fingerprint: 
                     }
                     if (registration) Regex("\"effective_license\"\\s*:\\s*\"([^\"]*)\"").find(text)
                         ?.let { m -> Logbook.log("registration: effective_license=${m.groupValues[1]}") }
-                    // An ad in the queue Spotify sends: the song before it goes on to the next song
-                    // instead, before the page sees the queue (AdBlock.withoutAds, Myspoti 2.0.0).
-                    val playback = path.contains("/track-playback/")
-                    val given = if (playback) AdBlock.withoutAds(text) else null
-                    given?.second?.forEach { note -> Logbook.log("ad left out: $note") }
-                    // Marked as holding an ad, yet left as it was: why (which marker, what kept it), once per reason.
-                    if (playback && given == null) AdBlock.whyKept(text)?.takeIf { it != lastAdKept }?.let { why -> lastAdKept = why; Logbook.log("ad kept in the queue: $why") }
-                    val sent = given?.first ?: text
-                    // Both ways on from this song lead to the ad: the player plays the next song
-                    // just before this one ends (AdBlock.adAhead).
-                    if (playback) AdBlock.adAhead(sent)?.let { a ->
-                        if (AdBlock.ahead.value != a) Logbook.log("ad ahead: ${a.nextUri} is played before the end")
-                        AdBlock.ahead.value = a
-                    }
-                    answer(reply, id, it.code, out.toString(), sent)
-                    // Gain diagnostics: what the page got, read after it got it; nothing of theirs
-                    // reaches the answer or this relay.
-                    if (gainTicket != null && playback && it.code in 200..299) runCatching { MyspotiRuntime.gainDiagnostics?.onRelayAnswer(gainTicket, path, sent) }
+                    // The page's answer (without ads AdBlock leaves out), then the gain diagnostics' look at it.
+                    answers.deliver(path, it.code, it.headers, text, gainTicket) { status, headersJson, sent -> answer(reply, id, status, headersJson, sent) }
                 }
             }
         })
@@ -254,8 +232,12 @@ internal class ControlRelay(private val view: WebView, private val fingerprint: 
         })
     }
 
-    /** The last reason an ad was kept in a queue (see [AdBlock.whyKept]): logged once per reason. */
-    @Volatile private var lastAdKept: String? = null
+    /** The last step of every answer, and the gain diagnostics' part in the relay (see [RelayAnswers]). */
+    private val answers = RelayAnswers(
+        log = Logbook::log,
+        tickets = { tag -> MyspotiRuntime.gainDiagnostics?.relayTicket(tag) },
+        observe = { ticket, path, body -> MyspotiRuntime.gainDiagnostics?.onRelayAnswer(ticket, path, body) },
+    )
 
     /** Back to the document that asked, on the main thread (reply proxies are thread-bound). */
     private fun answer(reply: JavaScriptReplyProxy, id: Int, status: Int, headersJson: String, body: String) {
@@ -418,7 +400,10 @@ internal class ControlRelay(private val view: WebView, private val fingerprint: 
                 return new Promise((resolve, reject) => {
                   const id = ++seq;
                   pending.set(id, { resolve, reject, url, init });
-                  net.postMessage(JSON.stringify({ id, url, method, headers, body: body == null ? null : body, credentials }));
+                  // The gain diagnostics' tag of this page (0: not armed), for the answer's origin; nothing of it is sent on.
+                  let gain = 0;
+                  try { const t = window.__mspGainTag; gain = Number.isSafeInteger(t) && t > 0 ? t : 0; } catch (e) { /* none */ }
+                  net.postMessage(JSON.stringify({ id, url, method, headers, body: body == null ? null : body, credentials, gain }));
                 });
               };
             })();

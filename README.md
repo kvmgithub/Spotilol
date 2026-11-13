@@ -61,8 +61,6 @@ Kept from Myspoti: native screens, library tools, Spotify Connect, local Recap, 
 
 From beta.9: the page's ad managers switched off at runtime (the device registration is no longer altered), X-Requested-With suppressed, renderer-crash recovery, per-install browser identity that follows the WebView version, a kept client device id, relayed requests with the page's own browser headers, login that waits for a real token, crossfade, Recents, show/episode pages and the podcast player, playlist add/remove, and the UI fixes.
 
-From Orpheon 1.0.0-beta.1: larger touch targets around the player's and the lists' small buttons, controls that stay in place on songs without lyrics, a Canvas clip that gives its decoder back in the background, lyrics that keep the screen on for ten minutes after the last touch, older playlist addresses read as playlists, Remove from Your Library in a library row's menu, artists sorted by the date they were followed. Not from Orpheon: its ad handling, which leaves the ads on the phone's own player; MySpotilol keeps its own.
-
 From 2.0.0: ads left out of Spotify's track-playback queue in the relay before the page sees them, and the next song played just before an ad that cannot be left out; a player page Chromium never throttles; failed page loads retried; licence rate limits held; add songs, Spotify Codes; per-network streaming quality; the new welcome screen, player and page animations.
 
 From 2.1.0: ads marked only by their metadata left out, a reload past a stuck ad that stays muted until a song plays, licence holds that pause instead of skipping, the page always visible to itself, no idle copy of the phone left among the Connect devices, 15 s headphone skips on podcasts, adding a playlist or album to a playlist, library filter chips, listening stats, likes made offline sent later, page caches, Polish, Russian and Chinese.
@@ -73,6 +71,7 @@ From 2.3.0: repeat one through an ad, a pause during an ad that stays a pause, l
 
 From 2.4.0: repeat one through ads, stalls and reloads, autoplay that goes on, a failed session check that keeps the session, repairs that wait while offline, a stale page token after a network change repaired by a reload, plays sent again once a reloaded page has joined Spotify Connect, the queue kept over an ad's reload, ads held silent, the playback service kept in front during ads and loading, a phone call that pauses and resumes, What's New with release notifications, playlists reordered by hand, albums shared, Browse categories with shows and episodes, long titles that scroll, lyrics that keep the screen on.
 
+From Orpheon 1.0.0-beta.1: larger touch targets around the player's and the lists' small buttons, controls that stay in place on songs without lyrics, a Canvas clip that gives its decoder back in the background, lyrics that keep the screen on for ten minutes after the last touch, older playlist addresses read as playlists, Remove from Your Library in a library row's menu, artists sorted by the date they were followed. Not from Orpheon: its ad handling, which leaves the ads on the phone's own player; MySpotilol keeps its own.
 
 ## Security rules
 

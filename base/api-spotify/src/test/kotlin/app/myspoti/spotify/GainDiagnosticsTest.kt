@@ -369,6 +369,49 @@ class GainDiagnosticsTest {
 
     // --- provenance ---------------------------------------------------------------------------------
 
+    @Test fun `many reloads keep the waiting lines bounded, every event written or counted, each line with its own page`() {
+        val written = mutableListOf<Pair<Long, String>>()
+        val d = GainDiagnostics(output = { written += time.now to it }, schedule = time::schedule, clock = { time.now })
+        d.setEnabled(true)
+        var events = 1L                                         // the start line
+        var most = 0
+        val pages = 1_000
+        // A page every 500 ms, each with a reading and an answer: twice what two lines a second can write.
+        repeat(pages) {
+            val t = d.armPage()!!
+            d.onPage(page("volume", uA, tag = t, el = t.toInt()))
+            d.onRelayAnswer(d.relayTicket(t)!!, path, answer(track(uA, mp4 = listOf(file(fA1, "10", "-5.0")))))
+            events += 2
+            most = maxOf(most, d.waitingLines)
+            time.advance(500)
+            d.pageGone()
+        }
+        assertTrue(most <= GainDiagnostics.MAX_WAITING, "at most ${GainDiagnostics.MAX_WAITING} waiting, whatever the number of pages: $most")
+        time.advance(10_000)                                    // no new events: what waits goes out
+        assertEquals(0, d.waitingLines)
+        assertEquals(0, time.pending)
+        val f = written.map { fields(it.second) }
+        val dropped = f.last()["dropped"]!!.toLong()
+        assertTrue(dropped > 0, "the load is more than the rate: some are dropped")
+        assertEquals(events, f.sumOf { 1L + it["merged"]!!.toLong() } + dropped, "every event written, merged or counted")
+        // Each line with the page it came from: its el and its answer's request order are that page's tag.
+        assertTrue(f.filter { it["ev"] == "volume" }.all { it["page"] == it["el"] })
+        assertTrue(f.filter { it["ev"] == "answer" }.all { it["page"] == it["ans"] })
+        assertTrue(f.any { it["page"] == "$pages" }, "the newest page's lines come out")
+        // Never more than two lines in a second.
+        for ((at, _) in written) assertTrue(written.count { it.first in at - 999..at } <= GainDiagnostics.LINES_PER_S, "at $at")
+        // Off: nothing waits, nothing more is written.
+        val t = d.armPage()!!
+        repeat(5) { d.onPage(page("volume", uA, tag = t)) }
+        assertTrue(d.waitingLines > 0)
+        d.setEnabled(false)
+        assertEquals(0, d.waitingLines)
+        assertEquals(0, time.pending)
+        val before = written.size
+        time.advance(5_000)
+        assertEquals(before, written.size)
+    }
+
     @Test fun `the page's context is its own, also when only the context changes`() {
         on()
         relay(answer(track(uA, mp4 = listOf(file(fA1, "10", "-5.0")))))

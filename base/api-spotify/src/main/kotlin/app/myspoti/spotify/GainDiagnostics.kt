@@ -44,8 +44,11 @@ import java.util.Locale
  * answer ("capped") or "gain=none" are limits of this observation, not Spotify sending no gain.
  *
  * Bounds: [MAX_ENTRIES] song/file assignments (the least recently seen goes), [MAX_PER_ANSWER] file
- * observations read from one answer, [LINES_PER_S] lines a second (one waiting line per kind, the
- * newest, with how many it stands for), [MAX_SHOWN] candidates written per line and at most
+ * observations read from one answer, [LINES_PER_S] lines a second, [MAX_WAITING] lines waiting
+ * for their turn (one per kind and page, the newest, with how many it stands for, "merged"; past
+ * [MAX_WAITING] the oldest waiting line of a page or an answer goes, counted with the events it
+ * stood for in "dropped": every event is written, merged into a later line of its own page, or
+ * counted), [MAX_SHOWN] candidates written per line and at most
  * [MAX_GAIN_CHARS] characters of them on a page line. Lines carry ids of
  * the run (t1 for a song, f1 for a file; an id held by an assignment is never given away) instead
  * of Spotify's, fixed words for manifest groups (unknown ones are only counted), and no token,
@@ -112,6 +115,8 @@ class GainDiagnostics(
     private var bad = 0L
     private var evicted = 0L
     private var aliasEvicted = 0L
+    /** Events whose waiting line went past [MAX_WAITING] (see [emit]). */
+    private var dropped = 0L
     /** Tags handed to pages, never reused; [armed] is the one accepted now (0: none). */
     private var tags = 0L
     @Volatile private var armed = 0L
@@ -135,7 +140,7 @@ class GainDiagnostics(
 
     /** When the last lines went out (at most [LINES_PER_S] within [WINDOW_MS]). */
     private val written = ArrayDeque<Long>()
-    /** One waiting line per key (see [emit]), oldest first, with how many earlier ones it replaced. */
+    /** At most [MAX_WAITING] waiting lines, one per key (see [emit]), oldest first, with how many earlier ones it replaced. */
     private val waiting = LinkedHashMap<String, Pair<String, Int>>()
     private var cancelFlush: (() -> Unit)? = null
 
@@ -181,6 +186,10 @@ class GainDiagnostics(
         requests++
         return (armed shl 32) or (requests and ORDER_MASK)
     }
+
+    /** How many lines wait for their turn (at most [MAX_WAITING]). */
+    internal val waitingLines: Int
+        get() = synchronized(this) { waiting.size }
 
     /** How many song/file assignments are held. */
     internal val assignments: Int
@@ -319,6 +328,7 @@ class GainDiagnostics(
         bad = 0
         evicted = 0
         aliasEvicted = 0
+        dropped = 0
         requests = 0
         armed = 0L
     }
@@ -334,7 +344,9 @@ class GainDiagnostics(
     /**
      * A line now if this second has room, else it waits as the one line of its [key] (the newest):
      * its kind and, for a page's line or an answer's, its page, so lines of two pages never merge.
-     * ponytail: a waiting line per kind and page; pages come seconds apart, so a few at most.
+     * At most [MAX_WAITING] keys wait: a new one past that pushes out the oldest waiting line other
+     * than a start line, and the events it stood for (itself and those merged into it) are counted
+     * in "dropped". The newest line always waits: the current page's reading is the one kept.
      */
     private fun emit(key: String, body: String) {
         val now = clock()
@@ -345,6 +357,10 @@ class GainDiagnostics(
             return
         }
         val held = waiting.remove(key)
+        if (held == null && waiting.size >= MAX_WAITING) {
+            val oldest = waiting.keys.firstOrNull { it != KIND_META } ?: waiting.keys.first()
+            dropped += 1 + waiting.remove(oldest)!!.second
+        }
         waiting[key] = line to (held?.let { it.second + 1 } ?: 0)
         scheduleFlush(now)
     }
@@ -375,7 +391,7 @@ class GainDiagnostics(
     private fun write(now: Long, line: String, merged: Int) {
         written.addLast(now)
         runCatching {
-            output("$PREFIX $line table=${entries.size} evicted=$evicted aliasEvicted=$aliasEvicted late=$late bad=$bad merged=$merged")
+            output("$PREFIX $line table=${entries.size} evicted=$evicted aliasEvicted=$aliasEvicted late=$late bad=$bad merged=$merged dropped=$dropped")
         }
     }
 
@@ -426,6 +442,8 @@ class GainDiagnostics(
         const val MAX_PER_ANSWER = 512
         /** Run ids kept per kind: those held by an assignment, then the most recently used. */
         const val MAX_ALIASES = 512
+        /** Lines waiting for their turn, of all kinds and pages together (see [emit]). */
+        const val MAX_WAITING = 4
         /** Characters of candidates on one page line; the rest are counted ("gainMore"). */
         const val MAX_GAIN_CHARS = 3_000
 

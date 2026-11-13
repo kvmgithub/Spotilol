@@ -179,6 +179,17 @@ jobs:
           Path(sys.argv[2], 'errors.txt').write_text('\n'.join(keep[:800]) + '\n')
           Path(sys.argv[2], 'tail.txt').write_text('\n'.join(lines[-1500:]) + '\n')
           Path(sys.argv[2], 'run.txt').write_text(f"run={os.environ['GITHUB_RUN_NUMBER']} sha={os.environ['GITHUB_SHA']}\n")
+          # Failed tests with their messages (the console shows only class and line), also in the job log.
+          import glob, xml.etree.ElementTree as ET
+          failed = []
+          for f in sorted(glob.glob('*/build/test-results/**/*.xml', recursive=True)):
+              for case in ET.parse(f).getroot().iter('testcase'):
+                  for bad in list(case.iter('failure')) + list(case.iter('error')):
+                      failed.append(f"{case.get('classname')} > {case.get('name')}: {(bad.get('message') or '')[:1500]}")
+          text = '\n'.join(failed)
+          if secret: text = text.replace(secret, '[redacted]')
+          Path(sys.argv[2], 'failed-tests.txt').write_text(text + '\n')
+          print(text or 'no failed test in the reports')
           PY
       - name: Upload failure log (work branches)
         if: failure() && github.ref != 'refs/heads/myspoti-ui'

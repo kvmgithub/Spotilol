@@ -406,9 +406,9 @@ class GainDiagnosticsTest {
         }
     }
 
-    private fun stateOf(name: String) =
+    private fun stateOf(name: String, paused: Boolean = false) =
         """{"type":"state","state":{"track":{"kind":"track","uri":"spotify:track:$name","uid":"u$name","name":"$name","durationMs":200000},
-           |"contextUri":"spotify:playlist:C","next":null,"isPaused":false,"isBuffering":false,"positionMs":0,
+           |"contextUri":"spotify:playlist:C","next":null,"isPaused":$paused,"isBuffering":false,"positionMs":0,
            |"timestamp":${System.currentTimeMillis()},"restrictions":{}}}""".trimMargin()
 
     /** Reads of the page's state, made on timers: not playback commands. */
@@ -431,8 +431,11 @@ class GainDiagnosticsTest {
             host.messages.emit("""{"type":"diag","v":1,"ev":"track","uri":"spotify:track:A","el":1,"pv":0.8,"pvSt":"ok","vol":0.5,"merged":0}""")
             host.messages.emit(stateOf("B"))
             withTimeout(10_000) { player.state.first { it?.item?.uri == "spotify:track:B" } }
+            // A pause, as the page then reports it: no fade or rise whose timers could land on
+            // either side of the end of the recording (a skip's rise did, once).
             player.pause()
-            player.next()
+            host.messages.emit(stateOf("B", paused = true))
+            withTimeout(10_000) { player.state.first { it?.isPaused == true } }
             delay(1_000)
             host.calls.toList()
         } finally {

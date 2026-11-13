@@ -35,7 +35,8 @@ import java.util.Locale
  *
  * Bounds: [MAX_ENTRIES] song/file assignments (the least recently seen goes), [MAX_PER_ANSWER] file
  * observations read from one answer, [LINES_PER_S] lines a second (one waiting line per kind, the
- * newest, with how many it stands for), [MAX_SHOWN] candidates written per line. Lines carry ids of
+ * newest, with how many it stands for), [MAX_SHOWN] candidates written per line and at most
+ * [MAX_GAIN_CHARS] characters of them on a page line. Lines carry ids of
  * the run (t1 for a song, f1 for a file; an id held by an assignment is never given away) instead
  * of Spotify's, fixed words for manifest groups (unknown ones are only counted), and no token,
  * cookie, URL, name, raw id or free error text. A file is a "candidate" (offered in an answer) or
@@ -241,7 +242,16 @@ class GainDiagnostics(
             else -> "other"
         }
         val candidates = if (uri == null) emptyList() else entries.values.filter { it.uri == uri }
-        val gains = candidates.take(MAX_SHOWN).map { describe(it, ctx) }
+        // Bounded in number and length: one line stays whole in Logcat (about 4,000 bytes a line).
+        val gains = ArrayList<String>()
+        var room = MAX_GAIN_CHARS
+        for (c in candidates) {
+            if (gains.size == MAX_SHOWN) break
+            val d = describe(c, ctx)
+            if (d.length + 1 > room) break
+            gains += d
+            room -= d.length + 1
+        }
         val l = if (uri == null) null else runCatching { loudness(uri) }.getOrNull()
         val loudSt = when { uri == null -> "unknown"; l == null -> "not-read"; l.isNaN() -> "unusable"; else -> "cached" }
         emit(KIND_PAGE, "ev=$ev track=${uri?.let(::trackId) ?: "unknown"} kind=$kind ctx=$ctx pl=${count("pl")} el=${count("el")} " +
@@ -396,6 +406,8 @@ class GainDiagnostics(
         const val MAX_PER_ANSWER = 512
         /** Run ids kept per kind: those held by an assignment, then the most recently used. */
         const val MAX_ALIASES = 512
+        /** Characters of candidates on one page line; the rest are counted ("gainMore"). */
+        const val MAX_GAIN_CHARS = 3_000
 
         private const val ORDER_MASK = 0xffffffffL
         private const val KIND_META = "meta"
@@ -412,7 +424,12 @@ class GainDiagnostics(
         private val FORMAT = Regex("^[0-9]{1,3}$")
         private val STATE_PATH = Regex("^/track-playback/v1/devices/[^/]+/state$")
 
-        private fun num(v: Double?): String = v?.let { String.format(Locale.ROOT, "%.4f", it) } ?: "unknown"
+        /** A number as written; one too large for a level or a gain is not written out in full. */
+        private fun num(v: Double?): String = when {
+            v == null -> "unknown"
+            !v.isFinite() || kotlin.math.abs(v) > 1e6 -> "out-of-range"
+            else -> String.format(Locale.ROOT, "%.4f", v)
+        }
         private fun flag(v: Boolean?): String = v?.toString() ?: "unknown"
 
         /** Which kind of request an answer came for, without its device id. */

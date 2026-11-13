@@ -128,10 +128,10 @@ class GainDiagnosticsTest {
     // --- what the page says (the bridge's "diag" message) --------------------------------------------
 
     private fun page(ev: String, uri: String?, pv: String = "0.8", pvSt: String = "ok", el: Int = 1, ctx: String = "playlist",
-                     tag: Long = this.tag, extra: String = ""): JsonObject =
+                     tag: Long = this.tag, level: String = "0.512", extra: String = ""): JsonObject =
         Json.parseToJsonElement(
             """{"type":"diag","v":2,"tag":$tag,"ev":"$ev","uri":${uri?.let { "\"$it\"" } ?: "null"},"ctx":"$ctx","pl":1,"el":$el,
-               |"pv":$pv,"pvSt":"$pvSt","cubic":true,"vol":0.512,"muted":false,"paused":false,"level":0.512,"routed":false,
+               |"pv":$pv,"pvSt":"$pvSt","cubic":true,"vol":0.512,"muted":false,"paused":false,"level":$level,"routed":false,
                |"adMute":false,"wrote":"level","wroteMs":40,"wroteMatch":true,"merged":0,"faults":0,"fault":null$extra}""".trimMargin(),
         ).jsonObject
 
@@ -412,6 +412,26 @@ class GainDiagnosticsTest {
         assertTrue(lines.last().length < 4_000, "one bounded line: ${lines.last().length}")
     }
 
+    @Test fun `a page line stays whole in Logcat, also with every candidate in conflict`() {
+        on()
+        // Four answers, each with 20 files of one song at another gain and from another context: every
+        // candidate keeps four observations, all of them differing.
+        listOf("album", "playlist", "artist", "station").forEachIndexed { n, kind ->
+            relay(answer(track(uA, mp4 = (0 until 20).map { i -> file("%040x".format(i + 1), "123", "-1234${n}.123456") },
+                context = "spotify:$kind:CONTEXTSECRET")))
+            later()
+        }
+        diag.onPage(page("track", uA, ctx = "show", pv = "1e300", level = "1e300"))
+        val line = lines.last()
+        val p = fields(line)
+        val shown = p["gain"]!!.split(',')
+        assertTrue(line.length < 4_000, "${line.length}: $line")
+        assertTrue(shown.size in 1 until GainDiagnostics.MAX_SHOWN, "the length bounds it first: ${shown.size}")
+        assertTrue(shown.all { it.endsWith("|n=4") && it.split("|alt=").size == 4 }, "whole candidates only: $shown")
+        assertEquals("${20 - shown.size}", p["gainMore"])
+        assertEquals(listOf("out-of-range", "out-of-range"), listOf(p["pv"], p["level"]))
+    }
+
     @Test fun `a flood of events gives at most two lines a second, the rest merged and counted`() {
         on() // the start line is the first of this second
         repeat(1_000) { diag.onPage(page("volume", uA)) }
@@ -481,7 +501,7 @@ class GainDiagnosticsTest {
         assertEquals(1, failing.assignments)
     }
 
-    @Test fun `a large answer and page messages at the same time: nothing lost, nothing thrown`() {
+    @Test fun `a large answer and page messages at the same time, nothing lost, nothing thrown`() {
         on()
         val big = answer(*(0 until 300).map { i -> track("spotify:track:BIG$i", mp4 = listOf(file("%040x".format(i + 1), "10", "-2.0"))) }.toTypedArray())
         val pool = Executors.newSingleThreadExecutor()

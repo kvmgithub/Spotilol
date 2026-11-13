@@ -285,6 +285,36 @@ class SpotifyPlayer(
      */
     private val wake = kotlinx.coroutines.channels.Channel<Unit>(kotlinx.coroutines.channels.Channel.CONFLATED)
 
+    /**
+     * The gain diagnostics (see [GainDiagnostics] and [setGainDiagnostics]): observation only. Fed by
+     * the page's "diag" messages here and by the host's relay answers; reads the loudness, sound
+     * settings and Connect device this player already has, and never asks for any of them.
+     */
+    val gainDiagnostics = GainDiagnostics(
+        output = { line -> bridge.logger?.invoke(line) },
+        schedule = { ms, run -> val job = scope.launch { delay(ms); run() }; { job.cancel() } },
+        loudness = { uri -> loudness[uri] },
+        app = { GainDiagnostics.App(normalize = normalize, boost = boost, crossfadeSeconds = crossfadeSeconds, adMuted = adMuted) },
+        device = { lastMedia?.active },
+    ).also { d -> bridge.diag = d::onPage }
+
+    /** A page was told to observe for the gain diagnostics and not told to stop since. */
+    @Volatile private var gainPageOn = false
+
+    /** The diagnostics switch, for the gain diagnostics: on or off here, and in the page when it is up. */
+    fun setGainDiagnostics(on: Boolean) {
+        gainDiagnostics.setEnabled(on)
+        if (bridge.ready.value) scope.launch { sendGainDiagnostics() }
+    }
+
+    /** The page's side of the gain diagnostics as the switch is now (its listener on or off). */
+    private suspend fun sendGainDiagnostics() {
+        val on = gainDiagnostics.enabled
+        runCatching { bridge.call("diag.gain", buildJsonObject { put("on", on) }, quiet = true) }
+            .onSuccess { gainPageOn = on }
+            .onFailure { bridge.logger?.invoke("gain diagnostics not set in the page: ${it.message}") }
+    }
+
     init {
         scope.launch {
             bridge.events.collect { (type, payload) ->
@@ -343,6 +373,8 @@ class SpotifyPlayer(
                 if (boost > 1.0) applyBoost()
                 if (crossfadeSeconds > 0) applyCrossfade()
                 if (normalize) { normalizedFor = null; normalizeSoon() }
+                // A new page starts without the gain diagnostics' listener: on again while the switch is.
+                if (gainDiagnostics.enabled || gainPageOn) scope.launch { sendGainDiagnostics() }
                 // The page keeps its volume: an app closed during a muted ad must not stay silent.
                 // Only when this page is Connect's active device: the volume is that device's otherwise, and a
                 // speaker at 0 went to 100 % (Myspoti 2.4.0, #159).
@@ -2422,11 +2454,6 @@ class SpotifyPlayer(
      */
     @Volatile var normalize: Boolean = false
         private set
-
-    /** Gain diagnostics: not implemented yet. */
-    val gainDiagnostics = GainDiagnostics(output = {}, schedule = { _, _ -> {} })
-
-    fun setGainDiagnostics(on: Boolean) {}
 
     /** Spotify's loudness in dB by track uri; NaN: Spotify has none for it. */
     private val loudness = java.util.concurrent.ConcurrentHashMap<String, Double>()

@@ -257,6 +257,99 @@
   let riseTimers = [];
   const cancelFade = () => { fadeTimers.forEach(clearTimeout); fadeTimers = []; riseTimers.forEach(clearTimeout); riseTimers = []; };
 
+  // --- gain diagnostics (read-only, off unless the host turns it on) ------------------------------
+  //
+  // What sets the level of the element this phone plays: the page player's own volume read raw
+  // (_playerVolume and _cubicVolume: ownLevel() makes a missing one 1, which proves nothing), the
+  // element's volume and mute, and the last level this bridge wrote on it itself (gdWrote, at the
+  // places that write one). Told on 'diag.gain' {on: true}, at a change of song or of element, and
+  // at the element's own volumechange; at most GD_PER_S messages a second, those in between told
+  // after as one (the newest reading) with how many it stands for. Nothing here sets a level,
+  // routes an element, polls, or asks Spotify anything; off, it holds no listener and no timer.
+  const GD_PER_S = 2;
+  const gd = { on: false, player: null, el: null, uri: null, ctx: null, ids: new WeakMap(), count: 0, wrote: null, sent: [], waiting: null, merged: 0, timer: 0 };
+  const gdWrote = (el, kind) => { if (gd.on) gd.wrote = { el, kind, value: el.volume, at: performance.now() }; };
+  const gdNum = v => typeof v === 'number' && Number.isFinite(v) ? v : null;
+  // The kind of a context uri (spotify:<kind>:..., a user's collection as "collection"), never its id.
+  const gdCtx = uri => {
+    const m = /^spotify:(?:user:[^:]+:)?([a-z]+)/.exec(uri || '');
+    return m ? m[1] : null;
+  };
+  const gdRead = ev => {
+    const el = gd.el, p = gd.player;
+    const raw = p ? p._playerVolume : undefined;
+    const w = gd.wrote && gd.wrote.el === el ? gd.wrote : null;
+    return {
+      type: 'diag', v: 1, ev, uri: gd.uri, ctx: gd.ctx,
+      el: el ? gd.ids.get(el) || 0 : 0,
+      pv: gdNum(raw), pvSt: raw === undefined ? 'absent' : gdNum(raw) === null ? 'invalid' : 'ok',
+      cubic: p && typeof p._cubicVolume === 'boolean' ? p._cubicVolume : null,
+      vol: el ? el.volume : null, muted: el ? el.muted : null, paused: el ? el.paused : null,
+      level: el ? levelOf(el) : null, routed: el ? boosted(el) : null,
+      adMute: !!window.__mspMuted,
+      wrote: w ? w.kind : null, wroteMs: w ? Math.round(performance.now() - w.at) : null,
+      wroteMatch: w ? el.volume === w.value : null,
+      merged: 0,
+    };
+  };
+  const gdFlush = () => {
+    gd.timer = 0;
+    if (!gd.on || gd.waiting === null) return;
+    const now = performance.now();
+    gd.sent = gd.sent.filter(t => now - t < 1000);
+    if (gd.sent.length >= GD_PER_S) { gd.timer = setTimeout(gdFlush, Math.max(0, 1000 - (now - gd.sent[0]))); return; }
+    const msg = gdRead(gd.waiting);
+    msg.merged = gd.merged;
+    gd.waiting = null;
+    gd.merged = 0;
+    gd.sent.push(now);
+    post(msg);
+  };
+  const gdSend = ev => {
+    if (!gd.on) return;
+    const now = performance.now();
+    gd.sent = gd.sent.filter(t => now - t < 1000);
+    if (gd.waiting === null && gd.sent.length < GD_PER_S) { gd.sent.push(now); post(gdRead(ev)); return; }
+    if (gd.waiting !== null) gd.merged++;
+    gd.waiting = ev;
+    if (!gd.timer) gd.timer = setTimeout(gdFlush, Math.max(0, 1000 - (now - gd.sent[0])));
+  };
+  const gdVolume = () => gdSend('volume');
+  // Listens on the element the player plays now, and on no other one. -> whether it changed.
+  const gdFollow = el => {
+    if (el === gd.el) return false;
+    if (gd.el) gd.el.removeEventListener('volumechange', gdVolume);
+    gd.el = el;
+    if (el) {
+      if (!gd.ids.has(el)) gd.ids.set(el, ++gd.count);
+      el.addEventListener('volumechange', gdVolume);
+    }
+    return true;
+  };
+  const gdLocate = async () => {
+    const p = await localPlayer().catch(() => null);
+    if (!gd.on) return;
+    gd.player = p;
+    gdFollow(p && p._player instanceof HTMLMediaElement ? p._player : null);
+  };
+  // From pushState, while on: a new song is told, so is a new element under the same one.
+  const gdState = state => {
+    const p = gd.player;
+    const moved = !!p && p._player instanceof HTMLMediaElement && gdFollow(p._player);
+    const uri = state && state.track ? state.track.uri : null;
+    if (uri !== gd.uri) {
+      gd.uri = uri;
+      gd.ctx = gdCtx(state && state.contextUri);
+      if (!p) gdLocate().then(() => gdSend('track')); else gdSend('track');
+    } else if (moved) gdSend('element');
+  };
+  const gdOff = () => {
+    gd.on = false;
+    if (gd.el) gd.el.removeEventListener('volumechange', gdVolume);
+    clearTimeout(gd.timer);
+    Object.assign(gd, { player: null, el: null, uri: null, ctx: null, wrote: null, sent: [], waiting: null, merged: 0, timer: 0 });
+  };
+
   // --- audio graph: volume boost and crossfade -------------------------------
   //
   // The page's media elements play through Web Audio once a boost above 100 % or a crossfade
@@ -335,13 +428,15 @@
   const setLevel = (el, player, v) => {
     const own = player && el === player._player ? ownLevel(player) : 1;
     const level = Math.min(1, Math.max(SILENT, v));
-    if (!boosted(el) || own <= SILENT) { el.volume = level; return; }
+    if (!boosted(el) || own <= SILENT) { el.volume = level; gdWrote(el, 'level'); return; }
     el.volume = own;
+    gdWrote(el, 'level');
     boost.out.gain.setTargetAtTime(Math.min(1, level / own), boost.ctx.currentTime, 0.015);
   };
   const levelOf = el => el.volume * (boosted(el) ? boost.out.gain.value : 1);
   const restoreOwn = (el, player) => {
     el.volume = player && el === player._player ? ownLevel(player) : 1;
+    gdWrote(el, 'restore');
     if (boosted(el)) boost.out.gain.setTargetAtTime(1, boost.ctx.currentTime, 0.015);
   };
 
@@ -1061,7 +1156,7 @@
       for (const el of els) {
         silence(el);
         el.muted = false;
-        if (a.on) el.volume = SILENT; else restoreOwn(el, player);
+        if (a.on) { el.volume = SILENT; gdWrote(el, 'mute'); } else restoreOwn(el, player);
       }
       return els.size;
     },
@@ -1213,6 +1308,24 @@
       return { seconds: xf.seconds, routed: boost.count, state: boost.ctx.state };
     },
 
+    // The gain diagnostics (see "gain diagnostics"): {on} -> {on, el}. Turned on again, the listener
+    // stays the one it was and nothing is told twice (a page resumed, the host's switch set again).
+    'diag.gain': async a => {
+      if (!a.on) { gdOff(); return { on: false }; }
+      const first = !gd.on;
+      gd.on = true;
+      await gdLocate();
+      if (!gd.on) return { on: false };
+      if (first) {
+        let s = null;
+        try { s = lastState ? JSON.parse(lastState) : null; } catch (e) { /* none */ }
+        gd.uri = s && s.track ? s.track.uri : null;
+        gd.ctx = gdCtx(s && s.contextUri);
+        gdSend('enable');
+      }
+      return { on: true, el: gd.el ? gd.ids.get(gd.el) : 0 };
+    },
+
     'volume.get': () => need().playback.getVolume(),
     'volume.set': a => need().playback.setVolume(a.level),
     'device.activeNow': () => activeNow(),
@@ -1303,6 +1416,8 @@
     const state = mapState(services.player.getState());
     // The song's gain from its first moment (see "normalization").
     nzTrack(state && state.track ? state.track.uri : null);
+    // The gain diagnostics, while on: a change of song or of element (read-only).
+    if (gd.on) gdState(state);
     // An ad is on: the page's ad managers are turned off again (it re-arms them per break).
     if (state && state.track && state.track.kind === 'ad') { try { adsOff(); } catch (e) { /* no service */ } }
     const json = JSON.stringify(state);

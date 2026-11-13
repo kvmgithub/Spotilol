@@ -26,6 +26,15 @@ object BetaLogs {
     fun setEnabled(context: android.content.Context, on: Boolean) {
         enabled.value = on
         context.getSharedPreferences(PREF, android.content.Context.MODE_PRIVATE).edit().putBoolean("enabled", on).apply()
+        applyToPlayer()
+    }
+
+    /**
+     * The same switch for the gain diagnostics (observation only, lines in the app's log): on with
+     * the diagnostics, off without. Set at start and at every change of the switch.
+     */
+    fun applyToPlayer() {
+        if (app.myspoti.host.android.MyspotiRuntime.isStarted) app.myspoti.host.android.MyspotiRuntime.spotify.player.setGainDiagnostics(enabled.value)
     }
 
     /** Clipboard and share sheets refuse very large texts. */

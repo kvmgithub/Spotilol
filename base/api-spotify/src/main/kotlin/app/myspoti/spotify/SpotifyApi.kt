@@ -52,8 +52,11 @@ class SpotifyApi(
 
     fun updateOps(newOps: GqlOps) { currentOps = newOps }
 
-    /** The account may change from here on (see [SpotifyHttp.newSession]). */
-    fun newSession() = http.newSession()
+    /** The account may change from here on (see [SpotifyHttp.newSession]); the gain diagnostics start a new run. */
+    fun newSession() {
+        http.newSession()
+        player.gainDiagnostics.newRun()
+    }
 
     override val ready: StateFlow<Boolean> = bridge.ready
     override val player = SpotifyPlayer(bridge, scope, this.http)

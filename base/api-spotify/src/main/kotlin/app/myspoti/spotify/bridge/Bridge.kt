@@ -31,7 +31,10 @@ class Bridge(private val host: BridgeHost, scope: CoroutineScope) {
     /** Diagnostics: receives one line per call, result and page message. */
     @Volatile var logger: ((String) -> Unit)? = null
 
-    /** The gain diagnostics' page messages (type "diag"). Not wired yet. */
+    /**
+     * The gain diagnostics' page messages (type "diag", see app.myspoti.spotify.GainDiagnostics):
+     * handed over as they came, never logged raw nor passed on as player [events].
+     */
     @Volatile var diag: ((JsonObject) -> Unit)? = null
     private val pending = ConcurrentHashMap<Int, CompletableDeferred<JsonElement>>()
 
@@ -95,6 +98,12 @@ class Bridge(private val host: BridgeHost, scope: CoroutineScope) {
         // Lenient reads: a field of an unexpected type counts as missing.
         fun field(name: String) = msg[name] as? JsonPrimitive
         val type = field("type")?.contentOrNull
+        // Before any logging: a diag message carries a song's uri, and its reader takes only the
+        // fields it knows. A reader that fails says so without the message.
+        if (type == "diag") {
+            diag?.let { reader -> runCatching { reader(msg) }.onFailure { logger?.invoke("gain diagnostics: a page message was not read") } }
+            return
+        }
         if (type == "net") licenceNote(msg)
         logger?.let { log ->
             if (type == "state") {

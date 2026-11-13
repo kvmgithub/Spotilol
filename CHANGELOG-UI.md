@@ -6,6 +6,9 @@ Each version section is the text of the GitHub release tagged `ui-v<version>` (p
 
 ## [Unreleased]
 
+### Diagnostics
+- With diagnostics on (Settings), the app's log notes the volume gain (`gain_db`) Spotify's playback answers carry for each song and file, and the page player's volume at each change of song: a measurement for a later check of the volume normalization. Nothing about playback, volume or requests changes; with diagnostics off nothing is read or written.
+
 ## [1.4.0] - 2026-11-12
 
 Taken from Orpheon 1.0.0-beta.1, the name Myspoti continues under. Myspoti 2.4.1 and 2.4.2-beta.1 only offer to install Orpheon and bring nothing here. Not taken: Orpheon's ad handling (it leaves the ads on the phone's own player and acts on Spotify Connect devices only; MySpotilol keeps its own), the native playback engine, the choice of a music account (YouTube Music or none) and the catalogue providers behind it, the sign-in of a computer by QR code, the Wear OS app, the token kept on storage between launches, the volume of another Connect device, the page throttled while idle, and as before AutoMix, extensions, the Immersive look, tablet and TV layouts and the updater.

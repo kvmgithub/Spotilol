@@ -25,6 +25,8 @@ object Graph {
         com.music.spotui.data.preferences.BoostPref.applyToPlayer()
         // Volume normalization (off by default), through the same graph as the boost.
         com.music.spotui.data.preferences.NormalizePref.applyToPlayer()
+        // The gain diagnostics follow the diagnostics switch (off by default).
+        com.music.spotui.data.BetaLogs.applyToPlayer()
         if (MyspotiRuntime.isStarted) MyspotiRuntime.scope.launch {
             MyspotiRuntime.spotify.player.boostSilent.collect { com.music.spotui.data.preferences.BoostPref.turnedOff(application) }
         }

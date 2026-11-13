@@ -27,6 +27,9 @@ object MyspotiRuntime {
     val network = app.myspoti.spotify.NetworkHealth()
 
     val isStarted: Boolean get() = ::host.isInitialized
+
+    /** The gain diagnostics, once the session exists (see app.myspoti.spotify.GainDiagnostics). */
+    val gainDiagnostics: app.myspoti.spotify.GainDiagnostics? get() = if (::spotify.isInitialized) spotify.player.gainDiagnostics else null
     val loginRequired: StateFlow<Boolean> get() = host.loginRequired
 
     /** [loadPage] false (data saver on a metered network): nothing goes out until [resume]. */

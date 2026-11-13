@@ -2,17 +2,17 @@
 
 Stand: 13. November 2026. Antwort auf „MySpotilol – M1, unabhängiges Review 2“ (`M1-05-review-2.md`). Rollen unverändert.
 
-**Ergebnis:** Pakete A, B und C sowie die Punkte aus Abschnitt 6 sind umgesetzt; der Relay-Vergleich läuft jetzt am Produktionscode. @@CIRESULT@@ Offen bleibt HKs Gerätetest. Nichts gemergt, nichts veröffentlicht, `myspoti-ui` unberührt.
+**Ergebnis:** Pakete A, B und C sowie die Punkte aus Abschnitt 6 sind umgesetzt; der Relay-Vergleich läuft jetzt am Produktionscode. Node-Tests, Release-Notes-Prüfung und der vollständige CI-Lauf sind auf dem Code-Ergebnis grün, die APK ist mit dem vorgesehenen Schlüssel signiert. Offen bleibt HKs Gerätetest. Nichts gemergt, nichts veröffentlicht, `myspoti-ui` unberührt.
 
 ## 1. Stände
 
 | | |
 | --- | --- |
 | Ausgangspunkt | Spitze `17ecb75` (Code `2329f0f`, zwei Dokumentcommits `ddf6f00`, `17ecb75`); unverändert seit Review 2, Dokumentcommits erhalten |
-| **Code-Ergebnis** | **`@@RESULT@@`** (ein Commit: „Gain diagnostics: review 2 (search origin, page of every line, relay test seam)“) |
-| Dokumentcommits danach | `@@DOCS@@`: nur `docs/agent-handoff/` (Review 2 abgelegt, diese Übergabe). Auf dem Arbeitszweig startet die CI nur per Hand; APK-Code ist das Code-Ergebnis. |
-| Diff Korrektur | https://github.com/kvmgithub/Spotilol/compare/2329f0f9a73b88db142d2fff2f29c333fa1f1bdb...@@RESULT@@ |
-| Diff gegen Basis | https://github.com/kvmgithub/Spotilol/compare/64f97bb9ffe517b2f40ded45b7e934e23ec6a11a...@@RESULT@@ |
+| **Code-Ergebnis** | **`5071fce001759dc6e712cf2a74d8e60fd5b1940e`** (ein Commit: „Gain diagnostics: review 2 (search origin, page of every line, relay test seam)“) |
+| Dokumentcommits danach | ``de64662` (Entwurf) und der Commit mit dieser Fassung`: nur `docs/agent-handoff/` (Review 2 abgelegt, diese Übergabe). Auf dem Arbeitszweig startet die CI nur per Hand; APK-Code ist das Code-Ergebnis. |
+| Diff Korrektur | https://github.com/kvmgithub/Spotilol/compare/2329f0f9a73b88db142d2fff2f29c333fa1f1bdb...5071fce001759dc6e712cf2a74d8e60fd5b1940e |
+| Diff gegen Basis | https://github.com/kvmgithub/Spotilol/compare/64f97bb9ffe517b2f40ded45b7e934e23ec6a11a...5071fce001759dc6e712cf2a74d8e60fd5b1940e |
 | Produktbranch | `myspoti-ui` weiter `63bff95` (nur README seit `64f97bb`), keine Überschneidung |
 
 Geänderte Dateien (7): `player-bridge.js`, `GainDiagnostics.kt`, `ControlRelay.kt`, neu `RelayAnswers.kt`, `gain-diagnostics.test.mjs`, `GainDiagnosticsTest.kt`, neu `RelayAnswersTest.kt`.
@@ -89,13 +89,13 @@ Alles Übrige wie in Übergabe 2, Abschnitt 3.
 
 | CI | |
 | --- | --- |
-| Lauf | @@RUN@@ |
-| Ergebnis | @@CI@@ |
-| Node | @@NODE@@ |
-| APK | @@APKART@@ |
-| APK SHA-256 | `@@APKSHA@@` |
-| Signierer | `@@SIGNER@@` |
-| Testberichte | @@REPORTS@@ |
+| Lauf | [43427715418](https://github.com/kvmgithub/Spotilol/actions/runs/43427715418), `workflow_dispatch` auf `work/gain-diagnostics`, Commit `5071fce` |
+| Ergebnis | erfolgreich (Job `build`: success, `BUILD SUCCESSFUL in 5m 21s`, darin `:host-android:testDebugUnitTest` mit `RelayAnswersTest`; Release-Notes übersprungen, keine Veröffentlichung) |
+| Node | eigener Schritt vor Gradle: 23 Tests, 23 bestanden |
+| APK | [apk-5071fce001759dc6e712cf2a74d8e60fd5b1940e](https://github.com/kvmgithub/Spotilol/actions/runs/43427715418/artifacts/14037574091) mit `SHA256SUMS.txt`, `signers.txt`, `apk-metadata.txt`, `build-info.txt`; CI-Prüfungen (ein Signierer, Label, nicht debuggable, Version 1.4.0 / 1004000) bestanden |
+| APK SHA-256 | `0cf4bc08c3e76f7f027882db19ceffc09eff0a21b48a0979022034e8dd29b97a` |
+| Signierer | `73cf309a74b1a107a1e1cbb9453806f7b0d8e803957ecd371cb51cfed0b21e9a` |
+| Testberichte | [test-reports-5071fce001759dc6e712cf2a74d8e60fd5b1940e](https://github.com/kvmgithub/Spotilol/actions/runs/43427715418/artifacts/14037624051), JUnit-XML und Node-TAP |
 
 JUnit-Fallzahlen stehen nur in den Testberichten; Artefakte kann ich hier nicht herunterladen. Erwartet: `GainDiagnosticsTest` 33, `RelayAnswersTest` 6.
 

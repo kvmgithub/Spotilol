@@ -1,5 +1,8 @@
 # MySpotilol M1 – Auswertung Gerätetest 1
 
+> **Berichtigt** durch `M1-13-reload-und-berichtigung.md` (D1–D4): Die App hat einen manuellen Reload (Einstellungen → App → „Player neu starten“); Gleichheit an/aus nur eingeschränkt verglichen; Ursache des Hängers offen; Zahlen sind Stichproben der erhaltenen Zeilen.
+
+
 Stand: 13. November 2026. Auswertung der Protokolle von HKs erstem Gerätetest nach Review 4 (`M1-09-review-4.md`). Gerät: Google Pixel 9 Pro XL, Android 17 (SDK 37). Rollen unverändert; diese Auswertung ändert keinen Code.
 
 **Ergebnis:** In dem Ausschnitt, den die Protokolle abdecken, arbeitet die Gain-Diagnose wie spezifiziert: Titelwechsel, Kontextwechsel Playlist → Album und Ab-/Anmeldung erscheinen korrekt; alle Fehler-, Verlust- und Verspätungszähler stehen auf 0; keine `gain-diag`-Zeile enthält Kennungen, Tokens oder URLs. Wiedergabe im Hintergrund und bei gesperrtem Bildschirm lief zwölf Minuten ohne Absturz. **Ein Mangel von M1 wurde nicht gefunden.** Drei Prüfschritte sind durch die Protokolle nicht belegt, weil der Logpuffer die frühen Minuten nicht mehr enthält: der Vergleich Diagnose aus/an, ein Reload ohne Abmeldung und das Abschalten (letzteres nur indirekt). Dafür genügt ein kurzer zweiter Durchgang (Abschnitt 6).

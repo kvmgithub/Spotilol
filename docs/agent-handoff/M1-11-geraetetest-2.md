@@ -1,5 +1,8 @@
 # MySpotilol M1 – Auswertung Gerätetest 2
 
+> **Berichtigt** durch `M1-13-reload-und-berichtigung.md` (D1–D4): Die App hat einen manuellen Reload (Einstellungen → App → „Player neu starten“); Gleichheit an/aus nur eingeschränkt verglichen; Ursache des Hängers offen; Zahlen sind Stichproben der erhaltenen Zeilen.
+
+
 Stand: 13. November 2026. Zweiter Durchgang von HK nach `M1-10-geraetetest-1.md`, Prozess neu gestartet um 20:58:41 MEZ, gleiche APK (Formatversion `v=3`, Feld `dropped=`). Protokolle: App-Export (ab 21:01:57), App-Logcat und System-Logcat (UTC; Myspoti-Zeilen ab 21:02:11 MEZ). Keine Codeänderung.
 
 **Ergebnis:** Durchgang 2 schließt drei der vier offenen Punkte: Abschalten, Diagnose aus/an und ein natürlicher Titelwechsel mit Überblendung sind jetzt belegt. Alle 14 `gain-diag`-Zeilen ohne Kennungen, alle Zähler 0. Offen bleibt nur ein Reload, während die Diagnose an ist: Beide Reloads dieses Durchgangs fielen in die Aus-Phase. In der Aus-Phase gab es Wiedergabeprobleme rund um eine Werbung; sie traten bei ausgeschalteter Diagnose auf und liegen in Code, den M1 nicht verändert hat (Abschnitt 4).

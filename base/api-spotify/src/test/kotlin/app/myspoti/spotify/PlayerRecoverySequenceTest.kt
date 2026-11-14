@@ -75,10 +75,18 @@ class PlayerRecoverySequenceTest {
         until("page ready") { bridge.ready.value }
     }
 
-    /** The page reports [name] ([paused] or playing), and the player has taken it. */
+    /**
+     * The page reports [name] ([paused] or playing), and the player has taken it. Said again every
+     * half second until then: the player's event collector may not listen yet, and a state posted
+     * before it does is lost (the bridge's events keep none for later).
+     */
     private suspend fun showing(name: String, paused: Boolean) {
-        host.post(state(name, paused))
-        until("state $name paused=$paused") { player.state.value?.let { it.item?.uri == "spotify:track:$name" && it.isPaused == paused } == true }
+        val end = System.currentTimeMillis() + 10_000
+        while (player.state.value?.let { it.item?.uri == "spotify:track:$name" && it.isPaused == paused } != true) {
+            check(System.currentTimeMillis() < end) { "timed out: state $name paused=$paused; sent: ${sent()}; log: ${logs.takeLast(15)}" }
+            host.post(state(name, paused))
+            delay(500)
+        }
     }
 
     /**

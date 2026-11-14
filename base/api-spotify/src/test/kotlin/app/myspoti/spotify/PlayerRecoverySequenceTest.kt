@@ -141,6 +141,11 @@ class PlayerRecoverySequenceTest {
 
     private fun count(method: String) = host.calls.count { it.method == method }
 
+    /** [ScriptedBridgeHost.awaitCall], failing with what was sent and logged when nothing comes. */
+    private suspend fun next(method: String, ms: Long): CapturedCall =
+        runCatching { host.awaitCall(method, timeoutMs = ms) }
+            .getOrElse { throw AssertionError("no $method within $ms ms; sent: ${sent()}; log: ${logs.takeLast(20)}", it) }
+
     /** Commands that make the page play, sent from call [from] on. */
     private fun playsSince(from: Int): List<CapturedCall> = host.calls.drop(from).filter { it.method in PLAYING }
 
@@ -314,7 +319,7 @@ class PlayerRecoverySequenceTest {
         pageLostWhilePlaying()
         joinDevice()
         restored("A", paused = true)
-        val old = host.awaitCall("player.resume", timeoutMs = SpotifyPlayer.RESTORE_WAIT_MS + 2_000)
+        val old = next("player.resume", SpotifyPlayer.RESTORE_WAIT_MS + 2_000)
         pick("P")
         showing("P", paused = false)
         val mark = host.calls.size
@@ -331,7 +336,7 @@ class PlayerRecoverySequenceTest {
         pageLostWhilePlaying()
         joinDevice()
         restored("B", paused = true)
-        val old = host.awaitCall("player.play", timeoutMs = SpotifyPlayer.RESTORE_WAIT_MS + 2_000)
+        val old = next("player.play", SpotifyPlayer.RESTORE_WAIT_MS + 2_000)
         assertEquals("spotify:track:A", old.args["trackUri"]?.jsonPrimitive?.content, "the restore plays A: ${old.args}")
         pick("P")
         showing("P", paused = false)
@@ -351,7 +356,7 @@ class PlayerRecoverySequenceTest {
         pageLostWhilePlaying(at = 98_000)
         joinDevice()
         restored("A", paused = true)
-        host.fail(host.awaitCall("player.resume", timeoutMs = SpotifyPlayer.RESTORE_WAIT_MS + 2_000), "No such device.")
+        host.fail(next("player.resume", SpotifyPlayer.RESTORE_WAIT_MS + 2_000), "No such device.")
         until("the retry waits") { logged("player.resume not taken") }
         val mark = host.calls.size
         player.pause()
@@ -366,8 +371,8 @@ class PlayerRecoverySequenceTest {
         joinDevice()
         val mark = host.calls.size
         restored("A", paused = true)
-        host.succeed(host.awaitCall("player.resume", timeoutMs = SpotifyPlayer.RESTORE_WAIT_MS + 2_000))
-        val seek = host.awaitCall("player.seek", timeoutMs = 5_000)
+        host.succeed(next("player.resume", SpotifyPlayer.RESTORE_WAIT_MS + 2_000))
+        val seek = next("player.seek", 5_000)
         val to = seek.args["positionMs"]?.jsonPrimitive?.long ?: 0L
         assertTrue(to >= 98_000, "back to where A was: ${seek.args}")
         host.succeed(seek)

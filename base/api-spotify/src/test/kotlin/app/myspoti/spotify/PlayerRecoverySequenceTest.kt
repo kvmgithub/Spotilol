@@ -37,6 +37,8 @@ class PlayerRecoverySequenceTest {
     private lateinit var bridge: Bridge
     private lateinit var player: SpotifyPlayer
     private val logs = CopyOnWriteArrayList<String>()
+    /** A log line holding this is written slowly ([SLOW_LOG_MS]): see restoreJudgesTheNewPagesState. */
+    @Volatile private var slowLog: String? = null
 
     @BeforeEach fun up() = runBlocking {
         // Process-wide state other tests share: from a known start, and back to it after.
@@ -47,7 +49,7 @@ class PlayerRecoverySequenceTest {
         // (null: nothing known); the playback commands stay open until the test answers them.
         BACKGROUND.forEach { host.answer(it) }
         bridge = Bridge(host, scope)
-        bridge.logger = { logs += it }
+        bridge.logger = { line -> logs += line; slowLog?.let { if (it in line) Thread.sleep(SLOW_LOG_MS) } }
         player = SpotifyPlayer(bridge, scope)
         host.awaitSubscriber()
     }
@@ -371,6 +373,22 @@ class PlayerRecoverySequenceTest {
         assertRestoreStopped("paused")
     }
 
+    /**
+     * R3 (found by lateRestoreAnswerKeepsANewerPick_play failing now and then): the new page restored
+     * another song (B), and the old page's state (A playing) is shown until the player has taken the
+     * new one. The restore must judge the new page's state, and play A. The player writes its track
+     * change to the log after counting the new state and before showing it: slowed there, that gap
+     * is sure to be seen.
+     */
+    @Test fun restoreJudgesTheNewPagesState() = runBlocking {
+        slowLog = "track change"
+        pageLostWhilePlaying()
+        joinDevice()
+        restored("B", paused = true)
+        val play = next("player.play", SpotifyPlayer.RESTORE_WAIT_MS + 2_000)
+        assertEquals("spotify:track:A", play.args["trackUri"]?.jsonPrimitive?.content, "the restore plays A: ${play.args}")
+    }
+
     /** The other side of R2: nobody pauses, the resume is answered, and the far position is set once. */
     @Test fun restoreSetsAFarPositionOnce() = runBlocking {
         pageLostWhilePlaying(at = 98_000)
@@ -393,6 +411,9 @@ class PlayerRecoverySequenceTest {
 
         /** Time for the player's collector to take a page's loss (see pageLostWhilePlaying). */
         const val LOSS_SEEN_MS = 300L
+
+        /** Longer than the restore's look at the page's state (every 100 ms). */
+        const val SLOW_LOG_MS = 500L
 
         /** Reads and level steps of the page, answered with null as in the other player tests. */
         val BACKGROUND = setOf(

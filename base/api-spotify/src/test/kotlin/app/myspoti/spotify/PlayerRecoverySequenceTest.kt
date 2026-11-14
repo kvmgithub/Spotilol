@@ -112,6 +112,12 @@ class PlayerRecoverySequenceTest {
         showing("A", paused = false, at = at)
         bridge.pageGone()
         until("page gone") { !bridge.ready.value }
+        // The player's own collector of [Bridge.ready] must see the page go: a StateFlow keeps only
+        // its newest value, and "not ready" then "ready" at once is no change to a collector that
+        // was late, and no restore would run (a likely cause of one timeout in CI, not shown). Nothing
+        // of the player tells it has; every test here shows the restore ran (its command, or its
+        // log), so a miss fails, never passes.
+        delay(LOSS_SEEN_MS)
         ready()
     }
 
@@ -384,6 +390,9 @@ class PlayerRecoverySequenceTest {
     private companion object {
         /** Longer than the player's first retry gap ([SpotifyPlayer.COMMAND_RETRY_MS]) and its rise. */
         const val SETTLE_MS = 2_000L
+
+        /** Time for the player's collector to take a page's loss (see pageLostWhilePlaying). */
+        const val LOSS_SEEN_MS = 300L
 
         /** Reads and level steps of the page, answered with null as in the other player tests. */
         val BACKGROUND = setOf(

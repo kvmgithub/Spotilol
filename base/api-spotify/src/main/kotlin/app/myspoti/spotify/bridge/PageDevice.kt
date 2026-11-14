@@ -34,4 +34,10 @@ object PageDevice {
 
     /** The page is going away (a reload asked for or started): its device is not one to command. */
     fun pageGone() { _joined.value = false; PageAuth.pageGone() }
+
+    /**
+     * Tests only: back to a process that has seen no page (no join reported, no command lost).
+     * This state is process-wide; a test that reports joins starts and ends with this.
+     */
+    internal fun resetForTests() { reported = false; _joined.value = false; commandLostAt = 0L }
 }

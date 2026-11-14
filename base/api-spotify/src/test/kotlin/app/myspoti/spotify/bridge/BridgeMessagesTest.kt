@@ -1,9 +1,11 @@
 package app.myspoti.spotify.bridge
 
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -137,5 +139,94 @@ class BridgeMessagesTest {
         val (bridge, logged) = diagRun({ throw IllegalStateException("broken reader with SECRET inside") }, CopyOnWriteArrayList())
         assertTrue(logged.none { "SECRET" in it }, "$logged")
         assertEquals(JsonPrimitive(1), bridge.call("bridge.version", timeoutMs = 2_000))
+    }
+
+    // --- calls whose answers the test gives (ScriptedBridgeHost) ----------------------------------
+
+    private suspend fun scripted(): Pair<ScriptedBridgeHost, Bridge> {
+        val host = ScriptedBridgeHost()
+        val bridge = Bridge(host, scope)
+        host.awaitSubscriber()
+        newPage(host, bridge)
+        return host to bridge
+    }
+
+    private suspend fun newPage(host: ScriptedBridgeHost, bridge: Bridge) {
+        host.post("""{"type":"ready","version":1}""")
+        withTimeout(2_000) { bridge.ready.first { it } }
+    }
+
+    /** Every page message posted so far has been handled: the bridge reads them in order. */
+    private suspend fun handled(host: ScriptedBridgeHost, bridge: Bridge) {
+        val probe = scope.async { bridge.call("bridge.version") }
+        host.succeed(host.awaitCall("bridge.version"), JsonPrimitive(1))
+        withTimeout(2_000) { probe.await() }
+    }
+
+    @Test fun `two calls of one method answered in reverse order each get their own value`() = runBlocking {
+        val (host, bridge) = scripted()
+        val first = scope.async { bridge.call("player.state") }
+        val a = host.awaitCall("player.state")
+        val second = scope.async { bridge.call("player.state") }
+        val b = host.awaitCall("player.state")
+        host.succeed(b, JsonPrimitive("second"))
+        assertEquals(JsonPrimitive("second"), withTimeout(2_000) { second.await() })
+        assertTrue(first.isActive, "the first still waits for its own answer")
+        host.succeed(a, JsonPrimitive("first"))
+        assertEquals(JsonPrimitive("first"), withTimeout(2_000) { first.await() })
+        assertEquals(listOf(a.id, b.id), host.calls.map { it.id })
+    }
+
+    /** B1: a call already waiting when its page goes away fails then, not after its timeout. */
+    @Test fun pendingCallFailsWhenPageGoesAway() = runBlocking {
+        val (host, bridge) = scripted()
+        val waiting = scope.async { bridge.call("player.resume", timeoutMs = 20_000) }
+        val asked = host.awaitCall("player.resume")
+        val started = System.currentTimeMillis()
+        bridge.pageGone()
+        val e = assertThrows(BridgeException::class.java) { runBlocking { withTimeout(2_000) { waiting.await() } } }
+        assertEquals("page reloaded", e.message)
+        assertTrue(System.currentTimeMillis() - started < 2_000, "failed at once, not after its timeout")
+        // The new page answers its own calls.
+        newPage(host, bridge)
+        val next = scope.async { bridge.call("player.resume") }
+        val nextCall = host.awaitCall("player.resume")
+        host.succeed(nextCall, JsonPrimitive("new"))
+        assertEquals(JsonPrimitive("new"), withTimeout(2_000) { next.await() })
+        assertTrue(asked.page < nextCall.page, "made for the new page: ${host.calls}")
+    }
+
+    /** B2: the old page's late answer does not complete the call made on the new page. */
+    @Test fun lateOldResultCannotCompleteNewCall() = runBlocking {
+        val (host, bridge) = scripted()
+        val old = scope.async { bridge.call("player.play") }
+        val oldCall = host.awaitCall("player.play")
+        bridge.pageGone()
+        assertThrows(BridgeException::class.java) { runBlocking { withTimeout(2_000) { old.await() } } }
+        newPage(host, bridge)
+        val fresh = scope.async { bridge.call("player.play") }
+        val freshCall = host.awaitCall("player.play")
+        host.succeed(oldCall, JsonPrimitive("old"))
+        handled(host, bridge)
+        assertTrue(fresh.isActive, "the old answer completed the new call")
+        host.succeed(freshCall, JsonPrimitive("new"))
+        assertEquals(JsonPrimitive("new"), withTimeout(2_000) { fresh.await() })
+        assertTrue(oldCall.id != freshCall.id)
+    }
+
+    /** B3: a call whose caller was cancelled stays cancelled; its late answer breaks nothing, nothing is sent again. */
+    @Test fun cancelledCallDoesNotBreakNextCall() = runBlocking {
+        val (host, bridge) = scripted()
+        val hanging = scope.async { bridge.call("player.resume") }
+        val hangingCall = host.awaitCall("player.resume")
+        hanging.cancel()
+        assertThrows(CancellationException::class.java) { runBlocking { hanging.await() } }
+        host.succeed(hangingCall, JsonPrimitive("late"))
+        handled(host, bridge)
+        val next = scope.async { bridge.call("player.resume") }
+        val nextCall = host.awaitCall("player.resume")
+        host.succeed(nextCall, JsonPrimitive("next"))
+        assertEquals(JsonPrimitive("next"), withTimeout(2_000) { next.await() })
+        assertEquals(listOf(hangingCall.id, nextCall.id), host.calls.filter { it.method == "player.resume" }.map { it.id }, "nothing sent again by the bridge")
     }
 }

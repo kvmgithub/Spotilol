@@ -378,8 +378,8 @@ class SpotifyPlayer(
                 // Each waits for the new page to settle (its device joined Spotify Connect, its first
                 // state told): a play sent right after "ready" was answered DEVICE_NOT_FOUND (Myspoti 2.3.0, 2.4.0).
                 if (!ownReload && pickAfterReload != null) { val seq = stateSeq; scope.launch { awaitPageSettled(seq); playPickAfterReload() } }
-                else if (!ownReload && (lost != null || liveIntent() != null)) { val seq = stateSeq; scope.launch {
-                    runCatching { if (lost != null) { awaitDeviceJoined(); resumeAfterReload(lost) } else { awaitPageSettled(seq); playIntent() } }
+                else if (!ownReload && (lost != null || liveIntent() != null)) { val seq = stateSeq; val played = lastPlay?.third ?: 0L; scope.launch {
+                    runCatching { if (lost != null) { awaitDeviceJoined(); resumeAfterReload(lost, playedBefore = played) } else { awaitPageSettled(seq); playIntent() } }
                 }
                 }
                 repeatRestoreUntil = System.currentTimeMillis() + REPEAT_RESTORE_MS
@@ -467,8 +467,9 @@ class SpotifyPlayer(
                 } else {
                     val sent = System.currentTimeMillis()
                     val joinFrom = userMoveAt
+                    val played = lastPlay?.third ?: 0L
                     val joined = awaitDeviceJoined()
-                    resumeAfterReload(s, nextUp)
+                    resumeAfterReload(s, nextUp, playedBefore = played)
                     // Its restore went to a page whose device had not joined: followed as a play on a new page is.
                     if (!joined) lastPlay?.takeIf { it.third >= sent }?.let { p -> scope.launch { playWhenJoined(p, joinFrom) } }
                 }
@@ -669,8 +670,11 @@ class SpotifyPlayer(
      * A new page after [lost] was playing: the page restores the session paused, or not at
      * all, and takes commands only once its device is registered again. The song goes on from
      * where it was, checked and tried again, unless the user paused or played something since.
+     * [playedBefore]: the last play when the restore was decided, before any wait for the new
+     * page's device (a pick made during that wait is newer; found by PlayerRecoverySequenceTest:
+     * taken after the wait, it counted as old and the restore played the lost song over it).
      */
-    private suspend fun resumeAfterReload(lost: PlayerState, nextUp: List<NowPlaying>? = null) {
+    private suspend fun resumeAfterReload(lost: PlayerState, nextUp: List<NowPlaying>? = null, playedBefore: Long = lastPlay?.third ?: 0L) {
         if (licenceRefusedHold) { bridge.logger?.invoke("page back after a reload: nothing resumed, Spotify refuses this account's licences"); return }
         // Skipped during the reload: that song, not the one that played before it.
         if (liveIntent() != null) {
@@ -683,13 +687,17 @@ class SpotifyPlayer(
         val uri = item.uri
         val at = lost.positionMs
         // A play newer than [since] is the user's: the restore stops there.
-        var since = lastPlay?.third ?: 0L
+        var since = playedBefore
         val seq = stateSeq
         // The restored session (or nothing, when the page has none): a real state, or a while.
         withTimeoutOrNull(RESTORE_WAIT_MS) { while (stateSeq == seq || _state.value?.item == null) delay(100) }
         bridge.logger?.invoke("page back after a reload: ${item.name} goes on at ${at / 1000} s")
         for (attempt in 1..RESTORE_ATTEMPTS) {
-            if (pausedByUser || (lastPlay?.third ?: 0L) != since) return
+            if (pausedByUser) return
+            if ((lastPlay?.third ?: 0L) != since) {
+                if (attempt == 1) bridge.logger?.invoke("page back after a reload: played or picked meanwhile, ${item.name} not played on")
+                return
+            }
             val s = _state.value
             if (s != null && s.item?.uri == uri && !s.isPaused) return
             runCatching {
@@ -1994,8 +2002,14 @@ class SpotifyPlayer(
      * A playback command, sent again when the page was not able to take it yet: a page just
      * (re)loaded says "ready" a moment before Spotify Connect knows its device ("No such
      * device"), and a reload under way refuses everything ("not ready").
+     *
+     * A resume is not sent again once the user paused while it waited: found by
+     * PlayerRecoverySequenceTest, a resume refused for a moment ("No such device") was sent again
+     * after the pause, and the music started. It then ends as done, with nothing sent: the user's
+     * pause stands for it. (Other commands are sent again as before; none was shown to need this.)
      */
     private suspend fun command(method: String, args: JsonObject = JsonObject(emptyMap()), timeoutMs: Long = 20_000): kotlinx.serialization.json.JsonElement {
+        val pauses = pausesAsked
         var attempt = 0
         while (true) {
             try {
@@ -2006,6 +2020,10 @@ class SpotifyPlayer(
                 bridge.logger?.invoke("$method not taken (${e.message}): sent again")
                 delay(COMMAND_RETRY_MS * attempt)
                 if (!bridge.ready.value) withTimeoutOrNull(READY_WAIT_MS) { bridge.ready.first { it } }
+                if (method == "player.resume" && pausesAsked != pauses) {
+                    bridge.logger?.invoke("$method not sent again: paused meanwhile")
+                    return kotlinx.serialization.json.JsonNull
+                }
             }
         }
     }

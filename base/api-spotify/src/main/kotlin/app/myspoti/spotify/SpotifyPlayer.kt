@@ -675,7 +675,10 @@ class SpotifyPlayer(
      * taken after the wait, it counted as old and the restore played the lost song over it).
      * Checked again once each command of the restore is answered, before a seek or another attempt
      * (found by the review of M2.1: a pick, or a pause that dropped the resume, while that command
-     * was on its way was followed by a play of the lost song or a seek).
+     * was on its way was followed by a play of the lost song or a seek), and by [command] itself
+     * before each send, so a command refused for a moment is not sent again once the restore is
+     * overtaken (found by the second review: a play, resume or seek of the restore was sent again
+     * after a pause or a pick that came while it waited).
      */
     private suspend fun resumeAfterReload(lost: PlayerState, nextUp: List<NowPlaying>? = null, playedBefore: Long = lastPlay?.third ?: 0L) {
         if (licenceRefusedHold) { bridge.logger?.invoke("page back after a reload: nothing resumed, Spotify refuses this account's licences"); return }
@@ -693,13 +696,16 @@ class SpotifyPlayer(
         // play moves it, to that play's mark (a resume or a seek leaves [lastPlay] as it was).
         var since = playedBefore
         val pauses = pausesAsked
-        // The user (or a hold) paused, or something was played since: the restore is over.
+        // Why the restore is over (the user, or a hold, paused; something was played since), or null.
+        fun overtaken(): String? = when {
+            pausedByUser || pausesAsked != pauses -> "paused"
+            (lastPlay?.third ?: 0L) != since -> "played or picked"
+            else -> null
+        }
+        // Its commands go out, and again after a refusal, only while it stands (see [command]).
+        val stands = { overtaken() == null }
         fun superseded(): Boolean {
-            val by = when {
-                pausedByUser || pausesAsked != pauses -> "paused"
-                (lastPlay?.third ?: 0L) != since -> "played or picked"
-                else -> return false
-            }
+            val by = overtaken() ?: return false
             bridge.logger?.invoke("page back after a reload: $by meanwhile, ${item.name} not played on")
             return true
         }
@@ -713,10 +719,13 @@ class SpotifyPlayer(
             if (s != null && s.item?.uri == uri && !s.isPaused) return
             runCatching {
                 if (s?.item?.uri == uri) {
-                    // Not sent (dropped for a pause while it waited to be sent again), or overtaken on its way.
-                    val sent = resumePage()
+                    // Not sent (overtaken before it went, or while it waited to be sent again), or overtaken on its way.
+                    val sent = resumePage(stands)
                     if (superseded() || !sent) return
-                    if (kotlin.math.abs(s.positionMs - at) > 5_000) seek(at)
+                    if (kotlin.math.abs(s.positionMs - at) > 5_000) {
+                        val moved = seekPage(at, stands)
+                        if (superseded() || !moved) return
+                    }
                 } else {
                     // A state without a list would play the song alone, and Spotify then goes on
                     // with its own autoplay: the list of the song before it is the next best.
@@ -724,8 +733,9 @@ class SpotifyPlayer(
                     val ctx = if (item.provider == "autoplay") uri else lost.contextUri ?: lastSong?.contextUri ?: uri
                     val station = nextUp?.takeIf { ctx == lost.contextUri }?.let { RepeatRules.stationOrder(uri, it) }
                     since = System.currentTimeMillis()
-                    playNow(ctx, trackUri = uri.takeIf { ctx != it }, positionMs = at, order = station ?: lastOrder?.takeIf { it.first == ctx }?.second,
-                        keepsOrder = station == null, playedAt = since)
+                    val sent = playNow(ctx, trackUri = uri.takeIf { ctx != it }, positionMs = at, order = station ?: lastOrder?.takeIf { it.first == ctx }?.second,
+                        keepsOrder = station == null, playedAt = since, stands = stands)
+                    if (superseded() || !sent) return
                 }
             }.onFailure { bridge.logger?.invoke("restore attempt $attempt failed: ${it.message}") }
             val ok = withTimeoutOrNull(RESTORE_CHECK_MS) { _state.first { it?.item?.uri == uri && !it.isPaused } }
@@ -1981,9 +1991,10 @@ class SpotifyPlayer(
     /**
      * A play sent to the page; [refusable]: the user's own, whose refusal walks [onRefused]'s steps.
      * [keepsOrder] false: [order] is for this play only, later plays of the list go without it.
-     * [playedAt]: its mark in [lastPlay], known to the caller before the play goes out.
+     * [playedAt]: its mark in [lastPlay], known to the caller before the play goes out. [stands]:
+     * see [command]; false then: not sent.
      */
-    private suspend fun playNow(contextUri: Uri, trackUri: Uri? = null, index: Int? = null, positionMs: Long? = null, order: List<Uri>? = null, refusable: Boolean = false, keepsOrder: Boolean = true, playedAt: Long = System.currentTimeMillis()) {
+    private suspend fun playNow(contextUri: Uri, trackUri: Uri? = null, index: Int? = null, positionMs: Long? = null, order: List<Uri>? = null, refusable: Boolean = false, keepsOrder: Boolean = true, playedAt: Long = System.currentTimeMillis(), stands: (() -> Boolean)? = null): Boolean {
         // A new song picked (or the intent itself played): any earlier skip is over.
         if (trackUri == null || trackUri != liveIntent()?.item?.uri) intent = null
         lastOrder = order?.takeIf { keepsOrder }?.let { contextUri to it }
@@ -1995,9 +2006,10 @@ class SpotifyPlayer(
         // The play starts the page on its own options: what it reports next is no answer to a set of ours.
         repeatRestoreUntil = System.currentTimeMillis() + REPEAT_RESTORE_MS
         repeatHeldUntil = 0L
+        var taken = true
         withFade {
             try {
-                command("player.play", timeoutMs = PLAY_TIMEOUT_MS, args = buildJsonObject {
+                taken = command("player.play", stands = stands, timeoutMs = PLAY_TIMEOUT_MS, args = buildJsonObject {
                     put("contextUri", contextUri)
                     order?.let { uris -> putJsonArray("order") { uris.forEach { add(kotlinx.serialization.json.JsonPrimitive(it)) } } }
                     trackUri?.let { put("trackUri", it) }
@@ -2009,6 +2021,7 @@ class SpotifyPlayer(
                 throw e
             }
         }
+        return taken
     }
 
     /**
@@ -2030,12 +2043,19 @@ class SpotifyPlayer(
      * after the pause, and the music started. It then ends with false, nothing sent and no error:
      * the user's pause stands for it, and a caller going on from a taken resume (the restore's seek)
      * stops there. (Other commands are sent again as before; none was shown to need this.)
+     * [stands]: a command of a routine the user can overtake (the restore after a reload), asked
+     * right before each send, the first and every one after a refusal (after its gap and any wait
+     * for the page): false, and it is not sent and ends with false.
      * True: the page took the command (its answer is never used).
      */
-    private suspend fun command(method: String, args: JsonObject = JsonObject(emptyMap()), timeoutMs: Long = 20_000): Boolean {
+    private suspend fun command(method: String, args: JsonObject = JsonObject(emptyMap()), timeoutMs: Long = 20_000, stands: (() -> Boolean)? = null): Boolean {
         val pauses = pausesAsked
         var attempt = 0
         while (true) {
+            if (stands?.invoke() == false) {
+                bridge.logger?.invoke("$method not sent${if (attempt > 0) " again" else ""}: overtaken meanwhile")
+                return false
+            }
             try {
                 bridge.call(method, args, timeoutMs)
                 return true
@@ -2149,9 +2169,10 @@ class SpotifyPlayer(
 
     /**
      * [resume] without counting as the user's play (a restore after a reload, the end of an ad).
-     * False: the resume was dropped for a pause (see [command]); a reload in its place counts as taken.
+     * False: the resume was dropped for a pause, or [stands] said no (see [command]); a reload in
+     * its place counts as taken.
      */
-    private suspend fun resumePage(): Boolean {
+    private suspend fun resumePage(stands: (() -> Boolean)? = null): Boolean {
         pausedByUser = false
         // A page that went silent while paused (frozen in the background): a quick ping, and if it
         // still says nothing, the page is loaded again and plays on where it was, instead of the
@@ -2172,7 +2193,7 @@ class SpotifyPlayer(
             return true
         }
         val quiet = _adPlaying.value || adMuted || crossfadeArmed || _state.value?.isPaused == false || lastMedia?.active == false
-        if (quiet) return command("player.resume")
+        if (quiet) return command("player.resume", stands = stands)
         fadeBackTo = lastMedia?.own?.takeIf { it > 0.01 } ?: 1.0
         fadeBack?.cancel()
         bridge.logger?.invoke("resume: rising from silence over $RISE_MS ms once the sound starts")
@@ -2187,7 +2208,7 @@ class SpotifyPlayer(
             }
         }
         val taken = try {
-            command("player.resume")
+            command("player.resume", stands = stands)
         } catch (e: Throwable) {
             runCatching { restoreLevel() }
             fadeBackTo = null
@@ -2198,7 +2219,13 @@ class SpotifyPlayer(
         }
         return taken
     }
-    override suspend fun seek(positionMs: Long) { endCrossfade(restore = true); command("player.seek", buildJsonObject { put("positionMs", positionMs) }) }
+    override suspend fun seek(positionMs: Long) { seekPage(positionMs) }
+
+    /** [seek]; [stands]: see [command]. False: not sent. */
+    private suspend fun seekPage(positionMs: Long, stands: (() -> Boolean)? = null): Boolean {
+        endCrossfade(restore = true)
+        return command("player.seek", buildJsonObject { put("positionMs", positionMs) }, stands = stands)
+    }
     override suspend fun next() {
         pausedByUser = false
         pickBeforeAd = null

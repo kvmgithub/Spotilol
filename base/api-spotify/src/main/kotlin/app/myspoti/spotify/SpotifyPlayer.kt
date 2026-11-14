@@ -418,7 +418,7 @@ class SpotifyPlayer(
     /** The last state with a song, and when the page stopped reporting it (a null state). */
     @Volatile private var lastSong: PlayerState? = null
     @Volatile private var lastSongUntil = 0L
-    /** Bumped at every state the page reports. */
+    /** Bumped at every state the page reports, once the player has taken and shown it ([onState]). */
     @Volatile private var stateSeq = 0
 
     /**
@@ -673,6 +673,9 @@ class SpotifyPlayer(
      * [playedBefore]: the last play when the restore was decided, before any wait for the new
      * page's device (a pick made during that wait is newer; found by PlayerRecoverySequenceTest:
      * taken after the wait, it counted as old and the restore played the lost song over it).
+     * Checked again once each command of the restore is answered, before a seek or another attempt
+     * (found by the review of M2.1: a pick, or a pause that dropped the resume, while that command
+     * was on its way was followed by a play of the lost song or a seek).
      */
     private suspend fun resumeAfterReload(lost: PlayerState, nextUp: List<NowPlaying>? = null, playedBefore: Long = lastPlay?.third ?: 0L) {
         if (licenceRefusedHold) { bridge.logger?.invoke("page back after a reload: nothing resumed, Spotify refuses this account's licences"); return }
@@ -686,23 +689,33 @@ class SpotifyPlayer(
         val item = lost.item ?: return
         val uri = item.uri
         val at = lost.positionMs
-        // A play newer than [since] is the user's: the restore stops there.
+        // A play newer than [since] is the user's: the restore stops there. Only the restore's own
+        // play moves it, to that play's mark (a resume or a seek leaves [lastPlay] as it was).
         var since = playedBefore
+        val pauses = pausesAsked
+        // The user (or a hold) paused, or something was played since: the restore is over.
+        fun superseded(): Boolean {
+            val by = when {
+                pausedByUser || pausesAsked != pauses -> "paused"
+                (lastPlay?.third ?: 0L) != since -> "played or picked"
+                else -> return false
+            }
+            bridge.logger?.invoke("page back after a reload: $by meanwhile, ${item.name} not played on")
+            return true
+        }
         val seq = stateSeq
         // The restored session (or nothing, when the page has none): a real state, or a while.
         withTimeoutOrNull(RESTORE_WAIT_MS) { while (stateSeq == seq || _state.value?.item == null) delay(100) }
         bridge.logger?.invoke("page back after a reload: ${item.name} goes on at ${at / 1000} s")
         for (attempt in 1..RESTORE_ATTEMPTS) {
-            if (pausedByUser) return
-            if ((lastPlay?.third ?: 0L) != since) {
-                if (attempt == 1) bridge.logger?.invoke("page back after a reload: played or picked meanwhile, ${item.name} not played on")
-                return
-            }
+            if (superseded()) return
             val s = _state.value
             if (s != null && s.item?.uri == uri && !s.isPaused) return
             runCatching {
                 if (s?.item?.uri == uri) {
-                    resumePage()
+                    // Not sent (dropped for a pause while it waited to be sent again), or overtaken on its way.
+                    val sent = resumePage()
+                    if (superseded() || !sent) return
                     if (kotlin.math.abs(s.positionMs - at) > 5_000) seek(at)
                 } else {
                     // A state without a list would play the song alone, and Spotify then goes on
@@ -710,12 +723,11 @@ class SpotifyPlayer(
                     // A song autoplay brought is not in that list: played in it, the list would start over (#135).
                     val ctx = if (item.provider == "autoplay") uri else lost.contextUri ?: lastSong?.contextUri ?: uri
                     val station = nextUp?.takeIf { ctx == lost.contextUri }?.let { RepeatRules.stationOrder(uri, it) }
+                    since = System.currentTimeMillis()
                     playNow(ctx, trackUri = uri.takeIf { ctx != it }, positionMs = at, order = station ?: lastOrder?.takeIf { it.first == ctx }?.second,
-                        keepsOrder = station == null)
+                        keepsOrder = station == null, playedAt = since)
                 }
             }.onFailure { bridge.logger?.invoke("restore attempt $attempt failed: ${it.message}") }
-            // The play just sent is ours, not the user's.
-            since = lastPlay?.third ?: 0L
             val ok = withTimeoutOrNull(RESTORE_CHECK_MS) { _state.first { it?.item?.uri == uri && !it.isPaused } }
             if (ok != null) return
             delay(RESTORE_GAP_MS * attempt)
@@ -1559,8 +1571,17 @@ class SpotifyPlayer(
         }
     }
 
+    /**
+     * A state of the page, counted in [stateSeq] once it is taken and shown: a restore waiting for
+     * the new page's first state then reads that state, not the old page's (found by
+     * PlayerRecoverySequenceTest: counted first, the old page's "A playing" was read while the new
+     * page's B was still being taken, and the restore thought A played and gave up).
+     */
     private fun onState(s: PlayerState?) {
-        stateSeq++
+        try { takeState(s) } finally { stateSeq++ }
+    }
+
+    private fun takeState(s: PlayerState?) {
         // Another song than the one a crossfade is fading out: the ramp up, at once (the
         // watcher's next tick would leave the new song's first second at the faded level).
         if (crossfadeArmed) {
@@ -1960,12 +1981,13 @@ class SpotifyPlayer(
     /**
      * A play sent to the page; [refusable]: the user's own, whose refusal walks [onRefused]'s steps.
      * [keepsOrder] false: [order] is for this play only, later plays of the list go without it.
+     * [playedAt]: its mark in [lastPlay], known to the caller before the play goes out.
      */
-    private suspend fun playNow(contextUri: Uri, trackUri: Uri? = null, index: Int? = null, positionMs: Long? = null, order: List<Uri>? = null, refusable: Boolean = false, keepsOrder: Boolean = true) {
+    private suspend fun playNow(contextUri: Uri, trackUri: Uri? = null, index: Int? = null, positionMs: Long? = null, order: List<Uri>? = null, refusable: Boolean = false, keepsOrder: Boolean = true, playedAt: Long = System.currentTimeMillis()) {
         // A new song picked (or the intent itself played): any earlier skip is over.
         if (trackUri == null || trackUri != liveIntent()?.item?.uri) intent = null
         lastOrder = order?.takeIf { keepsOrder }?.let { contextUri to it }
-        lastPlay = Triple(contextUri, trackUri, System.currentTimeMillis())
+        lastPlay = Triple(contextUri, trackUri, playedAt)
         lastIndex = index
         lastPlayRefusable = refusable
         refusalStep = 0
@@ -2005,15 +2027,18 @@ class SpotifyPlayer(
      *
      * A resume is not sent again once the user paused while it waited: found by
      * PlayerRecoverySequenceTest, a resume refused for a moment ("No such device") was sent again
-     * after the pause, and the music started. It then ends as done, with nothing sent: the user's
-     * pause stands for it. (Other commands are sent again as before; none was shown to need this.)
+     * after the pause, and the music started. It then ends with false, nothing sent and no error:
+     * the user's pause stands for it, and a caller going on from a taken resume (the restore's seek)
+     * stops there. (Other commands are sent again as before; none was shown to need this.)
+     * True: the page took the command (its answer is never used).
      */
-    private suspend fun command(method: String, args: JsonObject = JsonObject(emptyMap()), timeoutMs: Long = 20_000): kotlinx.serialization.json.JsonElement {
+    private suspend fun command(method: String, args: JsonObject = JsonObject(emptyMap()), timeoutMs: Long = 20_000): Boolean {
         val pauses = pausesAsked
         var attempt = 0
         while (true) {
             try {
-                return bridge.call(method, args, timeoutMs)
+                bridge.call(method, args, timeoutMs)
+                return true
             } catch (e: app.myspoti.spotify.bridge.BridgeException) {
                 val transient = e.message.orEmpty().let { m -> TRANSIENT.any { it in m } }
                 if (!transient || ++attempt > COMMAND_RETRIES) throw e
@@ -2022,7 +2047,7 @@ class SpotifyPlayer(
                 if (!bridge.ready.value) withTimeoutOrNull(READY_WAIT_MS) { bridge.ready.first { it } }
                 if (method == "player.resume" && pausesAsked != pauses) {
                     bridge.logger?.invoke("$method not sent again: paused meanwhile")
-                    return kotlinx.serialization.json.JsonNull
+                    return false
                 }
             }
         }
@@ -2122,8 +2147,11 @@ class SpotifyPlayer(
         resumePage()
     }
 
-    /** [resume] without counting as the user's play (a restore after a reload, the end of an ad). */
-    private suspend fun resumePage() {
+    /**
+     * [resume] without counting as the user's play (a restore after a reload, the end of an ad).
+     * False: the resume was dropped for a pause (see [command]); a reload in its place counts as taken.
+     */
+    private suspend fun resumePage(): Boolean {
         pausedByUser = false
         // A page that went silent while paused (frozen in the background): a quick ping, and if it
         // still says nothing, the page is loaded again and plays on where it was, instead of the
@@ -2133,7 +2161,7 @@ class SpotifyPlayer(
             val s = lastTrackState
             bridge.logger?.invoke("resume: the page stopped answering while paused: loading it again")
             reloadAndPlayOn(s?.copy(isPaused = false, positionMs = s.positionMs, timestampMs = System.currentTimeMillis()), next = false)
-            return
+            return true
         }
         pageSuspect = false
         val stale = lastTrackState?.takeIf { authStalePending && reloadHost != null }
@@ -2141,10 +2169,10 @@ class SpotifyPlayer(
             authStalePending = false
             bridge.logger?.invoke("resume: the page's token went stale meanwhile: loading it again")
             reloadAndPlayOn(stale.copy(isPaused = false, timestampMs = System.currentTimeMillis()), next = false)
-            return
+            return true
         }
         val quiet = _adPlaying.value || adMuted || crossfadeArmed || _state.value?.isPaused == false || lastMedia?.active == false
-        if (quiet) { command("player.resume"); return }
+        if (quiet) return command("player.resume")
         fadeBackTo = lastMedia?.own?.takeIf { it > 0.01 } ?: 1.0
         fadeBack?.cancel()
         bridge.logger?.invoke("resume: rising from silence over $RISE_MS ms once the sound starts")
@@ -2158,7 +2186,7 @@ class SpotifyPlayer(
                     timeoutMs = LEVEL_TIMEOUT_MS, quiet = true)
             }
         }
-        try {
+        val taken = try {
             command("player.resume")
         } catch (e: Throwable) {
             runCatching { restoreLevel() }
@@ -2168,6 +2196,7 @@ class SpotifyPlayer(
         fadeBack = scope.launch {
             try { delay(RISE_WAIT_MS + RISE_MS + 200) } finally { fadeBackTo = null }
         }
+        return taken
     }
     override suspend fun seek(positionMs: Long) { endCrossfade(restore = true); command("player.seek", buildJsonObject { put("positionMs", positionMs) }) }
     override suspend fun next() {

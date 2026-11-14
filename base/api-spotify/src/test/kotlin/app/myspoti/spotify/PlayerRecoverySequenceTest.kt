@@ -14,6 +14,8 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
+import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.long
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
@@ -66,9 +68,9 @@ class PlayerRecoverySequenceTest {
     private fun track(name: String) =
         """{"kind":"track","uri":"spotify:track:$name","uid":"u$name","name":"$name","durationMs":200000}"""
 
-    private fun state(name: String, paused: Boolean) =
+    private fun state(name: String, paused: Boolean, at: Long = 0) =
         """{"type":"state","state":{"track":${track(name)},"contextUri":"spotify:playlist:C","next":null,"isPaused":$paused,
-            |"isBuffering":false,"positionMs":0,"timestamp":${System.currentTimeMillis()},"restrictions":{}}}""".trimMargin()
+            |"isBuffering":false,"positionMs":$at,"timestamp":${System.currentTimeMillis()},"restrictions":{}}}""".trimMargin()
 
     private suspend fun ready() {
         host.post("""{"type":"ready","version":1}""")
@@ -76,15 +78,15 @@ class PlayerRecoverySequenceTest {
     }
 
     /**
-     * The page reports [name] ([paused] or playing), and the player has taken it. Said again every
+     * The page reports [name] ([paused] or playing, at [at] ms), and the player has taken it. Said again every
      * half second until then: the player's event collector may not listen yet, and a state posted
      * before it does is lost (the bridge's events keep none for later).
      */
-    private suspend fun showing(name: String, paused: Boolean) {
+    private suspend fun showing(name: String, paused: Boolean, at: Long = 0) {
         val end = System.currentTimeMillis() + 10_000
         while (player.state.value?.let { it.item?.uri == "spotify:track:$name" && it.isPaused == paused } != true) {
             check(System.currentTimeMillis() < end) { "timed out: state $name paused=$paused; sent: ${sent()}; log: ${logs.takeLast(15)}" }
-            host.post(state(name, paused))
+            host.post(state(name, paused, at))
             delay(500)
         }
     }
@@ -93,21 +95,21 @@ class PlayerRecoverySequenceTest {
      * The new page reports its restored session: twice, so the restore, which waits for a state
      * newer than the one it started with, sees one whichever side of its start the first came.
      */
-    private suspend fun restored(name: String, paused: Boolean) {
-        showing(name, paused)
+    private suspend fun restored(name: String, paused: Boolean, at: Long = 0) {
+        showing(name, paused, at)
         delay(300)
-        host.post(state(name, paused))
+        host.post(state(name, paused, at))
     }
 
     /**
      * A song playing on a page whose device had joined Spotify Connect; the page goes away (not by
      * the player: Android, the WebView) and a new one says ready, its device not joined yet. The
-     * player's restore then waits for that device (it knows the host reports joins).
+     * player's restore then waits for that device (it knows the host reports joins). [at]: where A was.
      */
-    private suspend fun pageLostWhilePlaying() {
+    private suspend fun pageLostWhilePlaying(at: Long = 0) {
         PageDevice.joined()
         ready()
-        showing("A", paused = false)
+        showing("A", paused = false, at = at)
         bridge.pageGone()
         until("page gone") { !bridge.ready.value }
         ready()
@@ -280,6 +282,7 @@ class PlayerRecoverySequenceTest {
         delay(SETTLE_MS + 1_000)
         assertEquals(emptyList<String>(), playsSince(mark).map { "${it.method} ${it.args}" }, "the restore displaced the pick; all: ${sent()}")
         assertEquals("spotify:track:P", player.state.value?.item?.uri)
+        assertRestoreStopped("picked")
     }
 
     @Test fun newPickSupersedesOlderRestore_pickWhileTheRestoredStateIsAwaited() = runBlocking {
@@ -291,6 +294,86 @@ class PlayerRecoverySequenceTest {
         delay(SETTLE_MS + 1_000)
         assertEquals(emptyList<String>(), playsSince(mark).map { "${it.method} ${it.args}" }, "the restore displaced the pick; all: ${sent()}")
         assertEquals("spotify:track:P", player.state.value?.item?.uri)
+        assertRestoreStopped("picked")
+    }
+
+    /**
+     * The restore ran and stopped at the user's [what] ("paused", "picked"): without this, a test that
+     * finds no command after the user's action would pass also when no restore ran at all.
+     */
+    private fun assertRestoreStopped(what: String) =
+        assertTrue(logs.any { "page back after a reload" in it && "$what meanwhile, A not played on" in it }, "the restore stopped at the $what: ${logs.takeLast(15)}")
+
+    // --- from the review of M2.1: what the restore does once its own command is answered -------------
+
+    /**
+     * R1: the restore's resume is on its way, the user picks P and P plays; the old resume is
+     * answered only then. Positions within 5 s: no seek, only another attempt could play A again.
+     */
+    @Test fun lateRestoreAnswerKeepsANewerPick_resume() = runBlocking {
+        pageLostWhilePlaying()
+        joinDevice()
+        restored("A", paused = true)
+        val old = host.awaitCall("player.resume", timeoutMs = SpotifyPlayer.RESTORE_WAIT_MS + 2_000)
+        pick("P")
+        showing("P", paused = false)
+        val mark = host.calls.size
+        host.succeed(old)
+        // Past the restore's check and gap: where its next attempt would be.
+        delay(SpotifyPlayer.RESTORE_CHECK_MS + SpotifyPlayer.RESTORE_GAP_MS + SETTLE_MS)
+        assertEquals(emptyList<String>(), playsSince(mark).map { "${it.method} ${it.args}" }, "the old restore displaced the pick; all: ${sent()}")
+        assertEquals("spotify:track:P", player.state.value?.item?.uri)
+        assertRestoreStopped("picked")
+    }
+
+    /** R1 with the restore's play (the new page restored another song): the same for its late answer. */
+    @Test fun lateRestoreAnswerKeepsANewerPick_play() = runBlocking {
+        pageLostWhilePlaying()
+        joinDevice()
+        restored("B", paused = true)
+        val old = host.awaitCall("player.play", timeoutMs = SpotifyPlayer.RESTORE_WAIT_MS + 2_000)
+        assertEquals("spotify:track:A", old.args["trackUri"]?.jsonPrimitive?.content, "the restore plays A: ${old.args}")
+        pick("P")
+        showing("P", paused = false)
+        val mark = host.calls.size
+        host.succeed(old)
+        delay(SpotifyPlayer.RESTORE_CHECK_MS + SpotifyPlayer.RESTORE_GAP_MS + SETTLE_MS)
+        assertEquals(emptyList<String>(), playsSince(mark).map { "${it.method} ${it.args}" }, "the old restore displaced the pick; all: ${sent()}")
+        assertEquals("spotify:track:P", player.state.value?.item?.uri)
+        assertRestoreStopped("picked")
+    }
+
+    /**
+     * R2: A was at 98 s, the new page restored it at its start (more than 5 s off). The restore's
+     * resume is refused for a moment and dropped by the user's pause: no seek after it either.
+     */
+    @Test fun droppedRestoreResumeSendsNoSeek() = runBlocking {
+        pageLostWhilePlaying(at = 98_000)
+        joinDevice()
+        restored("A", paused = true)
+        host.fail(host.awaitCall("player.resume", timeoutMs = SpotifyPlayer.RESTORE_WAIT_MS + 2_000), "No such device.")
+        until("the retry waits") { logged("player.resume not taken") }
+        val mark = host.calls.size
+        player.pause()
+        delay(SpotifyPlayer.RESTORE_CHECK_MS + SpotifyPlayer.RESTORE_GAP_MS + SETTLE_MS)
+        assertEquals(emptyList<String>(), playsSince(mark).map { "${it.method} ${it.args}" }, "sent after the user's pause; all: ${sent()}")
+        assertRestoreStopped("paused")
+    }
+
+    /** The other side of R2: nobody pauses, the resume is answered, and the far position is set once. */
+    @Test fun restoreSetsAFarPositionOnce() = runBlocking {
+        pageLostWhilePlaying(at = 98_000)
+        joinDevice()
+        val mark = host.calls.size
+        restored("A", paused = true)
+        host.succeed(host.awaitCall("player.resume", timeoutMs = SpotifyPlayer.RESTORE_WAIT_MS + 2_000))
+        val seek = host.awaitCall("player.seek", timeoutMs = 5_000)
+        val to = seek.args["positionMs"]?.jsonPrimitive?.long ?: 0L
+        assertTrue(to >= 98_000, "back to where A was: ${seek.args}")
+        host.succeed(seek)
+        showing("A", paused = false, at = to)
+        delay(SETTLE_MS)
+        assertEquals(listOf("player.resume", "player.seek"), playsSince(mark).map { it.method }, "${sent()}")
     }
 
     private companion object {

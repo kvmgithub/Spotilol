@@ -405,6 +405,124 @@ class PlayerRecoverySequenceTest {
         assertEquals(listOf("player.resume", "player.seek"), playsSince(mark).map { it.method }, "${sent()}")
     }
 
+    // --- from the second review of M2.1 (R4): a command of the restore refused for a moment is sent ---
+    // --- again only while the restore still stands ---------------------------------------------------
+
+    /** The restore's play of A (the new page restored B), on its way. */
+    private suspend fun restorePlay(): CapturedCall =
+        next("player.play", SpotifyPlayer.RESTORE_WAIT_MS + 2_000).also {
+            assertEquals("spotify:track:A", it.args["trackUri"]?.jsonPrimitive?.content, "the restore plays A: ${it.args}")
+        }
+
+    /**
+     * The restore's [method], refused for a moment, is not sent again after the user's [what]
+     * ("paused", "picked"): the command says so, and the restore ends there, both before its next
+     * attempt could come (a quiet while alone would not tell). Nothing of it is sent after [mark];
+     * a play of [except] is the user's own.
+     */
+    private suspend fun assertDroppedAndOver(method: String, what: String, mark: Int, except: String? = null) {
+        until("the restore ended at the $what", ms = 3_000) { logged("$method not sent again") && logged("$what meanwhile, A not played on") }
+        delay(SpotifyPlayer.RESTORE_CHECK_MS + SpotifyPlayer.RESTORE_GAP_MS + SETTLE_MS)
+        val after = playsSince(mark).filterNot { except != null && it.args["trackUri"]?.jsonPrimitive?.content == "spotify:track:$except" }
+        assertEquals(emptyList<String>(), after.map { "${it.method} ${it.args}" }, "sent again after the user's $what; all: ${sent()}")
+    }
+
+    @Test fun obsoleteRestorePlayIsNotRetriedAfterPause() = runBlocking {
+        pageLostWhilePlaying()
+        joinDevice()
+        restored("B", paused = true)
+        val old = restorePlay()
+        player.pause()
+        val mark = host.calls.size
+        host.fail(old, "No such device.")
+        assertDroppedAndOver("player.play", "paused", mark)
+    }
+
+    @Test fun obsoleteRestorePlayIsNotRetriedAfterNewPick() = runBlocking {
+        pageLostWhilePlaying()
+        joinDevice()
+        restored("B", paused = true)
+        val old = restorePlay()
+        pick("P")
+        showing("P", paused = false)
+        val mark = host.calls.size
+        host.fail(old, "No such device.")
+        assertDroppedAndOver("player.play", "picked", mark)
+    }
+
+    @Test fun obsoleteRestoreResumeIsNotRetriedAfterNewPick() = runBlocking {
+        pageLostWhilePlaying()
+        joinDevice()
+        restored("A", paused = true)
+        val old = next("player.resume", SpotifyPlayer.RESTORE_WAIT_MS + 2_000)
+        pick("P")
+        showing("P", paused = false)
+        val mark = host.calls.size
+        host.fail(old, "No such device.")
+        assertDroppedAndOver("player.resume", "picked", mark)
+    }
+
+    @Test fun obsoleteRestoreSeekIsNotRetriedAfterNewPick() = runBlocking {
+        pageLostWhilePlaying(at = 98_000)
+        joinDevice()
+        restored("A", paused = true)
+        host.succeed(next("player.resume", SpotifyPlayer.RESTORE_WAIT_MS + 2_000))
+        val old = next("player.seek", 5_000)
+        pick("P")
+        showing("P", paused = false)
+        val mark = host.calls.size
+        host.fail(old, "No such device.")
+        assertDroppedAndOver("player.seek", "picked", mark)
+    }
+
+    /** The pick comes during the retry's gap, after the refusal was taken. */
+    @Test fun obsoleteRestorePlayIsNotRetriedAfterNewPickDuringTheGap() = runBlocking {
+        pageLostWhilePlaying()
+        joinDevice()
+        restored("B", paused = true)
+        host.fail(restorePlay(), "No such device.")
+        until("the retry waits") { logged("player.play not taken") }
+        val mark = host.calls.size
+        pick("P")
+        assertDroppedAndOver("player.play", "picked", mark, except = "P")
+    }
+
+    /**
+     * The page goes away during the retry's gap: after the gap the retry waits for the page to be
+     * ready again, and the user pauses then.
+     */
+    @Test fun obsoleteRestorePlayIsNotRetriedAfterPauseWhileThePageIsAwaited() = runBlocking {
+        pageLostWhilePlaying()
+        joinDevice()
+        restored("B", paused = true)
+        host.fail(restorePlay(), "No such device.")
+        until("the retry waits") { logged("player.play not taken") }
+        bridge.pageGone()
+        until("page gone") { !bridge.ready.value }
+        // Past the gap: the retry now waits for "ready".
+        delay(SpotifyPlayer.COMMAND_RETRY_MS + 300)
+        val mark = host.calls.size
+        player.pause()
+        ready()
+        assertDroppedAndOver("player.play", "paused", mark)
+    }
+
+    /** The other side of R4: nobody did anything, the refused play is sent again as it was, once. */
+    @Test fun validRestorePlayStillRetriesATransientFailure() = runBlocking {
+        pageLostWhilePlaying()
+        joinDevice()
+        restored("B", paused = true)
+        val old = restorePlay()
+        val mark = host.calls.size
+        host.fail(old, "No such device.")
+        val again = next("player.play", SpotifyPlayer.COMMAND_RETRY_MS + 3_000)
+        assertEquals(old.args, again.args, "sent again as it was")
+        host.succeed(again)
+        showing("A", paused = false)
+        delay(SETTLE_MS)
+        assertEquals(listOf("player.play"), playsSince(mark).map { it.method }, "${sent()}")
+    }
+
     private companion object {
         /** Longer than the player's first retry gap ([SpotifyPlayer.COMMAND_RETRY_MS]) and its rise. */
         const val SETTLE_MS = 2_000L
